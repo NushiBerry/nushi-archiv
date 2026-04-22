@@ -3,13 +3,12 @@
 	"id": "archiv",
 	"version": "${version}",
 	"name": "Archiv",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"description": "A visual asset library for Minecraft Builders",
 	"authors": [
-		"Me!"
+		"Nushi"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"sources": "https://github.com/NushiBerry/nushi-archiv"
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/archiv/icon.png",
