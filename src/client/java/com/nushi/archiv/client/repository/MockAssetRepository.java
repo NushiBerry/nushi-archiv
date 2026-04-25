@@ -17,12 +17,12 @@ public final class MockAssetRepository {
     // Metodo estático que devolve todos os assets mockados.
     public static List<ArchivAsset> getAllAssets() {
         return List.of(
-                new ArchivAsset("Dark Oak Bed", "Furniture", "1.20.1", 0xFF5B3A1E, 0xFF7A4BD6, 6, true, false),
-                new ArchivAsset("Stone Tower", "Structure", "1.20.1", 0xFF4B6E9A, 0xFF2D9CDB, 6, false, false),
-                new ArchivAsset("Palm Tree", "Tree", "1.20.1", 0xFF3A8B52, 0xFF2DBE73, 6, true, false),
-                new ArchivAsset("Crystal Lamp", "Decoration", "1.20.1", 0xFF7646C7, 0xFF8A5CFF, 7, false, false),
-                new ArchivAsset("Mossy Rock Pack", "Terrain", "1.20.1", 0xFF507A42, 0xFF57C784, 8, true, true),
-                new ArchivAsset("Cyberpunk Sign", "Prop", "1.20.1", 0xFF8A3BA8, 0xFFDA8A2D, 6, false, false)
+                new ArchivAsset("Dark Oak Bed", "Medieval", "Furniture", "1.20.1", 0xFF5B3A1E, 0xFF7A4BD6, 6, true, false),
+                new ArchivAsset("Stone Tower", "Medieval", "Structure", "1.20.1", 0xFF4B6E9A, 0xFF2D9CDB, 6, false, false),
+                new ArchivAsset("Palm Tree", "Nature", "Tree", "1.20.1", 0xFF3A8B52, 0xFF2DBE73, 6, true, false),
+                new ArchivAsset("Crystal Lamp", "Fantasy", "Decoration", "1.20.1", 0xFF7646C7, 0xFF8A5CFF, 7, false, false),
+                new ArchivAsset("Mossy Rock Pack", "Organic", "Terrain", "1.20.1", 0xFF507A42, 0xFF57C784, 8, true, true),
+                new ArchivAsset("Cyberpunk Sign", "Cyberpunk", "Prop", "1.20.1", 0xFF8A3BA8, 0xFFDA8A2D, 6, false, false)
         );
     }
 }

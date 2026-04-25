@@ -6,6 +6,7 @@ package com.nushi.archiv.client.model;
 public class ArchivAsset {
 
     private final String name;
+    private final String macroCategory;
     private final String type;
     private final String version;
     private final int previewColor;
@@ -16,6 +17,7 @@ public class ArchivAsset {
 
     public ArchivAsset(
             String name,
+            String macroCategory,
             String type,
             String version,
             int previewColor,
@@ -25,6 +27,7 @@ public class ArchivAsset {
             boolean highlighted
     ) {
         this.name = name;
+        this.macroCategory = macroCategory;
         this.type = type;
         this.version = version;
         this.previewColor = previewColor;
@@ -36,6 +39,10 @@ public class ArchivAsset {
 
     public String getName() {
         return name;
+    }
+
+    public String getMacroCategory() {
+        return macroCategory;
     }
 
     public String getType() {
