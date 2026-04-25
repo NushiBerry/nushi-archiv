@@ -6,6 +6,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import com.nushi.archiv.client.repository.MockAssetRepository;
+import net.minecraft.client.input.MouseButtonEvent;
 
 // Primeira versão real da tela principal do Archiv.
 // Nesta etapa, ela é um shell visual: layout grande, fullscreen e inspirado no design aprovado.
@@ -26,6 +27,20 @@ public class ArchivBrowseScreen extends Screen {
     private final Screen parent;
 
     private final List<ArchivAsset> mockAssets;
+
+    private final String[] categories = {
+            "All",
+            "Medieval",
+            "Fantasy",
+            "Cyberpunk",
+            "Sci-fi",
+            "Organic",
+            "Nature",
+            "Modern",
+            "Industrial"
+    };
+
+    private String selectedCategory = "All";
 
     // Construtor da tela.
     public ArchivBrowseScreen(Component title, Screen parent) {
@@ -53,6 +68,51 @@ public class ArchivBrowseScreen extends Screen {
         if (this.minecraft != null) {
             this.minecraft.setScreen(this.parent);
         }
+    }
+
+    @Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        // botão esquerdo do mouse = 0
+        if (event.button() != 0) {
+            return super.mouseClicked(event, doubleClick);
+        }
+
+        int margin = 20;
+
+        int rootX = margin;
+        int rootY = margin;
+        int rootW = this.width - (margin * 2);
+        int rootH = this.height - (margin * 2);
+
+        int headerH = 58;
+        int footerH = 24;
+        int sidebarW = 180;
+
+        int bodyY = rootY + headerH;
+        int bodyH = rootH - headerH - footerH;
+
+        int itemX = rootX + 12;
+        int itemY = bodyY + 34;
+        int itemW = sidebarW - 24;
+        int itemH = 34;
+        int itemGap = 40;
+
+        double mouseX = event.x();
+        double mouseY = event.y();
+
+        for (int i = 0; i < categories.length; i++) {
+            int currentY = itemY + (i * itemGap);
+
+            boolean insideX = mouseX >= itemX && mouseX <= itemX + itemW;
+            boolean insideY = mouseY >= currentY && mouseY <= currentY + itemH;
+
+            if (insideX && insideY) {
+                selectedCategory = categories[i];
+                return true;
+            }
+        }
+
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override
@@ -109,21 +169,9 @@ public class ArchivBrowseScreen extends Screen {
         // ===== Sidebar content =====
         guiGraphics.drawString(this.font, "CATEGORIES", rootX + 16, bodyY + 14, COLOR_TEXT_DIM);
 
-        String[] categories = {
-                "All",
-                "Medieval",
-                "Fantasy",
-                "Cyberpunk",
-                "Sci-fi",
-                "Organic",
-                "Nature",
-                "Modern",
-                "Industrial"
-        };
-
         int categoryY = bodyY + 34;
         for (int i = 0; i < categories.length; i++) {
-            boolean active = i == 0;
+            boolean active = categories[i].equals(selectedCategory);
             drawSidebarItem(guiGraphics, categories[i], rootX + 12, categoryY, sidebarW - 24, 34, active);
             categoryY += 40;
         }
