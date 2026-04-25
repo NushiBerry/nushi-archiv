@@ -42,6 +42,7 @@ public class ArchivBrowseScreen extends Screen {
     };
 
     private String selectedCategory = "All";
+    private String selectedTopTab = "Browse";
 
     // Construtor da tela.
     public ArchivBrowseScreen(Component title, Screen parent) {
@@ -108,6 +109,18 @@ public class ArchivBrowseScreen extends Screen {
         int footerH = 24;
         int sidebarW = 180;
 
+        int tabY = rootY + 10;
+        int tabX = rootX + 150;
+        int tabW = 110;
+        int tabH = 38;
+        int tabGap = 8;
+
+        int myAssetsX = tabX + (tabW + tabGap);
+        int myAssetsW = tabW + 10;
+
+        int importX = tabX + (tabW + tabGap) * 2 + 10;
+        int settingsX = tabX + (tabW + tabGap) * 3 + 10;
+
         int bodyY = rootY + headerH;
         int bodyH = rootH - headerH - footerH;
 
@@ -119,6 +132,38 @@ public class ArchivBrowseScreen extends Screen {
 
         double mouseX = event.x();
         double mouseY = event.y();
+
+        boolean insideBrowseTab = mouseX >= tabX && mouseX <= tabX + tabW
+                && mouseY >= tabY && mouseY <= tabY + tabH;
+
+        boolean insideMyAssetsTab = mouseX >= myAssetsX && mouseX <= myAssetsX + myAssetsW
+                && mouseY >= tabY && mouseY <= tabY + tabH;
+
+        boolean insideImportTab = mouseX >= importX && mouseX <= importX + tabW
+                && mouseY >= tabY && mouseY <= tabY + tabH;
+
+        boolean insideSettingsTab = mouseX >= settingsX && mouseX <= settingsX + tabW
+                && mouseY >= tabY && mouseY <= tabY + tabH;
+
+        if (insideBrowseTab) {
+            selectedTopTab = "Browse";
+            return true;
+        }
+
+        if (insideMyAssetsTab) {
+            selectedTopTab = "My Assets";
+            return true;
+        }
+
+        if (insideImportTab) {
+            selectedTopTab = "Import";
+            return true;
+        }
+
+        if (insideSettingsTab) {
+            selectedTopTab = "Settings";
+            return true;
+        }
 
         for (int i = 0; i < categories.length; i++) {
             int currentY = itemY + (i * itemGap);
@@ -181,10 +226,10 @@ public class ArchivBrowseScreen extends Screen {
         int tabH = 38;
         int tabGap = 8;
 
-        drawTopTab(guiGraphics, "Browse", tabX, tabY, tabW, tabH, true);
-        drawTopTab(guiGraphics, "My Assets", tabX + (tabW + tabGap), tabY, tabW + 10, tabH, false);
-        drawTopTab(guiGraphics, "Import", tabX + (tabW + tabGap) * 2 + 10, tabY, tabW, tabH, false);
-        drawTopTab(guiGraphics, "Settings", tabX + (tabW + tabGap) * 3 + 10, tabY, tabW, tabH, false);
+        drawTopTab(guiGraphics, "Browse", tabX, tabY, tabW, tabH, "Browse".equals(selectedTopTab));
+        drawTopTab(guiGraphics, "My Assets", tabX + (tabW + tabGap), tabY, tabW + 10, tabH, "My Assets".equals(selectedTopTab));
+        drawTopTab(guiGraphics, "Import", tabX + (tabW + tabGap) * 2 + 10, tabY, tabW, tabH, "Import".equals(selectedTopTab));
+        drawTopTab(guiGraphics, "Settings", tabX + (tabW + tabGap) * 3 + 10, tabY, tabW, tabH, "Settings".equals(selectedTopTab));
 
         // ===== Sidebar content =====
         guiGraphics.drawString(this.font, "CATEGORIES", rootX + 16, bodyY + 14, COLOR_TEXT_DIM);
