@@ -205,6 +205,9 @@ public class ArchivBrowseScreen extends Screen {
         int contentW = rootW - sidebarW;
         int contentH = bodyH;
 
+        boolean browseActive = "Browse".equals(selectedTopTab);
+        List<ArchivAsset> visibleAssets = getVisibleAssets();
+
         // Container principal
         drawPanel(guiGraphics, rootX, rootY, rootW, rootH, COLOR_ROOT, COLOR_BORDER);
 
@@ -232,15 +235,21 @@ public class ArchivBrowseScreen extends Screen {
         drawTopTab(guiGraphics, "Settings", tabX + (tabW + tabGap) * 3 + 10, tabY, tabW, tabH, "Settings".equals(selectedTopTab));
 
         // ===== Sidebar content =====
-        guiGraphics.drawString(this.font, "CATEGORIES", rootX + 16, bodyY + 14, COLOR_TEXT_DIM);
+        if (browseActive) {
+            guiGraphics.drawString(this.font, "CATEGORIES", rootX + 16, bodyY + 14, COLOR_TEXT_DIM);
 
-        int categoryY = bodyY + 34;
-        for (int i = 0; i < categories.length; i++) {
-            boolean active = categories[i].equals(selectedCategory);
-            drawSidebarItem(guiGraphics, categories[i], rootX + 12, categoryY, sidebarW - 24, 34, active);
-            categoryY += 40;
+            int categoryY = bodyY + 34;
+            for (int i = 0; i < categories.length; i++) {
+                boolean active = categories[i].equals(selectedCategory);
+                drawSidebarItem(guiGraphics, categories[i], rootX + 12, categoryY, sidebarW - 24, 34, active);
+                categoryY += 40;
+            }
+        } else {
+            guiGraphics.drawString(this.font, "SECTION", rootX + 16, bodyY + 14, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, selectedTopTab, rootX + 16, bodyY + 34, COLOR_TEXT);
         }
 
+        if (browseActive) {
         // ===== Toolbar / controls =====
         int toolbarY = contentY + 14;
         int innerPadding = 18;
@@ -282,8 +291,6 @@ public class ArchivBrowseScreen extends Screen {
         int rowGap = 16;
         int cardH = (cardsAreaH - (rowGap * (rows - 1))) / rows;
 
-        List<ArchivAsset> visibleAssets = getVisibleAssets();
-
         if (visibleAssets.isEmpty()) {
             drawEmptyState(guiGraphics, cardsAreaX, cardsAreaY, cardsAreaW, cardsAreaH);
         } else {
@@ -307,14 +314,21 @@ public class ArchivBrowseScreen extends Screen {
             }
         }
 
+        } else {
+            drawTabPlaceholder(guiGraphics, contentX, contentY, contentW, contentH, selectedTopTab);
+        }
         // ===== Footer =====
         drawPanel(guiGraphics, rootX, rootY + rootH - footerH, rootW, footerH, COLOR_PANEL, COLOR_BORDER);
 
         int footerY = rootY + rootH - footerH + 8;
         guiGraphics.drawString(this.font, "WorldEdit: pending", rootX + 12, footerY, COLOR_SUCCESS);
         guiGraphics.drawString(this.font, "Preview pipeline: planned", rootX + 140, footerY, COLOR_TEXT_DIM);
-        String assetCountText = visibleAssets.size() + " / " + mockAssets.size() + " assets";
-        guiGraphics.drawString(this.font, assetCountText, rootX + rootW - 120, footerY, COLOR_TEXT_DIM);
+        if (browseActive) {
+            String assetCountText = visibleAssets.size() + " / " + mockAssets.size() + " assets";
+            guiGraphics.drawString(this.font, assetCountText, rootX + rootW - 120, footerY, COLOR_TEXT_DIM);
+        } else {
+            guiGraphics.drawString(this.font, selectedTopTab, rootX + rootW - 80, footerY, COLOR_TEXT_DIM);
+        }
 
         super.render(guiGraphics, mouseX, mouseY, delta);
     }
@@ -384,6 +398,48 @@ public class ArchivBrowseScreen extends Screen {
                 subtitle,
                 panelX + (panelWidth / 2) - (subtitleWidth / 2),
                 panelY + 44,
+                COLOR_TEXT_DIM
+        );
+    }
+
+    private void drawTabPlaceholder(GuiGraphics guiGraphics, int x, int y, int width, int height, String tabName) {
+        int panelWidth = 360;
+        int panelHeight = 110;
+
+        int panelX = x + (width / 2) - (panelWidth / 2);
+        int panelY = y + (height / 2) - (panelHeight / 2);
+
+        drawPanel(guiGraphics, panelX, panelY, panelWidth, panelHeight, COLOR_PANEL, COLOR_BORDER);
+
+        String title = tabName;
+        String subtitle = "This section is not implemented yet.";
+        String hint = "We will build this tab in the next steps.";
+
+        int titleWidth = this.font.width(title);
+        int subtitleWidth = this.font.width(subtitle);
+        int hintWidth = this.font.width(hint);
+
+        guiGraphics.drawString(
+                this.font,
+                title,
+                panelX + (panelWidth / 2) - (titleWidth / 2),
+                panelY + 20,
+                COLOR_TEXT
+        );
+
+        guiGraphics.drawString(
+                this.font,
+                subtitle,
+                panelX + (panelWidth / 2) - (subtitleWidth / 2),
+                panelY + 44,
+                COLOR_TEXT_DIM
+        );
+
+        guiGraphics.drawString(
+                this.font,
+                hint,
+                panelX + (panelWidth / 2) - (hintWidth / 2),
+                panelY + 62,
                 COLOR_TEXT_DIM
         );
     }
