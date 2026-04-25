@@ -7,6 +7,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import com.nushi.archiv.client.repository.MockAssetRepository;
 import net.minecraft.client.input.MouseButtonEvent;
+import java.util.ArrayList;
 
 // Primeira versão real da tela principal do Archiv.
 // Nesta etapa, ela é um shell visual: layout grande, fullscreen e inspirado no design aprovado.
@@ -68,6 +69,25 @@ public class ArchivBrowseScreen extends Screen {
         if (this.minecraft != null) {
             this.minecraft.setScreen(this.parent);
         }
+    }
+
+    private List<ArchivAsset> getVisibleAssets() {
+        // Se a categoria selecionada for "All", mostra tudo.
+        if (selectedCategory.equals("All")) {
+            return mockAssets;
+        }
+
+        // Caso contrário, criamos uma nova lista só com os assets
+        // cuja macroCategory bate com a categoria selecionada.
+        List<ArchivAsset> filteredAssets = new ArrayList<>();
+
+        for (ArchivAsset asset : mockAssets) {
+            if (asset.getMacroCategory().equals(selectedCategory)) {
+                filteredAssets.add(asset);
+            }
+        }
+
+        return filteredAssets;
     }
 
     @Override
@@ -217,8 +237,10 @@ public class ArchivBrowseScreen extends Screen {
         int rowGap = 16;
         int cardH = (cardsAreaH - (rowGap * (rows - 1))) / rows;
 
-        for (int i = 0; i < mockAssets.size(); i++) {
-            ArchivAsset asset = mockAssets.get(i);
+        List<ArchivAsset> visibleAssets = getVisibleAssets();
+
+        for (int i = 0; i < visibleAssets.size(); i++) {
+            ArchivAsset asset = visibleAssets.get(i);
 
             int column = i % columns;
             int row = i / columns;
@@ -242,7 +264,8 @@ public class ArchivBrowseScreen extends Screen {
         int footerY = rootY + rootH - footerH + 8;
         guiGraphics.drawString(this.font, "WorldEdit: pending", rootX + 12, footerY, COLOR_SUCCESS);
         guiGraphics.drawString(this.font, "Preview pipeline: planned", rootX + 140, footerY, COLOR_TEXT_DIM);
-        guiGraphics.drawString(this.font, "v0.1.0", rootX + rootW - 50, footerY, COLOR_TEXT_DIM);
+        String assetCountText = visibleAssets.size() + " / " + mockAssets.size() + " assets";
+        guiGraphics.drawString(this.font, assetCountText, rootX + rootW - 120, footerY, COLOR_TEXT_DIM);
 
         super.render(guiGraphics, mouseX, mouseY, delta);
     }
