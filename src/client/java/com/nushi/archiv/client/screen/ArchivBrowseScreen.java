@@ -239,23 +239,27 @@ public class ArchivBrowseScreen extends Screen {
 
         List<ArchivAsset> visibleAssets = getVisibleAssets();
 
-        for (int i = 0; i < visibleAssets.size(); i++) {
-            ArchivAsset asset = visibleAssets.get(i);
+        if (visibleAssets.isEmpty()) {
+            drawEmptyState(guiGraphics, cardsAreaX, cardsAreaY, cardsAreaW, cardsAreaH);
+        } else {
+            for (int i = 0; i < visibleAssets.size(); i++) {
+                ArchivAsset asset = visibleAssets.get(i);
 
-            int column = i % columns;
-            int row = i / columns;
+                int column = i % columns;
+                int row = i / columns;
 
-            int cardX = cardsAreaX + column * (cardW + cardsGap);
-            int cardY = cardsAreaY + row * (cardH + rowGap);
+                int cardX = cardsAreaX + column * (cardW + cardsGap);
+                int cardY = cardsAreaY + row * (cardH + rowGap);
 
-            drawAssetCard(
-                    guiGraphics,
-                    cardX,
-                    cardY,
-                    cardW,
-                    cardH,
-                    asset
-            );
+                drawAssetCard(
+                        guiGraphics,
+                        cardX,
+                        cardY,
+                        cardW,
+                        cardH,
+                        asset
+                );
+            }
         }
 
         // ===== Footer =====
@@ -304,6 +308,39 @@ public class ArchivBrowseScreen extends Screen {
     private void drawControlBox(GuiGraphics guiGraphics, String label, int x, int y, int width, int height) {
         drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
         guiGraphics.drawString(this.font, label, x + 12, y + 12, COLOR_TEXT_DIM);
+    }
+
+    private void drawEmptyState(GuiGraphics guiGraphics, int x, int y, int width, int height) {
+        // Painel interno da área vazia
+        int panelWidth = 320;
+        int panelHeight = 90;
+
+        int panelX = x + (width / 2) - (panelWidth / 2);
+        int panelY = y + (height / 2) - (panelHeight / 2);
+
+        drawPanel(guiGraphics, panelX, panelY, panelWidth, panelHeight, COLOR_PANEL, COLOR_BORDER);
+
+        String title = "No assets found";
+        String subtitle = "Try another category or import new assets.";
+
+        int titleWidth = this.font.width(title);
+        int subtitleWidth = this.font.width(subtitle);
+
+        guiGraphics.drawString(
+                this.font,
+                title,
+                panelX + (panelWidth / 2) - (titleWidth / 2),
+                panelY + 24,
+                COLOR_TEXT
+        );
+
+        guiGraphics.drawString(
+                this.font,
+                subtitle,
+                panelX + (panelWidth / 2) - (subtitleWidth / 2),
+                panelY + 44,
+                COLOR_TEXT_DIM
+        );
     }
 
     private void drawAssetCard(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset) {
