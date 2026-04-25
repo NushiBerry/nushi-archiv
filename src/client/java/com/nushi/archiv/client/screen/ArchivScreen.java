@@ -11,7 +11,7 @@ import java.util.ArrayList;
 
 // Primeira versão real da tela principal do Archiv.
 // Nesta etapa, ela é um shell visual: layout grande, fullscreen e inspirado no design aprovado.
-public class ArchivBrowseScreen extends Screen {
+public class ArchivScreen extends Screen {
 
     // ===== Cores principais da interface =====
     private static final int COLOR_BACKGROUND = 0xFF08111D;
@@ -45,7 +45,7 @@ public class ArchivBrowseScreen extends Screen {
     private String selectedTopTab = "Browse";
 
     // Construtor da tela.
-    public ArchivBrowseScreen(Component title, Screen parent) {
+    public ArchivScreen(Component title, Screen parent) {
         super(title);
         this.parent = parent;
         this.mockAssets = MockAssetRepository.getAllAssets();
