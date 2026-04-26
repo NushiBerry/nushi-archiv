@@ -59,6 +59,8 @@ public class ArchivScreen extends Screen {
     private boolean mockDetailsFilled = false;
     private boolean mockAssetSaved = false;
 
+    private int savedAssetCounter = 1;
+
     private final String mockAssetName = "Stone Tower";
     private final String mockMacroCategory = "Medieval";
     private final String mockAuthor = "BuilderX";
@@ -249,6 +251,12 @@ public class ArchivScreen extends Screen {
         selectedImportStep = 1;
     }
 
+    private String getNextSavedAssetName() {
+        return savedAssetCounter == 1
+                ? mockAssetName
+                : mockAssetName + " #" + savedAssetCounter;
+    }
+
     private void beginFreshImportSession() {
         resetImportState();
         selectedTopTab = "Import";
@@ -273,19 +281,19 @@ public class ArchivScreen extends Screen {
             };
         }
 
-        private ArchivAsset buildSavedAssetFromImport() {
-            return new ArchivAsset(
-                    mockAssetName,
-                    mockMacroCategory,
-                    mockType,
-                    mockMinecraftVersion,
-                    mockPreviewImageSelected ? MOCK_PREVIEW_IMAGE_COLOR : MOCK_NO_PREVIEW_IMAGE_COLOR,
-                    getImportChipColor(),
-                    getImportVariantCount(),
-                    false,
-                    false
-            );
-        }
+    private ArchivAsset buildSavedAssetFromImport() {
+        return new ArchivAsset(
+                getNextSavedAssetName(),
+                mockMacroCategory,
+                mockType,
+                mockMinecraftVersion,
+                mockPreviewImageSelected ? MOCK_PREVIEW_IMAGE_COLOR : MOCK_NO_PREVIEW_IMAGE_COLOR,
+                getImportChipColor(),
+                getImportVariantCount(),
+                false,
+                false
+        );
+    }
 
     private String fitTextToWidth(String text, int maxWidth) {
         if (this.font.width(text) <= maxWidth) {
@@ -484,6 +492,7 @@ public class ArchivScreen extends Screen {
                     if (isImportReady() && !mockAssetSaved) {
                         ArchivAsset savedAsset = buildSavedAssetFromImport();
                         savedAssets.add(0, savedAsset);
+                        savedAssetCounter++;
 
                         mockAssetSaved = true;
                         selectedImportStep = 4;
