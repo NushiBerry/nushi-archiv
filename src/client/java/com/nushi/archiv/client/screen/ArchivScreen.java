@@ -59,17 +59,6 @@ public class ArchivScreen extends Screen {
     private boolean mockDetailsFilled = false;
     private boolean mockAssetSaved = false;
 
-    private int savedAssetCounter = 1;
-
-    private final String mockAssetName = "Stone Tower";
-    private final String mockMacroCategory = "Medieval";
-    private final String mockAuthor = "BuilderX";
-    private final String mockType = "Structure";
-    private final String mockMinecraftVersion = "1.20.1";
-    private final String mockVariants = "Default, Mossy";
-    private final String mockTags = "tower, stone, medieval";
-    private final String mockFileInfo = ".schem • 1.24 MB";
-
     private final ImportPreset[] importPresets = new ImportPreset[] {
             new ImportPreset(
                     "Stone Tower",
@@ -344,10 +333,19 @@ public class ArchivScreen extends Screen {
 
     private String getNextSavedAssetName() {
         String baseName = getCurrentImportPreset().name;
+        int sameNameCount = 0;
 
-        return savedAssetCounter == 1
+        for (ArchivAsset asset : savedAssets) {
+            String existingName = asset.getName();
+
+            if (existingName.equals(baseName) || existingName.startsWith(baseName + " #")) {
+                sameNameCount++;
+            }
+        }
+
+        return sameNameCount == 0
                 ? baseName
-                : baseName + " #" + savedAssetCounter;
+                : baseName + " #" + (sameNameCount + 1);
     }
 
     private void beginFreshImportSession() {
@@ -577,7 +575,6 @@ public class ArchivScreen extends Screen {
                     if (isImportReady() && !mockAssetSaved) {
                         ArchivAsset savedAsset = buildSavedAssetFromImport();
                         savedAssets.add(0, savedAsset);
-                        savedAssetCounter++;
                         advanceImportPreset();
 
                         mockAssetSaved = true;
