@@ -378,6 +378,29 @@ public class ArchivScreen extends Screen {
         );
     }
 
+    private ArchivAsset copyAssetWithFavorite(ArchivAsset asset, boolean favorite) {
+        return new ArchivAsset(
+                asset.getName(),
+                asset.getMacroCategory(),
+                asset.getType(),
+                asset.getVersion(),
+                asset.getPreviewColor(),
+                asset.getChipColor(),
+                asset.getVariantCount(),
+                favorite,
+                asset.isHighlighted()
+        );
+    }
+
+    private void toggleSavedAssetFavorite(ArchivAsset asset) {
+        int index = savedAssets.indexOf(asset);
+
+        if (index >= 0) {
+            ArchivAsset updatedAsset = copyAssetWithFavorite(asset, !asset.isFavorite());
+            savedAssets.set(index, updatedAsset);
+        }
+    }
+
     private String fitTextToWidth(String text, int maxWidth) {
         if (this.font.width(text) <= maxWidth) {
             return text;
@@ -595,6 +618,84 @@ public class ArchivScreen extends Screen {
 
                     if (insideX && insideY) {
                         selectedCategory = categories[i];
+                        return true;
+                    }
+                }
+            }
+            if ("My Assets".equals(selectedTopTab)) {
+                int innerPadding = 18;
+                int toolbarY = contentY + 14;
+
+                int cardsAreaX = contentX + innerPadding;
+                int cardsAreaY = toolbarY + 50;
+                int cardsAreaW = contentW - (innerPadding * 2);
+                int cardsAreaH = (contentY + contentH - 16) - cardsAreaY;
+
+                int cardsGap = 14;
+                int columns = 3;
+                int rows = 2;
+                int rowGap = 16;
+
+                int cardW = (cardsAreaW - (cardsGap * (columns - 1))) / columns;
+                int cardH = (cardsAreaH - (rowGap * (rows - 1))) / rows;
+
+                List<ArchivAsset> visibleAssets = getVisibleAssets();
+
+                for (int i = 0; i < visibleAssets.size(); i++) {
+                    ArchivAsset asset = visibleAssets.get(i);
+
+                    int column = i % columns;
+                    int row = i / columns;
+
+                    int cardX = cardsAreaX + column * (cardW + cardsGap);
+                    int cardY = cardsAreaY + row * (cardH + rowGap);
+
+                    int favoriteBoxX = cardX + cardW - 24;
+                    int favoriteBoxY = cardY + 4;
+                    int favoriteBoxW = 20;
+                    int favoriteBoxH = 20;
+
+                    if (isInside(mouseX, mouseY, favoriteBoxX, favoriteBoxY, favoriteBoxW, favoriteBoxH)) {
+                        toggleSavedAssetFavorite(asset);
+                        return true;
+                    }
+                }
+            }
+            if ("My Assets".equals(selectedTopTab)) {
+                int innerPadding = 18;
+                int toolbarY = contentY + 14;
+
+                int cardsAreaX = contentX + innerPadding;
+                int cardsAreaY = toolbarY + 50;
+                int cardsAreaW = contentW - (innerPadding * 2);
+                int cardsAreaH = (contentY + contentH - 16) - cardsAreaY;
+
+                int cardsGap = 14;
+                int columns = 3;
+                int rows = 2;
+                int rowGap = 16;
+
+                int cardW = (cardsAreaW - (cardsGap * (columns - 1))) / columns;
+                int cardH = (cardsAreaH - (rowGap * (rows - 1))) / rows;
+
+                List<ArchivAsset> visibleAssets = getVisibleAssets();
+
+                for (int i = 0; i < visibleAssets.size(); i++) {
+                    ArchivAsset asset = visibleAssets.get(i);
+
+                    int column = i % columns;
+                    int row = i / columns;
+
+                    int cardX = cardsAreaX + column * (cardW + cardsGap);
+                    int cardY = cardsAreaY + row * (cardH + rowGap);
+
+                    int favoriteBoxX = cardX + cardW - 24;
+                    int favoriteBoxY = cardY + 4;
+                    int favoriteBoxW = 20;
+                    int favoriteBoxH = 20;
+
+                    if (isInside(mouseX, mouseY, favoriteBoxX, favoriteBoxY, favoriteBoxW, favoriteBoxH)) {
+                        toggleSavedAssetFavorite(asset);
                         return true;
                     }
                 }
