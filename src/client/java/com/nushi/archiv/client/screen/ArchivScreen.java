@@ -48,6 +48,8 @@ public class ArchivScreen extends Screen {
     private String selectedTopTab = "Browse";
     private int selectedImportStep = 1;
     private boolean myAssetsFavoritesOnly = false;
+    private String selectedLibraryAssetName = null;
+    private String libraryActionMessage = "No asset selected";
     private boolean mockStructureFileSelected = false;
     private final String mockStructureFileName = "stone_tower.schem";
     private final String mockStructureFileFormat = ".schem";
@@ -187,6 +189,19 @@ public class ArchivScreen extends Screen {
         super(title);
         this.parent = parent;
         this.mockAssets = MockAssetRepository.getAllAssets();
+
+        for (ArchivAsset asset : this.mockAssets) {
+            if (asset.isHighlighted()) {
+                this.selectedLibraryAssetName = asset.getName();
+                this.libraryActionMessage = "Selected: " + asset.getName();
+                break;
+            }
+        }
+
+        if (this.selectedLibraryAssetName == null && !this.mockAssets.isEmpty()) {
+            this.selectedLibraryAssetName = this.mockAssets.get(0).getName();
+            this.libraryActionMessage = "Selected: " + this.selectedLibraryAssetName;
+        }
     }
 
     private void drawStepPanel(GuiGraphics guiGraphics, int x, int y, int width, int height, boolean active) {
@@ -404,6 +419,20 @@ public class ArchivScreen extends Screen {
         }
     }
 
+    private boolean isLibraryAssetSelected(ArchivAsset asset) {
+        return selectedLibraryAssetName != null && selectedLibraryAssetName.equals(asset.getName());
+    }
+
+    private void selectLibraryAsset(ArchivAsset asset) {
+        selectedLibraryAssetName = asset.getName();
+        libraryActionMessage = "Selected: " + asset.getName();
+    }
+
+    private void setLibraryAction(String action, ArchivAsset asset) {
+        selectedLibraryAssetName = asset.getName();
+        libraryActionMessage = action + ": " + asset.getName();
+    }
+
     private String fitTextToWidth(String text, int maxWidth) {
         if (this.font.width(text) <= maxWidth) {
             return text;
@@ -603,6 +632,9 @@ public class ArchivScreen extends Screen {
                         savedAssets.add(0, savedAsset);
                         advanceImportPreset();
 
+                        selectedLibraryAssetName = savedAsset.getName();
+                        libraryActionMessage = "Selected: " + savedAsset.getName();
+
                         mockAssetSaved = true;
                         selectedImportStep = 4;
                         selectedTopTab = "My Assets";
@@ -722,6 +754,60 @@ public class ArchivScreen extends Screen {
 
                     if (isInside(mouseX, mouseY, favoriteBoxX, favoriteBoxY, favoriteBoxW, favoriteBoxH)) {
                         toggleSavedAssetFavorite(asset);
+                        return true;
+                    }
+                }
+            }
+            if ("Browse".equals(selectedTopTab) || "My Assets".equals(selectedTopTab)) {
+                int innerPadding = 18;
+                int toolbarY = contentY + 14;
+
+                int cardsAreaX = contentX + innerPadding;
+                int cardsAreaY = toolbarY + 50;
+                int cardsAreaW = contentW - (innerPadding * 2);
+                int cardsAreaH = (contentY + contentH - 16) - cardsAreaY;
+
+                int cardsGap = 14;
+                int columns = 3;
+                int rows = 2;
+                int rowGap = 16;
+
+                int cardW = (cardsAreaW - (cardsGap * (columns - 1))) / columns;
+                int cardH = (cardsAreaH - (rowGap * (rows - 1))) / rows;
+
+                List<ArchivAsset> visibleAssets = getVisibleAssets();
+
+                for (int i = 0; i < visibleAssets.size(); i++) {
+                    ArchivAsset asset = visibleAssets.get(i);
+
+                    int column = i % columns;
+                    int row = i / columns;
+
+                    int cardX = cardsAreaX + column * (cardW + cardsGap);
+                    int cardY = cardsAreaY + row * (cardH + rowGap);
+
+                    boolean selected = isLibraryAssetSelected(asset);
+
+                    if (selected) {
+                        int overlayButtonW = cardW - 60;
+                        int overlayX = cardX + 30;
+
+                        int loadButtonY = cardY + 30;
+                        int detailsButtonY = cardY + 60;
+
+                        if (isInside(mouseX, mouseY, overlayX, loadButtonY, overlayButtonW, 24)) {
+                            setLibraryAction("Load pending", asset);
+                            return true;
+                        }
+
+                        if (isInside(mouseX, mouseY, overlayX, detailsButtonY, overlayButtonW, 22)) {
+                            setLibraryAction("Details pending", asset);
+                            return true;
+                        }
+                    }
+
+                    if (isInside(mouseX, mouseY, cardX, cardY, cardW, cardH)) {
+                        selectLibraryAsset(asset);
                         return true;
                     }
                 }
@@ -890,7 +976,8 @@ public class ArchivScreen extends Screen {
                                 cardY,
                                 cardW,
                                 cardH,
-                                asset
+                                asset,
+                                isLibraryAssetSelected(asset)
                         );
                     }
                 }
@@ -905,7 +992,8 @@ public class ArchivScreen extends Screen {
 
         int footerY = rootY + rootH - footerH + 8;
         guiGraphics.drawString(this.font, "WorldEdit: pending", rootX + 12, footerY, COLOR_SUCCESS);
-        guiGraphics.drawString(this.font, "Preview pipeline: planned", rootX + 140, footerY, COLOR_TEXT_DIM);
+        String footerMiddleText = libraryTabActive ? libraryActionMessage : "Preview pipeline: planned";
+        guiGraphics.drawString(this.font, footerMiddleText, rootX + 140, footerY, COLOR_TEXT_DIM);
                 if (libraryTabActive) {
                     int totalAssets = myAssetsActive ? savedAssets.size() : mockAssets.size();
                     String assetCountText = visibleAssets.size() + " / " + totalAssets + " assets";
@@ -1408,8 +1496,8 @@ public class ArchivScreen extends Screen {
         }
     }
 
-    private void drawAssetCard(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset) {
-        int border = asset.isHighlighted() ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
+    private void drawAssetCard(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset, boolean selected) {
+        int border = selected ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
         drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, border);
 
         int previewX = x + 1;
@@ -1429,7 +1517,7 @@ public class ArchivScreen extends Screen {
 
         guiGraphics.drawString(this.font, asset.isFavorite() ? "★" : "☆", x + width - 16, y + 10, 0xFFFFD45A);
 
-        if (asset.isHighlighted()) {
+        if (selected) {
             guiGraphics.fill(previewX, previewY, previewX + previewW, previewY + previewH, 0x55000000);
 
             int overlayButtonW = width - 60;
