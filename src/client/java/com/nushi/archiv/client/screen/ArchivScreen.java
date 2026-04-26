@@ -165,15 +165,17 @@ public class ArchivScreen extends Screen {
             return true;
         }
 
-        for (int i = 0; i < categories.length; i++) {
-            int currentY = itemY + (i * itemGap);
+        if ("Browse".equals(selectedTopTab)) {
+            for (int i = 0; i < categories.length; i++) {
+                int currentY = itemY + (i * itemGap);
 
-            boolean insideX = mouseX >= itemX && mouseX <= itemX + itemW;
-            boolean insideY = mouseY >= currentY && mouseY <= currentY + itemH;
+                boolean insideX = mouseX >= itemX && mouseX <= itemX + itemW;
+                boolean insideY = mouseY >= currentY && mouseY <= currentY + itemH;
 
-            if (insideX && insideY) {
-                selectedCategory = categories[i];
-                return true;
+                if (insideX && insideY) {
+                    selectedCategory = categories[i];
+                    return true;
+                }
             }
         }
 
@@ -244,7 +246,7 @@ public class ArchivScreen extends Screen {
                 drawSidebarItem(guiGraphics, categories[i], rootX + 12, categoryY, sidebarW - 24, 34, active);
                 categoryY += 40;
             }
-        } else {
+        } else if (!"Import".equals(selectedTopTab)) {
             guiGraphics.drawString(this.font, "SECTION", rootX + 16, bodyY + 14, COLOR_TEXT_DIM);
             guiGraphics.drawString(this.font, selectedTopTab, rootX + 16, bodyY + 34, COLOR_TEXT);
         }
@@ -368,7 +370,23 @@ public class ArchivScreen extends Screen {
 
     private void drawControlBox(GuiGraphics guiGraphics, String label, int x, int y, int width, int height) {
         drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
-        guiGraphics.drawString(this.font, label, x + 12, y + 12, COLOR_TEXT_DIM);
+
+        int textY = y + (height - this.font.lineHeight) / 2;
+        guiGraphics.drawString(this.font, label, x + 12, textY, COLOR_TEXT_DIM);
+    }
+
+    private void drawButtonBox(GuiGraphics guiGraphics, String label, int x, int y, int width, int height, boolean primary) {
+        int background = primary ? 0xFF2F9BE6 : COLOR_PANEL;
+        int border = primary ? 0xFF73C8FF : COLOR_BORDER;
+        int textColor = 0xFFFFFFFF;
+
+        drawPanel(guiGraphics, x, y, width, height, background, border);
+
+        int textWidth = this.font.width(label);
+        int textX = x + (width - textWidth) / 2;
+        int textY = y + (height - this.font.lineHeight) / 2;
+
+        guiGraphics.drawString(this.font, label, textX, textY, textColor);
     }
 
     private void drawEmptyState(GuiGraphics guiGraphics, int x, int y, int width, int height) {
@@ -452,89 +470,157 @@ public class ArchivScreen extends Screen {
         // ===== Sidebar do Import =====
         guiGraphics.drawString(this.font, "IMPORT STEPS", rootX + 16, bodyY + 14, COLOR_TEXT_DIM);
 
-        drawSidebarItem(guiGraphics, "1. Select File", rootX + 12, bodyY + 34, 156, 34, true);
-        drawSidebarItem(guiGraphics, "2. Preview Image", rootX + 12, bodyY + 74, 156, 34, false);
-        drawSidebarItem(guiGraphics, "3. Details", rootX + 12, bodyY + 114, 156, 34, false);
-        drawSidebarItem(guiGraphics, "4. Save Asset", rootX + 12, bodyY + 154, 156, 34, false);
+        int stepX = rootX + 12;
+        int stepW = 156;
+        int stepH = 34;
+        int stepGap = 40;
 
-        // ===== Conteúdo principal =====
-        guiGraphics.drawString(this.font, "Import Asset", contentX + 18, contentY + 16, COLOR_TEXT);
-        guiGraphics.drawString(this.font, "Import a new build asset into Archiv", contentX + 18, contentY + 32, COLOR_TEXT_DIM);
+        drawSidebarItem(guiGraphics, "1. Select File", stepX, bodyY + 34, stepW, stepH, true);
+        drawSidebarItem(guiGraphics, "2. Preview Image", stepX, bodyY + 34 + stepGap, stepW, stepH, false);
+        drawSidebarItem(guiGraphics, "3. Details", stepX, bodyY + 34 + (stepGap * 2), stepW, stepH, false);
+        drawSidebarItem(guiGraphics, "4. Save Asset", stepX, bodyY + 34 + (stepGap * 3), stepW, stepH, false);
 
-        // Painéis principais
-        int topRowY = contentY + 54;
-        int leftBoxX = contentX + 18;
-        int leftBoxW = 300;
-        int rightBoxX = leftBoxX + leftBoxW + 16;
-        int rightBoxW = 220;
-        int previewBoxX = rightBoxX + rightBoxW + 16;
-        int previewBoxW = 190;
-        int topBoxH = 160;
+        // ===== Área útil interna =====
+        int pad = 18;
+        int innerX = contentX + pad;
+        int innerY = contentY + pad;
+        int innerW = contentW - (pad * 2);
+        int innerH = contentH - (pad * 2);
 
-        drawPanel(guiGraphics, leftBoxX, topRowY, leftBoxW, topBoxH, COLOR_PANEL, COLOR_BORDER);
-        drawPanel(guiGraphics, rightBoxX, topRowY, rightBoxW, topBoxH, COLOR_PANEL, COLOR_BORDER);
-        drawPanel(guiGraphics, previewBoxX, topRowY, previewBoxW, 250, COLOR_PANEL, COLOR_BORDER);
+// Se a altura útil estiver pequena, usamos layout compacto
+        boolean compact = true;
 
-        // Left box - structure file
-        guiGraphics.drawString(this.font, "1. Structure File", leftBoxX + 12, topRowY + 12, COLOR_TEXT);
-        guiGraphics.drawString(this.font, "Drop .schem / .schematic here", leftBoxX + 46, topRowY + 72, COLOR_TEXT);
-        guiGraphics.drawString(this.font, "Supports .schem and .schematic files", leftBoxX + 32, topRowY + 88, COLOR_TEXT_DIM);
-        drawControlBox(guiGraphics, "Browse File", leftBoxX + 90, topRowY + 112, 120, 28);
+        int titleBlockH = compact ? 44 : 36;
+        int gap = compact ? 12 : 16;
 
-        // Right box - preview image
-        guiGraphics.drawString(this.font, "2. Preview Image (Optional)", rightBoxX + 12, topRowY + 12, COLOR_TEXT);
-        guiGraphics.drawString(this.font, "Drop image here", rightBoxX + 58, topRowY + 72, COLOR_TEXT);
-        guiGraphics.drawString(this.font, "PNG or JPG", rightBoxX + 84, topRowY + 88, COLOR_TEXT_DIM);
-        drawControlBox(guiGraphics, "Browse Image", rightBoxX + 55, topRowY + 112, 120, 28);
+        guiGraphics.drawString(this.font, "Import Asset", innerX, innerY, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Import a new build asset into Archiv", innerX, innerY + 16, COLOR_TEXT_DIM);
 
-        // Preview box
-        guiGraphics.drawString(this.font, "3. Asset Preview", previewBoxX + 12, topRowY + 12, COLOR_TEXT);
+// ===== Geometria principal =====
+        int sectionY = innerY + titleBlockH;
 
-        int previewImageX = previewBoxX + 12;
-        int previewImageY = topRowY + 30;
-        int previewImageW = previewBoxW - 24;
-        int previewImageH = 110;
+        int previewColumnW = compact ? 210 : 220;
+        int leftAreaW = innerW - previewColumnW - gap;
+
+        int topBoxH = compact ? 118 : 170;
+        int actionsBarH = 28;
+        int actionsBottomMargin = compact ? 8 : 18;
+        int detailsGap = compact ? 10 : 16;
+        int actionsGap = compact ? 8 : 12;
+
+        int structureW = (leftAreaW * 58) / 100;
+        int imageW = leftAreaW - structureW - gap;
+
+        int structureX = innerX;
+        int imageX = structureX + structureW + gap;
+        int previewX = innerX + leftAreaW + gap;
+
+        int detailsY = sectionY + topBoxH + detailsGap;
+
+// Botões ficam ancorados no fundo da área útil do conteúdo
+        int actionsY = innerY + innerH - actionsBottomMargin - actionsBarH;
+
+// O painel de details ocupa só o espaço até um pouco antes dos botões
+        int detailsH = actionsY - actionsGap - detailsY;
+
+        // ===== Blocos superiores =====
+        drawPanel(guiGraphics, structureX, sectionY, structureW, topBoxH, COLOR_PANEL, COLOR_BORDER);
+        drawPanel(guiGraphics, imageX, sectionY, imageW, topBoxH, COLOR_PANEL, COLOR_BORDER);
+        drawPanel(guiGraphics, previewX, sectionY, previewColumnW, topBoxH + detailsGap + detailsH, COLOR_PANEL, COLOR_BORDER);
+
+        int boxMainTextY = compact ? sectionY + 42 : sectionY + 76;
+        int boxSubTextY = compact ? sectionY + 60 : sectionY + 92;
+        int boxButtonY = compact ? sectionY + 80 : sectionY + 118;
+
+// ===== Structure file =====
+        guiGraphics.drawString(this.font, "1. Structure File", structureX + 12, sectionY + 12, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Drop .schem / .schematic here", structureX + 45, boxMainTextY, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Supports .schem and .schematic files", structureX + 26, boxSubTextY, COLOR_TEXT_DIM);
+        drawButtonBox(guiGraphics, "Browse File", structureX + (structureW / 2) - 60, boxButtonY, 120, 28, false);
+
+// ===== Preview image =====
+        guiGraphics.drawString(this.font, "2. Preview Image (Optional)", imageX + 12, sectionY + 12, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Drop image here", imageX + 40, boxMainTextY, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "PNG or JPG", imageX + 70, boxSubTextY, COLOR_TEXT_DIM);
+        drawButtonBox(guiGraphics, "Browse Image", imageX + (imageW / 2) - 60, boxButtonY, 120, 28, false);
+
+        // ===== Preview lateral =====
+        guiGraphics.drawString(this.font, "3. Asset Preview", previewX + 12, sectionY + 12, COLOR_TEXT);
+
+        int previewImageX = previewX + 12;
+        int previewImageY = sectionY + 30;
+        int previewImageW = previewColumnW - 24;
+        int previewImageH = compact ? 92 : 110;
 
         guiGraphics.fill(previewImageX, previewImageY, previewImageX + previewImageW, previewImageY + previewImageH, 0xFF4B6E9A);
-        guiGraphics.drawString(this.font, "PREVIEW", previewImageX + 60, previewImageY + 50, 0xFFFFFFFF);
+        guiGraphics.drawString(this.font, "PREVIEW", previewImageX + (previewImageW / 2) - 24, previewImageY + (previewImageH / 2) - 4, 0xFFFFFFFF);
 
-        guiGraphics.drawString(this.font, "Stone Tower", previewBoxX + 12, topRowY + 150, COLOR_TEXT);
-        guiGraphics.drawString(this.font, "Structure  •  1.20.1", previewBoxX + 12, topRowY + 166, COLOR_TEXT_DIM);
+        int previewInfoY = compact ? sectionY + 132 : sectionY + 150;
 
-        guiGraphics.drawString(this.font, "Author", previewBoxX + 12, topRowY + 196, COLOR_TEXT_DIM);
-        guiGraphics.drawString(this.font, "BuilderX", previewBoxX + 100, topRowY + 196, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Stone Tower", previewX + 12, previewInfoY, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Structure  •  1.20.1", previewX + 12, previewInfoY + 16, COLOR_TEXT_DIM);
 
-        guiGraphics.drawString(this.font, "Category", previewBoxX + 12, topRowY + 212, COLOR_TEXT_DIM);
-        guiGraphics.drawString(this.font, "Medieval", previewBoxX + 100, topRowY + 212, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Author", previewX + 12, previewInfoY + 44, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, "BuilderX", previewX + 90, previewInfoY + 44, COLOR_TEXT);
 
-        guiGraphics.drawString(this.font, "Format", previewBoxX + 12, topRowY + 228, COLOR_TEXT_DIM);
-        guiGraphics.drawString(this.font, ".schem", previewBoxX + 100, topRowY + 228, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Category", previewX + 12, previewInfoY + 60, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, "Medieval", previewX + 90, previewInfoY + 60, COLOR_TEXT);
 
-        // Details panel
-        int detailsY = topRowY + topBoxH + 16;
-        int detailsH = 170;
-        drawPanel(guiGraphics, leftBoxX, detailsY, rightBoxW + leftBoxW + 16, detailsH, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "Format", previewX + 12, previewInfoY + 76, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, ".schem", previewX + 90, previewInfoY + 76, COLOR_TEXT);
 
-        guiGraphics.drawString(this.font, "4. Asset Details", leftBoxX + 12, detailsY + 12, COLOR_TEXT);
+        // ===== Details =====
+        drawPanel(guiGraphics, innerX, detailsY, leftAreaW, detailsH, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "4. Asset Details", innerX + 12, detailsY + 12, COLOR_TEXT);
 
-        drawControlBox(guiGraphics, "Asset Name...", leftBoxX + 12, detailsY + 34, 180, 28);
-        drawControlBox(guiGraphics, "Macro Category...", leftBoxX + 204, detailsY + 34, 170, 28);
-        drawControlBox(guiGraphics, "Author...", leftBoxX + 386, detailsY + 34, 150, 28);
+        int formX = innerX + 12;
+        int fieldGap = 12;
+        int fieldH = compact ? 22 : 28;
+        int verticalGap = compact ? 10 : 12;
 
-        drawControlBox(guiGraphics, "Type...", leftBoxX + 12, detailsY + 74, 180, 28);
-        drawControlBox(guiGraphics, "Minecraft Version...", leftBoxX + 204, detailsY + 74, 170, 28);
-        drawControlBox(guiGraphics, "Variants...", leftBoxX + 386, detailsY + 74, 150, 28);
+        int fieldW1 = (leftAreaW - 48) / 3;
+        int fieldW2 = fieldW1;
+        int fieldW3 = fieldW1;
+        int wideFieldW = (leftAreaW - 36) / 2;
 
-        drawControlBox(guiGraphics, "Tags...", leftBoxX + 12, detailsY + 114, 260, 28);
-        drawControlBox(guiGraphics, "File Info...", leftBoxX + 284, detailsY + 114, 252, 28);
+// Espaços internos do painel de details
+        int topPadding = compact ? 34 : 38;
+        int bottomPadding = compact ? 10 : 14;
 
-        // Bottom buttons
-        int buttonsY = contentY + contentH - 48;
-        drawControlBox(guiGraphics, "Reset", contentX + contentW - 290, buttonsY, 90, 28);
-        drawControlBox(guiGraphics, "Cancel", contentX + contentW - 190, buttonsY, 90, 28);
+// Calcula as 3 linhas para caberem de verdade dentro do painel
+        int totalFieldsHeight = (fieldH * 3) + (verticalGap * 2);
+        int availableFormHeight = detailsH - topPadding - bottomPadding;
+        int extraSpace = Math.max(0, availableFormHeight - totalFieldsHeight);
 
-        drawPanel(guiGraphics, contentX + contentW - 90, buttonsY, 72, 28, 0xFF2F9BE6, 0xFF73C8FF);
-        guiGraphics.drawString(this.font, "Save", contentX + contentW - 67, buttonsY + 10, 0xFFFFFFFF);
+// Centraliza verticalmente o bloco de campos dentro do painel
+        int formY1 = detailsY + topPadding + (extraSpace / 2);
+        int formY2 = formY1 + fieldH + verticalGap;
+        int formY3 = formY2 + fieldH + verticalGap;
+
+        drawControlBox(guiGraphics, "Asset Name...", formX, formY1, fieldW1, fieldH);
+        drawControlBox(guiGraphics, "Macro Category...", formX + fieldW1 + fieldGap, formY1, fieldW2, fieldH);
+        drawControlBox(guiGraphics, "Author...", formX + fieldW1 + fieldGap + fieldW2 + fieldGap, formY1, fieldW3, fieldH);
+
+        drawControlBox(guiGraphics, "Type...", formX, formY2, fieldW1, fieldH);
+        drawControlBox(guiGraphics, "Minecraft Version...", formX + fieldW1 + fieldGap, formY2, fieldW2, fieldH);
+        drawControlBox(guiGraphics, "Variants...", formX + fieldW1 + fieldGap + fieldW2 + fieldGap, formY2, fieldW3, fieldH);
+
+        drawControlBox(guiGraphics, "Tags...", formX, formY3, wideFieldW, fieldH);
+        drawControlBox(guiGraphics, "File Info...", formX + wideFieldW + fieldGap, formY3, wideFieldW, fieldH);
+
+        // ===== Ações inferiores =====
+        int buttonH = 28;
+        int saveW = 88;
+        int cancelW = 90;
+        int resetW = 90;
+
+        int saveX = innerX + innerW - saveW;
+        int cancelX = saveX - fieldGap - cancelW;
+        int resetX = cancelX - fieldGap - resetW;
+
+        drawButtonBox(guiGraphics, "Reset", resetX, actionsY, resetW, buttonH, false);
+        drawButtonBox(guiGraphics, "Cancel", cancelX, actionsY, cancelW, buttonH, false);
+        drawButtonBox(guiGraphics, "Save", saveX, actionsY, saveW, buttonH, true);
     }
 
     private void drawAssetCard(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset) {
