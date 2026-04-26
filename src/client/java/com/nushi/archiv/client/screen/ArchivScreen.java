@@ -52,6 +52,13 @@ public class ArchivScreen extends Screen {
         this.mockAssets = MockAssetRepository.getAllAssets();
     }
 
+    private void drawStepPanel(GuiGraphics guiGraphics, int x, int y, int width, int height, boolean active) {
+        int border = active ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
+        int background = active ? COLOR_PANEL_ALT : COLOR_PANEL;
+
+        drawPanel(guiGraphics, x, y, width, height, background, border);
+    }
+
     @Override
     protected void init() {
         // Botão simples de fechar no canto superior direito.
@@ -546,9 +553,9 @@ public class ArchivScreen extends Screen {
         int detailsH = actionsY - actionsGap - detailsY;
 
         // ===== Blocos superiores =====
-        drawPanel(guiGraphics, structureX, sectionY, structureW, topBoxH, COLOR_PANEL, COLOR_BORDER);
-        drawPanel(guiGraphics, imageX, sectionY, imageW, topBoxH, COLOR_PANEL, COLOR_BORDER);
-        drawPanel(guiGraphics, previewX, sectionY, previewColumnW, topBoxH + detailsGap + detailsH, COLOR_PANEL, COLOR_BORDER);
+        drawStepPanel(guiGraphics, structureX, sectionY, structureW, topBoxH, selectedImportStep == 1);
+        drawStepPanel(guiGraphics, imageX, sectionY, imageW, topBoxH, selectedImportStep == 2);
+        drawStepPanel(guiGraphics, previewX, sectionY, previewColumnW, topBoxH + detailsGap + detailsH, false);
 
         int boxMainTextY = compact ? sectionY + 42 : sectionY + 76;
         int boxSubTextY = compact ? sectionY + 60 : sectionY + 92;
@@ -592,7 +599,7 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(this.font, ".schem", previewX + 90, previewInfoY + 76, COLOR_TEXT);
 
         // ===== Details =====
-        drawPanel(guiGraphics, innerX, detailsY, leftAreaW, detailsH, COLOR_PANEL, COLOR_BORDER);
+        drawStepPanel(guiGraphics, innerX, detailsY, leftAreaW, detailsH, selectedImportStep == 3);
         guiGraphics.drawString(this.font, "4. Asset Details", innerX + 12, detailsY + 12, COLOR_TEXT);
 
         int formX = innerX + 12;
@@ -639,10 +646,18 @@ public class ArchivScreen extends Screen {
         int saveX = innerX + innerW - saveW;
         int cancelX = saveX - fieldGap - cancelW;
         int resetX = cancelX - fieldGap - resetW;
+        boolean saveStepActive = selectedImportStep == 4;
 
         drawButtonBox(guiGraphics, "Reset", resetX, actionsY, resetW, buttonH, false);
         drawButtonBox(guiGraphics, "Cancel", cancelX, actionsY, cancelW, buttonH, false);
         drawButtonBox(guiGraphics, "Save", saveX, actionsY, saveW, buttonH, true);
+
+        if (saveStepActive) {
+            guiGraphics.fill(saveX - 2, actionsY - 2, saveX + saveW + 2, actionsY, COLOR_BORDER_ACTIVE);
+            guiGraphics.fill(saveX - 2, actionsY + buttonH, saveX + saveW + 2, actionsY + buttonH + 2, COLOR_BORDER_ACTIVE);
+            guiGraphics.fill(saveX - 2, actionsY - 2, saveX, actionsY + buttonH + 2, COLOR_BORDER_ACTIVE);
+            guiGraphics.fill(saveX + saveW, actionsY - 2, saveX + saveW + 2, actionsY + buttonH + 2, COLOR_BORDER_ACTIVE);
+        }
     }
 
     private void drawAssetCard(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset) {
