@@ -23,6 +23,8 @@ public class ArchivScreen extends Screen {
     private static final int COLOR_TEXT = 0xFFF2F7FF;
     private static final int COLOR_TEXT_DIM = 0xFF93A8C1;
     private static final int COLOR_SUCCESS = 0xFF36C275;
+    private static final int MOCK_PREVIEW_IMAGE_COLOR = 0xFF6B86B3;
+    private static final int MOCK_NO_PREVIEW_IMAGE_COLOR = 0xFF4B6E9A;
 
     // Guarda a tela anterior para voltar ao fechar.
     private final Screen parent;
@@ -44,6 +46,26 @@ public class ArchivScreen extends Screen {
     private String selectedCategory = "All";
     private String selectedTopTab = "Browse";
     private int selectedImportStep = 1;
+    private boolean mockStructureFileSelected = false;
+    private final String mockStructureFileName = "stone_tower.schem";
+    private final String mockStructureFileFormat = ".schem";
+    private final String mockStructureFileSize = "1.24 MB";
+    private boolean mockPreviewImageSelected = false;
+    private final String mockPreviewImageName = "stone_tower_preview.png";
+    private final String mockPreviewImageFormat = ".png";
+    private final String mockPreviewImageRatio = "16:9";
+
+    private boolean mockDetailsFilled = false;
+    private boolean mockAssetSaved = false;
+
+    private final String mockAssetName = "Stone Tower";
+    private final String mockMacroCategory = "Medieval";
+    private final String mockAuthor = "BuilderX";
+    private final String mockType = "Structure";
+    private final String mockMinecraftVersion = "1.20.1";
+    private final String mockVariants = "Default, Mossy";
+    private final String mockTags = "tower, stone, medieval";
+    private final String mockFileInfo = ".schem • 1.24 MB";
 
     // Construtor da tela.
     public ArchivScreen(Component title, Screen parent) {
@@ -106,6 +128,47 @@ public class ArchivScreen extends Screen {
         }
 
         return filteredAssets;
+    }
+
+    private boolean isInside(double mouseX, double mouseY, int x, int y, int width, int height) {
+        return mouseX >= x && mouseX <= x + width
+                && mouseY >= y && mouseY <= y + height;
+    }
+
+    private boolean isImportReady() {
+        return mockStructureFileSelected && mockDetailsFilled;
+    }
+
+    private boolean hasImportData() {
+        return mockStructureFileSelected || mockPreviewImageSelected || mockDetailsFilled || mockAssetSaved;
+    }
+
+    private void resetImportState() {
+        mockStructureFileSelected = false;
+        mockPreviewImageSelected = false;
+        mockDetailsFilled = false;
+        mockAssetSaved = false;
+        selectedImportStep = 1;
+    }
+
+    private String fitTextToWidth(String text, int maxWidth) {
+        if (this.font.width(text) <= maxWidth) {
+            return text;
+        }
+
+        String ellipsis = "...";
+        int ellipsisWidth = this.font.width(ellipsis);
+        StringBuilder result = new StringBuilder();
+
+        for (int i = 0; i < text.length(); i++) {
+            String next = result.toString() + text.charAt(i);
+            if (this.font.width(next) + ellipsisWidth > maxWidth) {
+                break;
+            }
+            result.append(text.charAt(i));
+        }
+
+        return result + ellipsis;
     }
 
     @Override
@@ -193,14 +256,194 @@ public class ArchivScreen extends Screen {
             for (int i = 0; i < 4; i++) {
                 int currentY = stepY + (i * stepGap);
 
-                boolean insideStepX = mouseX >= stepX && mouseX <= stepX + stepW;
-                boolean insideStepY = mouseY >= currentY && mouseY <= currentY + stepH;
-
-                if (insideStepX && insideStepY) {
+                if (isInside(mouseX, mouseY, stepX, currentY, stepW, stepH)) {
                     selectedImportStep = i + 1;
                     return true;
                 }
             }
+
+            // ===== clique fake no botão Browse/Replace File =====
+            if (selectedImportStep == 1) {
+                int importContentX = rootX + sidebarW;
+                int importContentY = bodyY;
+                int importContentW = rootW - sidebarW;
+
+                int pad = 18;
+                int innerX = importContentX + pad;
+                int innerY = importContentY + pad;
+                int innerW = importContentW - (pad * 2);
+
+                boolean compact = true;
+                int titleBlockH = compact ? 48 : 40;
+                int gap = compact ? 12 : 16;
+                int sectionY = innerY + titleBlockH;
+
+                int previewColumnW = compact ? 210 : 220;
+                int leftAreaW = innerW - previewColumnW - gap;
+                int structureW = (leftAreaW * 58) / 100;
+                int structureX = innerX;
+
+                int boxButtonY = compact ? sectionY + 80 : sectionY + 118;
+
+                if (mockStructureFileSelected) {
+                    int replaceButtonW = 108;
+                    int replaceButtonH = 24;
+                    int replaceButtonX = structureX + structureW - replaceButtonW - 20;
+                    int replaceButtonY = sectionY + 34;
+
+                    if (isInside(mouseX, mouseY, replaceButtonX, replaceButtonY, replaceButtonW, replaceButtonH)) {
+                        mockStructureFileSelected = false;
+                        mockAssetSaved = false;
+                        return true;
+                    }
+                } else {
+                    int browseFileButtonX = structureX + (structureW / 2) - 60;
+
+                    if (isInside(mouseX, mouseY, browseFileButtonX, boxButtonY, 120, 28)) {
+                        mockStructureFileSelected = true;
+                        mockAssetSaved = false;
+                        return true;
+                    }
+                }
+            }
+
+            if (selectedImportStep == 2) {
+                int importContentX = rootX + sidebarW;
+                int importContentY = bodyY;
+                int importContentW = rootW - sidebarW;
+
+                int pad = 18;
+                int innerX = importContentX + pad;
+                int innerY = importContentY + pad;
+                int innerW = importContentW - (pad * 2);
+
+                boolean compact = true;
+                int titleBlockH = compact ? 48 : 40;
+                int gap = compact ? 12 : 16;
+                int sectionY = innerY + titleBlockH;
+
+                int previewColumnW = compact ? 210 : 220;
+                int leftAreaW = innerW - previewColumnW - gap;
+                int structureW = (leftAreaW * 58) / 100;
+                int imageW = leftAreaW - structureW - gap;
+                int imageX = innerX + structureW + gap;
+
+                int boxButtonY = compact ? sectionY + 80 : sectionY + 118;
+
+                if (mockPreviewImageSelected) {
+                    int topBoxH = compact ? 118 : 170;
+
+                    int replaceButtonW = 118;
+                    int replaceButtonH = 24;
+                    int replaceButtonX = imageX + (imageW / 2) - (replaceButtonW / 2);
+                    int replaceButtonY = sectionY + topBoxH - replaceButtonH - 8;
+
+                    if (isInside(mouseX, mouseY, replaceButtonX, replaceButtonY, replaceButtonW, replaceButtonH)) {
+                        mockPreviewImageSelected = false;
+                        mockAssetSaved = false;
+                        return true;
+                    }
+                } else {
+                    int browseImageButtonX = imageX + (imageW / 2) - 60;
+
+                    if (isInside(mouseX, mouseY, browseImageButtonX, boxButtonY, 120, 28)) {
+                        mockPreviewImageSelected = true;
+                        mockAssetSaved = false;
+                        return true;
+                    }
+                }
+            }
+
+            if (selectedImportStep == 3) {
+                int importContentX = rootX + sidebarW;
+                int importContentY = bodyY;
+                int importContentW = rootW - sidebarW;
+                int importContentH = bodyH;
+
+                int pad = 18;
+                int innerX = importContentX + pad;
+                int innerY = importContentY + pad;
+                int innerW = importContentW - (pad * 2);
+                int innerH = importContentH - (pad * 2);
+
+                boolean compact = true;
+                int titleBlockH = compact ? 48 : 40;
+                int gap = compact ? 12 : 16;
+                int sectionY = innerY + titleBlockH;
+
+                int previewColumnW = compact ? 210 : 220;
+                int leftAreaW = innerW - previewColumnW - gap;
+
+                int topBoxH = 72;
+                int detailsGap = 10;
+                int actionsBarH = 28;
+                int actionsBottomMargin = 8;
+                int actionsGap = 8;
+
+                int detailsY = sectionY + topBoxH + detailsGap;
+                int actionsY = innerY + innerH - actionsBottomMargin - actionsBarH;
+                int detailsH = actionsY - actionsGap - detailsY;
+
+                int detailsActionW = 92;
+                int detailsActionH = 20;
+                int detailsActionX = innerX + leftAreaW - detailsActionW - 12;
+                int detailsActionY = detailsY + 10;
+
+                if (isInside(mouseX, mouseY, detailsActionX, detailsActionY, detailsActionW, detailsActionH)) {
+                    mockDetailsFilled = !mockDetailsFilled;
+                    mockAssetSaved = false;
+                    return true;
+                }
+            }
+
+            int importContentX = rootX + sidebarW;
+            int importContentY = bodyY;
+            int importContentW = rootW - sidebarW;
+            int importContentH = bodyH;
+
+            int pad = 18;
+            int innerX = importContentX + pad;
+            int innerY = importContentY + pad;
+            int innerW = importContentW - (pad * 2);
+            int innerH = importContentH - (pad * 2);
+
+            boolean compact = true;
+            int actionsBarH = 28;
+            int actionsBottomMargin = compact ? 8 : 18;
+            int actionsY = innerY + innerH - actionsBottomMargin - actionsBarH;
+
+            int fieldGap = 12;
+            int saveW = 88;
+            int cancelW = 90;
+            int resetW = 90;
+
+            int saveX = innerX + innerW - saveW;
+            int cancelX = saveX - fieldGap - cancelW;
+            int resetX = cancelX - fieldGap - resetW;
+
+// Reset
+            if (isInside(mouseX, mouseY, resetX, actionsY, resetW, actionsBarH)) {
+                if (hasImportData()) {
+                    resetImportState();
+                    return true;
+                }
+            }
+
+// Cancel
+            if (isInside(mouseX, mouseY, cancelX, actionsY, cancelW, actionsBarH)) {
+                this.onClose();
+                return true;
+            }
+
+// Save
+            if (isInside(mouseX, mouseY, saveX, actionsY, saveW, actionsBarH)) {
+                if (isImportReady()) {
+                    mockAssetSaved = true;
+                    selectedImportStep = 4;
+                    return true;
+                }
+            }
+
         }
 
         if ("Browse".equals(selectedTopTab)) {
@@ -413,10 +656,47 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(this.font, label, x + 12, textY, COLOR_TEXT_DIM);
     }
 
+    private void drawFieldBox(GuiGraphics guiGraphics, String text, int x, int y, int width, int height, boolean filled) {
+        drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
+
+        int textY = y + (height - this.font.lineHeight) / 2;
+        int textColor = filled ? COLOR_TEXT : COLOR_TEXT_DIM;
+
+        guiGraphics.drawString(this.font, text, x + 12, textY, textColor);
+    }
+
     private void drawButtonBox(GuiGraphics guiGraphics, String label, int x, int y, int width, int height, boolean primary) {
         int background = primary ? 0xFF2F9BE6 : COLOR_PANEL;
         int border = primary ? 0xFF73C8FF : COLOR_BORDER;
         int textColor = 0xFFFFFFFF;
+
+        drawPanel(guiGraphics, x, y, width, height, background, border);
+
+        int textWidth = this.font.width(label);
+        int textX = x + (width - textWidth) / 2;
+        int textY = y + (height - this.font.lineHeight) / 2;
+
+        guiGraphics.drawString(this.font, label, textX, textY, textColor);
+    }
+
+    private void drawButtonBoxState(GuiGraphics guiGraphics, String label, int x, int y, int width, int height, boolean primary, boolean enabled) {
+        int background;
+        int border;
+        int textColor;
+
+        if (!enabled) {
+            background = 0xFF162233;
+            border = 0xFF25384F;
+            textColor = 0xFF5F7288;
+        } else if (primary) {
+            background = 0xFF2F9BE6;
+            border = 0xFF73C8FF;
+            textColor = 0xFFFFFFFF;
+        } else {
+            background = COLOR_PANEL;
+            border = COLOR_BORDER;
+            textColor = 0xFFFFFFFF;
+        }
 
         drawPanel(guiGraphics, x, y, width, height, background, border);
 
@@ -514,10 +794,20 @@ public class ArchivScreen extends Screen {
 
     private String getImportStepSubtitle() {
         return switch (selectedImportStep) {
-            case 1 -> "Step 1 - Choose a .schem or .schematic file.";
-            case 2 -> "Step 2 - Add an optional preview image for the asset.";
-            case 3 -> "Step 3 - Fill in the metadata and asset details.";
-            case 4 -> "Step 4 - Review everything and save the asset.";
+            case 1 -> mockStructureFileSelected
+                    ? "Step 1 - Structure file selected. You can replace it if needed."
+                    : "Step 1 - Choose a .schem or .schematic file.";
+            case 2 -> mockPreviewImageSelected
+                    ? "Step 2 - Preview image selected. You can replace it if needed."
+                    : "Step 2 - Add an optional preview image for the asset.";
+            case 3 -> mockDetailsFilled
+                    ? "Step 3 - Metadata ready. You can review or clear the values."
+                    : "Step 3 - Fill in the metadata and asset details.";
+            case 4 -> mockAssetSaved
+                    ? "Step 4 - Mock asset saved successfully."
+                    : (mockDetailsFilled
+                       ? "Step 4 - Review the generated asset card and save it."
+                       : "Step 4 - Review everything and save the asset.");
             default -> "Import a new build asset into Archiv.";
         };
     }
@@ -604,29 +894,76 @@ public class ArchivScreen extends Screen {
         int boxButtonY = compact ? sectionY + 80 : sectionY + 118;
 
 // ===== Structure file =====
-        guiGraphics.drawString(this.font, "1. Structure File", structureX + 12, sectionY + 12, COLOR_TEXT);
+            guiGraphics.drawString(this.font, "1. Structure File", structureX + 12, sectionY + 12, COLOR_TEXT);
 
-        if (compactTopSections) {
-            guiGraphics.drawString(this.font, "Selected format: .schem / .schematic", structureX + 12, sectionY + 34, COLOR_TEXT_DIM);
-            guiGraphics.drawString(this.font, "Ready for metadata step", structureX + 12, sectionY + 50, COLOR_TEXT);
-        } else {
-            guiGraphics.drawString(this.font, "Drop .schem / .schematic here", structureX + 45, boxMainTextY, COLOR_TEXT);
-            guiGraphics.drawString(this.font, "Supports .schem and .schematic files", structureX + 26, boxSubTextY, COLOR_TEXT_DIM);
-            drawButtonBox(guiGraphics, "Browse File", structureX + (structureW / 2) - 60, boxButtonY, 120, 28, false);
-        }
+            if (compactTopSections) {
+                if (mockStructureFileSelected) {
+                    guiGraphics.drawString(this.font, "Selected: " + mockStructureFileName, structureX + 20, sectionY + 34, COLOR_TEXT);
+                    guiGraphics.drawString(this.font, mockStructureFileFormat + "  •  " + mockStructureFileSize, structureX + 20, sectionY + 50, COLOR_TEXT_DIM);
+                } else {
+                    guiGraphics.drawString(this.font, "No structure file selected", structureX + 20, sectionY + 34, COLOR_TEXT_DIM);
+                    guiGraphics.drawString(this.font, "Go back to step 1 to choose one", structureX + 20, sectionY + 50, COLOR_TEXT);
+                }
+            } else {
+                if (mockStructureFileSelected) {
+                    int selectedInfoX = structureX + 20;
+                    int selectedInfoY = sectionY + 34;
 
-        drawInactiveOverlay(guiGraphics, structureX, sectionY, structureW, topBoxH, !fileStepActive);
+                    int replaceButtonW = 108;
+                    int replaceButtonH = 24;
+                    int replaceButtonX = structureX + structureW - replaceButtonW - 20;
+                    int replaceButtonY = sectionY + 34;
 
-// ===== Preview image =====
+                    guiGraphics.drawString(this.font, "Selected file:", selectedInfoX, selectedInfoY, COLOR_TEXT_DIM);
+                    guiGraphics.drawString(this.font, mockStructureFileName, selectedInfoX, selectedInfoY + 18, COLOR_TEXT);
+                    guiGraphics.drawString(this.font, mockStructureFileFormat + "  •  " + mockStructureFileSize, selectedInfoX, selectedInfoY + 34, COLOR_TEXT_DIM);
+
+                    drawButtonBox(guiGraphics, "Replace File", replaceButtonX, replaceButtonY, replaceButtonW, replaceButtonH, false);
+                } else {
+                    guiGraphics.drawString(this.font, "Drop .schem / .schematic here", structureX + 45, boxMainTextY, COLOR_TEXT);
+                    guiGraphics.drawString(this.font, "Supports .schem and .schematic files", structureX + 26, boxSubTextY, COLOR_TEXT_DIM);
+                    drawButtonBox(guiGraphics, "Browse File", structureX + (structureW / 2) - 60, boxButtonY, 120, 28, false);
+                }
+            }
+
+            drawInactiveOverlay(guiGraphics, structureX, sectionY, structureW, topBoxH, !fileStepActive);
+        // ===== Preview image =====
         guiGraphics.drawString(this.font, "2. Preview Image (Optional)", imageX + 12, sectionY + 12, COLOR_TEXT);
 
         if (compactTopSections) {
-            guiGraphics.drawString(this.font, "Preview image: optional", imageX + 12, sectionY + 34, COLOR_TEXT_DIM);
-            guiGraphics.drawString(this.font, "You can add or replace it later", imageX + 12, sectionY + 50, COLOR_TEXT);
+            if (mockPreviewImageSelected) {
+                int compactTextMaxW = imageW - 40;
+                String compactImageName = fitTextToWidth(mockPreviewImageName, compactTextMaxW);
+
+                guiGraphics.drawString(this.font, "Selected image:", imageX + 20, sectionY + 34, COLOR_TEXT_DIM);
+                guiGraphics.drawString(this.font, compactImageName, imageX + 20, sectionY + 50, COLOR_TEXT);
+            } else {
+                guiGraphics.drawString(this.font, "Preview image: optional", imageX + 20, sectionY + 34, COLOR_TEXT_DIM);
+                guiGraphics.drawString(this.font, "You can add or replace it later", imageX + 20, sectionY + 50, COLOR_TEXT);
+            }
         } else {
-            guiGraphics.drawString(this.font, "Drop image here", imageX + 40, boxMainTextY, COLOR_TEXT);
-            guiGraphics.drawString(this.font, "PNG or JPG", imageX + 70, boxSubTextY, COLOR_TEXT_DIM);
-            drawButtonBox(guiGraphics, "Browse Image", imageX + (imageW / 2) - 60, boxButtonY, 120, 28, false);
+            if (mockPreviewImageSelected) {
+                int imageInfoX = imageX + 20;
+                int imageInfoY = sectionY + 34;
+                int imageTextMaxW = imageW - 40;
+
+                String visibleImageName = fitTextToWidth(mockPreviewImageName, imageTextMaxW);
+
+                int replaceButtonW = 118;
+                int replaceButtonH = 24;
+                int replaceButtonX = imageX + (imageW / 2) - (replaceButtonW / 2);
+                int replaceButtonY = sectionY + topBoxH - replaceButtonH - 8;
+
+                guiGraphics.drawString(this.font, "Selected image:", imageInfoX, imageInfoY, COLOR_TEXT_DIM);
+                guiGraphics.drawString(this.font, visibleImageName, imageInfoX, imageInfoY + 18, COLOR_TEXT);
+                guiGraphics.drawString(this.font, mockPreviewImageFormat + "  •  " + mockPreviewImageRatio, imageInfoX, imageInfoY + 34, COLOR_TEXT_DIM);
+
+                drawButtonBox(guiGraphics, "Replace Image", replaceButtonX, replaceButtonY, replaceButtonW, replaceButtonH, false);
+            } else {
+                guiGraphics.drawString(this.font, "Drop image here", imageX + 40, boxMainTextY, COLOR_TEXT);
+                guiGraphics.drawString(this.font, "PNG or JPG", imageX + 70, boxSubTextY, COLOR_TEXT_DIM);
+                drawButtonBox(guiGraphics, "Browse Image", imageX + (imageW / 2) - 60, boxButtonY, 120, 28, false);
+            }
         }
 
         drawInactiveOverlay(guiGraphics, imageX, sectionY, imageW, topBoxH, !imageStepActive);
@@ -639,28 +976,66 @@ public class ArchivScreen extends Screen {
         int previewImageW = previewColumnW - 24;
         int previewImageH = compact ? 92 : 110;
 
-        guiGraphics.fill(previewImageX, previewImageY, previewImageX + previewImageW, previewImageY + previewImageH, 0xFF4B6E9A);
-        guiGraphics.drawString(this.font, "PREVIEW", previewImageX + (previewImageW / 2) - 24, previewImageY + (previewImageH / 2) - 4, 0xFFFFFFFF);
+        int previewColor = mockPreviewImageSelected ? MOCK_PREVIEW_IMAGE_COLOR : MOCK_NO_PREVIEW_IMAGE_COLOR;
+        guiGraphics.fill(previewImageX, previewImageY, previewImageX + previewImageW, previewImageY + previewImageH, previewColor);
+
+        String previewBannerText = mockPreviewImageSelected ? "IMAGE READY" : "PREVIEW";
+        int previewBannerWidth = this.font.width(previewBannerText);
+        guiGraphics.drawString(
+                this.font,
+                previewBannerText,
+                previewImageX + (previewImageW / 2) - (previewBannerWidth / 2),
+                previewImageY + (previewImageH / 2) - 4,
+                0xFFFFFFFF
+        );
 
         int previewInfoY = compact ? sectionY + 132 : sectionY + 150;
 
-        guiGraphics.drawString(this.font, "Stone Tower", previewX + 12, previewInfoY, COLOR_TEXT);
-        guiGraphics.drawString(this.font, "Structure  •  1.20.1", previewX + 12, previewInfoY + 16, COLOR_TEXT_DIM);
+        String previewName = mockDetailsFilled ? mockAssetName : "Unnamed Asset";
+        String previewType = mockDetailsFilled ? mockType : "Unknown Type";
+        String previewVersion = mockDetailsFilled ? mockMinecraftVersion : "Unknown";
+        String previewAuthor = mockDetailsFilled ? mockAuthor : "Unknown";
+        String previewCategory = mockDetailsFilled ? mockMacroCategory : "Uncategorized";
+        String previewFormat = mockStructureFileSelected ? mockStructureFileFormat : "No file";
+        String previewImageStatus = mockPreviewImageSelected ? mockPreviewImageFormat + "  •  " + mockPreviewImageRatio : "No preview image";
+
+        guiGraphics.drawString(this.font, previewName, previewX + 12, previewInfoY, COLOR_TEXT);
+        guiGraphics.drawString(this.font, previewType + "  •  " + previewVersion, previewX + 12, previewInfoY + 16, COLOR_TEXT_DIM);
 
         guiGraphics.drawString(this.font, "Author", previewX + 12, previewInfoY + 44, COLOR_TEXT_DIM);
-        guiGraphics.drawString(this.font, "BuilderX", previewX + 90, previewInfoY + 44, COLOR_TEXT);
+        guiGraphics.drawString(this.font, previewAuthor, previewX + 90, previewInfoY + 44, COLOR_TEXT);
 
         guiGraphics.drawString(this.font, "Category", previewX + 12, previewInfoY + 60, COLOR_TEXT_DIM);
-        guiGraphics.drawString(this.font, "Medieval", previewX + 90, previewInfoY + 60, COLOR_TEXT);
+        guiGraphics.drawString(this.font, previewCategory, previewX + 90, previewInfoY + 60, COLOR_TEXT);
 
         guiGraphics.drawString(this.font, "Format", previewX + 12, previewInfoY + 76, COLOR_TEXT_DIM);
-        guiGraphics.drawString(this.font, ".schem", previewX + 90, previewInfoY + 76, COLOR_TEXT);
+        guiGraphics.drawString(this.font, previewFormat, previewX + 90, previewInfoY + 76, COLOR_TEXT);
+
+        guiGraphics.drawString(this.font, "Image", previewX + 12, previewInfoY + 92, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, previewImageStatus, previewX + 90, previewInfoY + 92, COLOR_TEXT);
 
         drawInactiveOverlay(guiGraphics, previewX, sectionY, previewColumnW, topBoxH + detailsGap + detailsH, !saveStepActive);
 
         // ===== Details =====
         drawStepPanel(guiGraphics, innerX, detailsY, leftAreaW, detailsH, detailsStepActive);
         guiGraphics.drawString(this.font, "4. Asset Details", innerX + 12, detailsY + 12, COLOR_TEXT);
+
+        int detailsActionW = 92;
+        int detailsActionH = 20;
+        int detailsActionX = innerX + leftAreaW - detailsActionW - 12;
+        int detailsActionY = detailsY + 10;
+
+        if (detailsStepActive) {
+            drawButtonBox(
+                    guiGraphics,
+                    mockDetailsFilled ? "Clear" : "Auto Fill",
+                    detailsActionX,
+                    detailsActionY,
+                    detailsActionW,
+                    detailsActionH,
+                    false
+            );
+        }
 
         int formX = innerX + 12;
         int fieldGap = 12;
@@ -673,7 +1048,9 @@ public class ArchivScreen extends Screen {
         int wideFieldW = (leftAreaW - 36) / 2;
 
 // Espaços internos do painel de details
-        int topPadding = compact ? 34 : 38;
+        int topPadding = detailsStepActive
+                ? (compact ? 44 : 50)
+                : (compact ? 34 : 38);
         int bottomPadding = compact ? 10 : 14;
 
 // Calcula as 3 linhas para caberem de verdade dentro do painel
@@ -686,16 +1063,16 @@ public class ArchivScreen extends Screen {
         int formY2 = formY1 + fieldH + verticalGap;
         int formY3 = formY2 + fieldH + verticalGap;
 
-        drawControlBox(guiGraphics, "Asset Name...", formX, formY1, fieldW1, fieldH);
-        drawControlBox(guiGraphics, "Macro Category...", formX + fieldW1 + fieldGap, formY1, fieldW2, fieldH);
-        drawControlBox(guiGraphics, "Author...", formX + fieldW1 + fieldGap + fieldW2 + fieldGap, formY1, fieldW3, fieldH);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? mockAssetName : "Asset Name...", formX, formY1, fieldW1, fieldH, mockDetailsFilled);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? mockMacroCategory : "Macro Category...", formX + fieldW1 + fieldGap, formY1, fieldW2, fieldH, mockDetailsFilled);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? mockAuthor : "Author...", formX + fieldW1 + fieldGap + fieldW2 + fieldGap, formY1, fieldW3, fieldH, mockDetailsFilled);
 
-        drawControlBox(guiGraphics, "Type...", formX, formY2, fieldW1, fieldH);
-        drawControlBox(guiGraphics, "Minecraft Version...", formX + fieldW1 + fieldGap, formY2, fieldW2, fieldH);
-        drawControlBox(guiGraphics, "Variants...", formX + fieldW1 + fieldGap + fieldW2 + fieldGap, formY2, fieldW3, fieldH);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? mockType : "Type...", formX, formY2, fieldW1, fieldH, mockDetailsFilled);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? mockMinecraftVersion : "Minecraft Version...", formX + fieldW1 + fieldGap, formY2, fieldW2, fieldH, mockDetailsFilled);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? mockVariants : "Variants...", formX + fieldW1 + fieldGap + fieldW2 + fieldGap, formY2, fieldW3, fieldH, mockDetailsFilled);
 
-        drawControlBox(guiGraphics, "Tags...", formX, formY3, wideFieldW, fieldH);
-        drawControlBox(guiGraphics, "File Info...", formX + wideFieldW + fieldGap, formY3, wideFieldW, fieldH);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? mockTags : "Tags...", formX, formY3, wideFieldW, fieldH, mockDetailsFilled);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? mockFileInfo : "File Info...", formX + wideFieldW + fieldGap, formY3, wideFieldW, fieldH, mockDetailsFilled);
 
         drawInactiveOverlay(guiGraphics, innerX, detailsY, leftAreaW, detailsH, !detailsStepActive);
 
@@ -717,15 +1094,27 @@ public class ArchivScreen extends Screen {
 
             drawStepPanel(guiGraphics, actionsGroupX, actionsGroupY, actionsGroupW, actionsGroupH, true);
         }
+
+        boolean importReady = isImportReady();
+        boolean hasImportState = hasImportData();
+
         if (saveStepActive) {
-            guiGraphics.drawString(this.font, "Ready to save asset", resetX, actionsY - 14, COLOR_BORDER_ACTIVE);
+            String saveHint;
+            if (mockAssetSaved) {
+                saveHint = "Mock asset saved successfully";
+            } else if (importReady) {
+                saveHint = "Ready to save asset";
+            } else {
+                saveHint = "Asset is still incomplete";
+            }
+
+            guiGraphics.drawString(this.font, saveHint, resetX, actionsY - 14, COLOR_BORDER_ACTIVE);
         }
+        drawButtonBoxState(guiGraphics, "Reset", resetX, actionsY, resetW, buttonH, false, hasImportState);
+        drawButtonBoxState(guiGraphics, "Cancel", cancelX, actionsY, cancelW, buttonH, false, true);
+        drawButtonBoxState(guiGraphics, mockAssetSaved ? "Saved" : "Save", saveX, actionsY, saveW, buttonH, true, importReady || mockAssetSaved);
 
-        drawButtonBox(guiGraphics, "Reset", resetX, actionsY, resetW, buttonH, false);
-        drawButtonBox(guiGraphics, "Cancel", cancelX, actionsY, cancelW, buttonH, false);
-        drawButtonBox(guiGraphics, "Save", saveX, actionsY, saveW, buttonH, true);
-
-        if (saveStepActive) {
+        if (saveStepActive && (importReady || mockAssetSaved)) {
             guiGraphics.fill(saveX - 2, actionsY - 2, saveX + saveW + 2, actionsY, COLOR_BORDER_ACTIVE);
             guiGraphics.fill(saveX - 2, actionsY + buttonH, saveX + saveW + 2, actionsY + buttonH + 2, COLOR_BORDER_ACTIVE);
             guiGraphics.fill(saveX - 2, actionsY - 2, saveX, actionsY + buttonH + 2, COLOR_BORDER_ACTIVE);
