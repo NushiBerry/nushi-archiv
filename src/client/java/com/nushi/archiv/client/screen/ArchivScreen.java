@@ -493,6 +493,26 @@ public class ArchivScreen extends Screen {
         );
     }
 
+    private String getImportStepLabel() {
+        return switch (selectedImportStep) {
+            case 1 -> "SELECT FILE";
+            case 2 -> "PREVIEW IMAGE";
+            case 3 -> "DETAILS";
+            case 4 -> "SAVE ASSET";
+            default -> "IMPORT";
+        };
+    }
+
+    private String getImportStepSubtitle() {
+        return switch (selectedImportStep) {
+            case 1 -> "Step 1 - Choose a .schem or .schematic file.";
+            case 2 -> "Step 2 - Add an optional preview image for the asset.";
+            case 3 -> "Step 3 - Fill in the metadata and asset details.";
+            case 4 -> "Step 4 - Review everything and save the asset.";
+            default -> "Import a new build asset into Archiv.";
+        };
+    }
+
     private void drawImportTab(GuiGraphics guiGraphics, int rootX, int rootY, int rootW, int rootH,
                                int bodyY, int bodyH, int contentX, int contentY, int contentW, int contentH) {
 
@@ -519,11 +539,17 @@ public class ArchivScreen extends Screen {
 // Se a altura útil estiver pequena, usamos layout compacto
         boolean compact = true;
 
-        int titleBlockH = compact ? 44 : 36;
+        int titleBlockH = compact ? 48 : 40;
         int gap = compact ? 12 : 16;
 
+        String importStepLabel = getImportStepLabel();
+        String importStepSubtitle = getImportStepSubtitle();
+
         guiGraphics.drawString(this.font, "Import Asset", innerX, innerY, COLOR_TEXT);
-        guiGraphics.drawString(this.font, "Import a new build asset into Archiv", innerX, innerY + 16, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, importStepSubtitle, innerX, innerY + 16, COLOR_TEXT_DIM);
+
+        int stepLabelWidth = this.font.width(importStepLabel);
+        guiGraphics.drawString(this.font, importStepLabel, innerX + innerW - stepLabelWidth, innerY, COLOR_BORDER_ACTIVE);
 
 // ===== Geometria principal =====
         int sectionY = innerY + titleBlockH;
