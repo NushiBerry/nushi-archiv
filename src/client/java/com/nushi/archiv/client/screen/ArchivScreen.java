@@ -67,6 +67,45 @@ public class ArchivScreen extends Screen {
     private final String mockTags = "tower, stone, medieval";
     private final String mockFileInfo = ".schem • 1.24 MB";
 
+    private static class ImportLayout {
+        int innerX;
+        int innerY;
+        int innerW;
+        int innerH;
+
+        int sectionY;
+
+        int previewColumnW;
+        int leftAreaW;
+
+        int topBoxH;
+        int structureW;
+        int imageW;
+
+        int structureX;
+        int imageX;
+        int previewX;
+
+        int boxButtonY;
+
+        int detailsY;
+        int detailsH;
+
+        int detailsActionX;
+        int detailsActionY;
+        int detailsActionW;
+        int detailsActionH;
+
+        int actionsY;
+        int buttonH;
+        int saveW;
+        int cancelW;
+        int resetW;
+        int saveX;
+        int cancelX;
+        int resetX;
+    }
+
     // Construtor da tela.
     public ArchivScreen(Component title, Screen parent) {
         super(title);
@@ -133,6 +172,65 @@ public class ArchivScreen extends Screen {
     private boolean isInside(double mouseX, double mouseY, int x, int y, int width, int height) {
         return mouseX >= x && mouseX <= x + width
                 && mouseY >= y && mouseY <= y + height;
+    }
+
+    private ImportLayout buildImportLayout(int contentX, int contentY, int contentW, int contentH) {
+        ImportLayout layout = new ImportLayout();
+
+        boolean compact = true;
+        boolean detailsStepActive = selectedImportStep == 3;
+        boolean saveStepActive = selectedImportStep == 4;
+        boolean compactTopSections = detailsStepActive || saveStepActive;
+
+        int pad = 18;
+        int titleBlockH = compact ? 48 : 40;
+        int gap = compact ? 12 : 16;
+        int detailsGap = compact ? 10 : 16;
+        int actionsBarH = 28;
+        int actionsBottomMargin = compact ? 8 : 18;
+        int actionsGap = saveStepActive ? 28 : (compact ? 8 : 12);
+        int fieldGap = 12;
+
+        layout.innerX = contentX + pad;
+        layout.innerY = contentY + pad;
+        layout.innerW = contentW - (pad * 2);
+        layout.innerH = contentH - (pad * 2);
+
+        layout.sectionY = layout.innerY + titleBlockH;
+
+        layout.previewColumnW = compact ? 210 : 220;
+        layout.leftAreaW = layout.innerW - layout.previewColumnW - gap;
+
+        layout.topBoxH = compactTopSections ? 72 : (compact ? 118 : 170);
+
+        layout.structureW = (layout.leftAreaW * 58) / 100;
+        layout.imageW = layout.leftAreaW - layout.structureW - gap;
+
+        layout.structureX = layout.innerX;
+        layout.imageX = layout.structureX + layout.structureW + gap;
+        layout.previewX = layout.innerX + layout.leftAreaW + gap;
+
+        layout.boxButtonY = compact ? layout.sectionY + 80 : layout.sectionY + 118;
+
+        layout.detailsY = layout.sectionY + layout.topBoxH + detailsGap;
+        layout.actionsY = layout.innerY + layout.innerH - actionsBottomMargin - actionsBarH;
+        layout.detailsH = layout.actionsY - actionsGap - layout.detailsY;
+
+        layout.detailsActionW = 92;
+        layout.detailsActionH = 20;
+        layout.detailsActionX = layout.innerX + layout.leftAreaW - layout.detailsActionW - 12;
+        layout.detailsActionY = layout.detailsY + 10;
+
+        layout.buttonH = 28;
+        layout.saveW = 88;
+        layout.cancelW = 90;
+        layout.resetW = 90;
+
+        layout.saveX = layout.innerX + layout.innerW - layout.saveW;
+        layout.cancelX = layout.saveX - fieldGap - layout.cancelW;
+        layout.resetX = layout.cancelX - fieldGap - layout.resetW;
+
+        return layout;
     }
 
     private boolean isImportReady() {
@@ -204,6 +302,11 @@ public class ArchivScreen extends Screen {
         int bodyY = rootY + headerH;
         int bodyH = rootH - headerH - footerH;
 
+        int contentX = rootX + sidebarW;
+        int contentY = bodyY;
+        int contentW = rootW - sidebarW;
+        int contentH = bodyH;
+
         int itemX = rootX + 12;
         int itemY = bodyY + 34;
         int itemW = sidebarW - 24;
@@ -262,34 +365,15 @@ public class ArchivScreen extends Screen {
                 }
             }
 
+            ImportLayout layout = buildImportLayout(contentX, contentY, contentW, contentH);
+
             // ===== clique fake no botão Browse/Replace File =====
             if (selectedImportStep == 1) {
-                int importContentX = rootX + sidebarW;
-                int importContentY = bodyY;
-                int importContentW = rootW - sidebarW;
-
-                int pad = 18;
-                int innerX = importContentX + pad;
-                int innerY = importContentY + pad;
-                int innerW = importContentW - (pad * 2);
-
-                boolean compact = true;
-                int titleBlockH = compact ? 48 : 40;
-                int gap = compact ? 12 : 16;
-                int sectionY = innerY + titleBlockH;
-
-                int previewColumnW = compact ? 210 : 220;
-                int leftAreaW = innerW - previewColumnW - gap;
-                int structureW = (leftAreaW * 58) / 100;
-                int structureX = innerX;
-
-                int boxButtonY = compact ? sectionY + 80 : sectionY + 118;
-
                 if (mockStructureFileSelected) {
                     int replaceButtonW = 108;
                     int replaceButtonH = 24;
-                    int replaceButtonX = structureX + structureW - replaceButtonW - 20;
-                    int replaceButtonY = sectionY + 34;
+                    int replaceButtonX = layout.structureX + layout.structureW - replaceButtonW - 20;
+                    int replaceButtonY = layout.sectionY + 34;
 
                     if (isInside(mouseX, mouseY, replaceButtonX, replaceButtonY, replaceButtonW, replaceButtonH)) {
                         mockStructureFileSelected = false;
@@ -297,9 +381,9 @@ public class ArchivScreen extends Screen {
                         return true;
                     }
                 } else {
-                    int browseFileButtonX = structureX + (structureW / 2) - 60;
+                    int browseFileButtonX = layout.structureX + (layout.structureW / 2) - 60;
 
-                    if (isInside(mouseX, mouseY, browseFileButtonX, boxButtonY, 120, 28)) {
+                    if (isInside(mouseX, mouseY, browseFileButtonX, layout.boxButtonY, 120, 28)) {
                         mockStructureFileSelected = true;
                         mockAssetSaved = false;
                         return true;
@@ -308,35 +392,11 @@ public class ArchivScreen extends Screen {
             }
 
             if (selectedImportStep == 2) {
-                int importContentX = rootX + sidebarW;
-                int importContentY = bodyY;
-                int importContentW = rootW - sidebarW;
-
-                int pad = 18;
-                int innerX = importContentX + pad;
-                int innerY = importContentY + pad;
-                int innerW = importContentW - (pad * 2);
-
-                boolean compact = true;
-                int titleBlockH = compact ? 48 : 40;
-                int gap = compact ? 12 : 16;
-                int sectionY = innerY + titleBlockH;
-
-                int previewColumnW = compact ? 210 : 220;
-                int leftAreaW = innerW - previewColumnW - gap;
-                int structureW = (leftAreaW * 58) / 100;
-                int imageW = leftAreaW - structureW - gap;
-                int imageX = innerX + structureW + gap;
-
-                int boxButtonY = compact ? sectionY + 80 : sectionY + 118;
-
                 if (mockPreviewImageSelected) {
-                    int topBoxH = compact ? 118 : 170;
-
                     int replaceButtonW = 118;
                     int replaceButtonH = 24;
-                    int replaceButtonX = imageX + (imageW / 2) - (replaceButtonW / 2);
-                    int replaceButtonY = sectionY + topBoxH - replaceButtonH - 8;
+                    int replaceButtonX = layout.imageX + (layout.imageW / 2) - (replaceButtonW / 2);
+                    int replaceButtonY = layout.sectionY + layout.topBoxH - replaceButtonH - 8;
 
                     if (isInside(mouseX, mouseY, replaceButtonX, replaceButtonY, replaceButtonW, replaceButtonH)) {
                         mockPreviewImageSelected = false;
@@ -344,9 +404,9 @@ public class ArchivScreen extends Screen {
                         return true;
                     }
                 } else {
-                    int browseImageButtonX = imageX + (imageW / 2) - 60;
+                    int browseImageButtonX = layout.imageX + (layout.imageW / 2) - 60;
 
-                    if (isInside(mouseX, mouseY, browseImageButtonX, boxButtonY, 120, 28)) {
+                    if (isInside(mouseX, mouseY, browseImageButtonX, layout.boxButtonY, 120, 28)) {
                         mockPreviewImageSelected = true;
                         mockAssetSaved = false;
                         return true;
@@ -355,74 +415,24 @@ public class ArchivScreen extends Screen {
             }
 
             if (selectedImportStep == 3) {
-                int importContentX = rootX + sidebarW;
-                int importContentY = bodyY;
-                int importContentW = rootW - sidebarW;
-                int importContentH = bodyH;
-
-                int pad = 18;
-                int innerX = importContentX + pad;
-                int innerY = importContentY + pad;
-                int innerW = importContentW - (pad * 2);
-                int innerH = importContentH - (pad * 2);
-
-                boolean compact = true;
-                int titleBlockH = compact ? 48 : 40;
-                int gap = compact ? 12 : 16;
-                int sectionY = innerY + titleBlockH;
-
-                int previewColumnW = compact ? 210 : 220;
-                int leftAreaW = innerW - previewColumnW - gap;
-
-                int topBoxH = 72;
-                int detailsGap = 10;
-                int actionsBarH = 28;
-                int actionsBottomMargin = 8;
-                int actionsGap = 8;
-
-                int detailsY = sectionY + topBoxH + detailsGap;
-                int actionsY = innerY + innerH - actionsBottomMargin - actionsBarH;
-                int detailsH = actionsY - actionsGap - detailsY;
-
-                int detailsActionW = 92;
-                int detailsActionH = 20;
-                int detailsActionX = innerX + leftAreaW - detailsActionW - 12;
-                int detailsActionY = detailsY + 10;
-
-                if (isInside(mouseX, mouseY, detailsActionX, detailsActionY, detailsActionW, detailsActionH)) {
+                if (isInside(
+                        mouseX,
+                        mouseY,
+                        layout.detailsActionX,
+                        layout.detailsActionY,
+                        layout.detailsActionW,
+                        layout.detailsActionH
+                )) {
                     mockDetailsFilled = !mockDetailsFilled;
                     mockAssetSaved = false;
                     return true;
                 }
             }
 
-            int importContentX = rootX + sidebarW;
-            int importContentY = bodyY;
-            int importContentW = rootW - sidebarW;
-            int importContentH = bodyH;
 
-            int pad = 18;
-            int innerX = importContentX + pad;
-            int innerY = importContentY + pad;
-            int innerW = importContentW - (pad * 2);
-            int innerH = importContentH - (pad * 2);
-
-            boolean compact = true;
-            int actionsBarH = 28;
-            int actionsBottomMargin = compact ? 8 : 18;
-            int actionsY = innerY + innerH - actionsBottomMargin - actionsBarH;
-
-            int fieldGap = 12;
-            int saveW = 88;
-            int cancelW = 90;
-            int resetW = 90;
-
-            int saveX = innerX + innerW - saveW;
-            int cancelX = saveX - fieldGap - cancelW;
-            int resetX = cancelX - fieldGap - resetW;
 
 // Reset
-            if (isInside(mouseX, mouseY, resetX, actionsY, resetW, actionsBarH)) {
+            if (isInside(mouseX, mouseY, layout.resetX, layout.actionsY, layout.resetW, layout.buttonH)) {
                 if (hasImportData()) {
                     resetImportState();
                     return true;
@@ -430,13 +440,13 @@ public class ArchivScreen extends Screen {
             }
 
 // Cancel
-            if (isInside(mouseX, mouseY, cancelX, actionsY, cancelW, actionsBarH)) {
+            if (isInside(mouseX, mouseY, layout.cancelX, layout.actionsY, layout.cancelW, layout.buttonH)) {
                 this.onClose();
                 return true;
             }
 
 // Save
-            if (isInside(mouseX, mouseY, saveX, actionsY, saveW, actionsBarH)) {
+            if (isInside(mouseX, mouseY, layout.saveX, layout.actionsY, layout.saveW, layout.buttonH)) {
                 if (isImportReady()) {
                     mockAssetSaved = true;
                     selectedImportStep = 4;
