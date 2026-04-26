@@ -70,6 +70,55 @@ public class ArchivScreen extends Screen {
     private final String mockTags = "tower, stone, medieval";
     private final String mockFileInfo = ".schem • 1.24 MB";
 
+    private final ImportPreset[] importPresets = new ImportPreset[] {
+            new ImportPreset(
+                    "Stone Tower",
+                    "Medieval",
+                    "BuilderX",
+                    "Structure",
+                    "1.20.1",
+                    "Default, Mossy",
+                    "tower, stone, medieval",
+                    ".schem • 1.24 MB",
+                    0xFF2D9CDB
+            ),
+            new ImportPreset(
+                    "Crystal Lamp",
+                    "Fantasy",
+                    "Arcanist",
+                    "Decoration",
+                    "1.20.1",
+                    "Default, Arcane",
+                    "crystal, lamp, fantasy",
+                    ".schem • 0.96 MB",
+                    0xFF8A5CFF
+            ),
+            new ImportPreset(
+                    "Palm Tree",
+                    "Nature",
+                    "BuilderX",
+                    "Tree",
+                    "1.20.1",
+                    "Tall, Curved",
+                    "tree, palm, beach",
+                    ".schem • 0.84 MB",
+                    0xFF2DBE73
+            ),
+            new ImportPreset(
+                    "Neon Sign",
+                    "Cyberpunk",
+                    "NeonFox",
+                    "Prop",
+                    "1.20.1",
+                    "Pink, Blue",
+                    "sign, neon, cyberpunk",
+                    ".schem • 0.71 MB",
+                    0xFFDA8A2D
+            )
+    };
+
+    private int currentImportPresetIndex = 0;
+
     private static class ImportLayout {
         int innerX;
         int innerY;
@@ -107,6 +156,40 @@ public class ArchivScreen extends Screen {
         int saveX;
         int cancelX;
         int resetX;
+    }
+
+    private static class ImportPreset {
+        final String name;
+        final String macroCategory;
+        final String author;
+        final String type;
+        final String version;
+        final String variants;
+        final String tags;
+        final String fileInfo;
+        final int chipColor;
+
+        ImportPreset(
+                String name,
+                String macroCategory,
+                String author,
+                String type,
+                String version,
+                String variants,
+                String tags,
+                String fileInfo,
+                int chipColor
+        ) {
+            this.name = name;
+            this.macroCategory = macroCategory;
+            this.author = author;
+            this.type = type;
+            this.version = version;
+            this.variants = variants;
+            this.tags = tags;
+            this.fileInfo = fileInfo;
+            this.chipColor = chipColor;
+        }
     }
 
     // Construtor da tela.
@@ -251,10 +334,20 @@ public class ArchivScreen extends Screen {
         selectedImportStep = 1;
     }
 
+    private ImportPreset getCurrentImportPreset() {
+        return importPresets[currentImportPresetIndex];
+    }
+
+    private void advanceImportPreset() {
+        currentImportPresetIndex = (currentImportPresetIndex + 1) % importPresets.length;
+    }
+
     private String getNextSavedAssetName() {
+        String baseName = getCurrentImportPreset().name;
+
         return savedAssetCounter == 1
-                ? mockAssetName
-                : mockAssetName + " #" + savedAssetCounter;
+                ? baseName
+                : baseName + " #" + savedAssetCounter;
     }
 
     private void beginFreshImportSession() {
@@ -262,33 +355,25 @@ public class ArchivScreen extends Screen {
         selectedTopTab = "Import";
     }
 
-        private int getImportVariantCount() {
-            String[] parts = mockVariants.split(",");
-            return Math.max(1, parts.length);
-        }
+    private int getImportVariantCount() {
+        String[] parts = getCurrentImportPreset().variants.split(",");
+        return Math.max(1, parts.length);
+    }
 
-        private int getImportChipColor() {
-            return switch (mockMacroCategory) {
-                case "Medieval" -> 0xFF2D9CDB;
-                case "Nature" -> 0xFF2DBE73;
-                case "Fantasy" -> 0xFF8A5CFF;
-                case "Cyberpunk" -> 0xFFDA8A2D;
-                case "Organic" -> 0xFF57C784;
-                case "Modern" -> 0xFF73C8FF;
-                case "Industrial" -> 0xFFB88A4A;
-                case "Sci-fi" -> 0xFF4DA6FF;
-                default -> 0xFF73C8FF;
-            };
-        }
+    private int getImportChipColor() {
+        return getCurrentImportPreset().chipColor;
+    }
 
     private ArchivAsset buildSavedAssetFromImport() {
+        ImportPreset preset = getCurrentImportPreset();
+
         return new ArchivAsset(
                 getNextSavedAssetName(),
-                mockMacroCategory,
-                mockType,
-                mockMinecraftVersion,
+                preset.macroCategory,
+                preset.type,
+                preset.version,
                 mockPreviewImageSelected ? MOCK_PREVIEW_IMAGE_COLOR : MOCK_NO_PREVIEW_IMAGE_COLOR,
-                getImportChipColor(),
+                preset.chipColor,
                 getImportVariantCount(),
                 false,
                 false
@@ -493,6 +578,7 @@ public class ArchivScreen extends Screen {
                         ArchivAsset savedAsset = buildSavedAssetFromImport();
                         savedAssets.add(0, savedAsset);
                         savedAssetCounter++;
+                        advanceImportPreset();
 
                         mockAssetSaved = true;
                         selectedImportStep = 4;
@@ -938,6 +1024,7 @@ public class ArchivScreen extends Screen {
 
         String importStepLabel = getImportStepLabel();
         String importStepSubtitle = getImportStepSubtitle();
+        ImportPreset preset = getCurrentImportPreset();
 
         guiGraphics.drawString(this.font, "Import Asset", innerX, innerY, COLOR_TEXT);
         guiGraphics.drawString(this.font, importStepSubtitle, innerX, innerY + 16, COLOR_TEXT_DIM);
@@ -1051,11 +1138,11 @@ public class ArchivScreen extends Screen {
 
         int previewInfoY = compact ? sectionY + 132 : sectionY + 150;
 
-        String previewName = mockDetailsFilled ? mockAssetName : "Unnamed Asset";
-        String previewType = mockDetailsFilled ? mockType : "Unknown Type";
-        String previewVersion = mockDetailsFilled ? mockMinecraftVersion : "Unknown";
-        String previewAuthor = mockDetailsFilled ? mockAuthor : "Unknown";
-        String previewCategory = mockDetailsFilled ? mockMacroCategory : "Uncategorized";
+        String previewName = mockDetailsFilled ? preset.name : "Unnamed Asset";
+        String previewType = mockDetailsFilled ? preset.type : "Unknown Type";
+        String previewVersion = mockDetailsFilled ? preset.version : "Unknown";
+        String previewAuthor = mockDetailsFilled ? preset.author : "Unknown";
+        String previewCategory = mockDetailsFilled ? preset.macroCategory : "Uncategorized";
         String previewFormat = mockStructureFileSelected ? mockStructureFileFormat : "No file";
         String previewImageStatus = mockPreviewImageSelected ? mockPreviewImageFormat + "  •  " + mockPreviewImageRatio : "No preview image";
 
@@ -1123,17 +1210,16 @@ public class ArchivScreen extends Screen {
         int formY2 = formY1 + fieldH + verticalGap;
         int formY3 = formY2 + fieldH + verticalGap;
 
-        drawFieldBox(guiGraphics, mockDetailsFilled ? mockAssetName : "Asset Name...", formX, formY1, fieldW1, fieldH, mockDetailsFilled);
-        drawFieldBox(guiGraphics, mockDetailsFilled ? mockMacroCategory : "Macro Category...", formX + fieldW1 + fieldGap, formY1, fieldW2, fieldH, mockDetailsFilled);
-        drawFieldBox(guiGraphics, mockDetailsFilled ? mockAuthor : "Author...", formX + fieldW1 + fieldGap + fieldW2 + fieldGap, formY1, fieldW3, fieldH, mockDetailsFilled);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.name : "Asset Name...", formX, formY1, fieldW1, fieldH, mockDetailsFilled);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.macroCategory : "Macro Category...", formX + fieldW1 + fieldGap, formY1, fieldW2, fieldH, mockDetailsFilled);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.author : "Author...", formX + fieldW1 + fieldGap + fieldW2 + fieldGap, formY1, fieldW3, fieldH, mockDetailsFilled);
 
-        drawFieldBox(guiGraphics, mockDetailsFilled ? mockType : "Type...", formX, formY2, fieldW1, fieldH, mockDetailsFilled);
-        drawFieldBox(guiGraphics, mockDetailsFilled ? mockMinecraftVersion : "Minecraft Version...", formX + fieldW1 + fieldGap, formY2, fieldW2, fieldH, mockDetailsFilled);
-        drawFieldBox(guiGraphics, mockDetailsFilled ? mockVariants : "Variants...", formX + fieldW1 + fieldGap + fieldW2 + fieldGap, formY2, fieldW3, fieldH, mockDetailsFilled);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.type : "Type...", formX, formY2, fieldW1, fieldH, mockDetailsFilled);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.version : "Minecraft Version...", formX + fieldW1 + fieldGap, formY2, fieldW2, fieldH, mockDetailsFilled);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.variants : "Variants...", formX + fieldW1 + fieldGap + fieldW2 + fieldGap, formY2, fieldW3, fieldH, mockDetailsFilled);
 
-        drawFieldBox(guiGraphics, mockDetailsFilled ? mockTags : "Tags...", formX, formY3, wideFieldW, fieldH, mockDetailsFilled);
-        drawFieldBox(guiGraphics, mockDetailsFilled ? mockFileInfo : "File Info...", formX + wideFieldW + fieldGap, formY3, wideFieldW, fieldH, mockDetailsFilled);
-
+        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.tags : "Tags...", formX, formY3, wideFieldW, fieldH, mockDetailsFilled);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.fileInfo : "File Info...", formX + wideFieldW + fieldGap, formY3, wideFieldW, fieldH, mockDetailsFilled);
         drawInactiveOverlay(guiGraphics, innerX, detailsY, leftAreaW, detailsH, !detailsStepActive);
 
         // ===== Ações inferiores =====
