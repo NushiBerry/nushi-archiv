@@ -59,6 +59,15 @@ public class ArchivScreen extends Screen {
         drawPanel(guiGraphics, x, y, width, height, background, border);
     }
 
+    private void drawInactiveOverlay(GuiGraphics guiGraphics, int x, int y, int width, int height, boolean inactive) {
+        if (!inactive) {
+            return;
+        }
+
+        // Desenha só por dentro da borda, para a borda continuar visível.
+        guiGraphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, 0x4408111D);
+    }
+
     @Override
     protected void init() {
         // Botão simples de fechar no canto superior direito.
@@ -523,6 +532,11 @@ public class ArchivScreen extends Screen {
         int stepW = 156;
         int stepH = 34;
         int stepGap = 40;
+        boolean fileStepActive = selectedImportStep == 1;
+        boolean imageStepActive = selectedImportStep == 2;
+        boolean detailsStepActive = selectedImportStep == 3;
+        boolean saveStepActive = selectedImportStep == 4;
+        boolean compactTopSections = detailsStepActive || saveStepActive;
 
         drawSidebarItem(guiGraphics, "1. Select File", stepX, bodyY + 34, stepW, stepH, selectedImportStep == 1);
         drawSidebarItem(guiGraphics, "2. Preview Image", stepX, bodyY + 34 + stepGap, stepW, stepH, selectedImportStep == 2);
@@ -557,11 +571,13 @@ public class ArchivScreen extends Screen {
         int previewColumnW = compact ? 210 : 220;
         int leftAreaW = innerW - previewColumnW - gap;
 
-        int topBoxH = compact ? 118 : 170;
+        int topBoxH = compactTopSections ? 72 : (compact ? 118 : 170);
         int actionsBarH = 28;
         int actionsBottomMargin = compact ? 8 : 18;
         int detailsGap = compact ? 10 : 16;
-        int actionsGap = compact ? 8 : 12;
+
+// No step 4, reservamos mais espaço entre o painel de details e a área final
+        int actionsGap = saveStepActive ? 28 : (compact ? 8 : 12);
 
         int structureW = (leftAreaW * 58) / 100;
         int imageW = leftAreaW - structureW - gap;
@@ -579,9 +595,9 @@ public class ArchivScreen extends Screen {
         int detailsH = actionsY - actionsGap - detailsY;
 
         // ===== Blocos superiores =====
-        drawStepPanel(guiGraphics, structureX, sectionY, structureW, topBoxH, selectedImportStep == 1);
-        drawStepPanel(guiGraphics, imageX, sectionY, imageW, topBoxH, selectedImportStep == 2);
-        drawStepPanel(guiGraphics, previewX, sectionY, previewColumnW, topBoxH + detailsGap + detailsH, false);
+        drawStepPanel(guiGraphics, structureX, sectionY, structureW, topBoxH, fileStepActive);
+        drawStepPanel(guiGraphics, imageX, sectionY, imageW, topBoxH, imageStepActive);
+        drawStepPanel(guiGraphics, previewX, sectionY, previewColumnW, topBoxH + detailsGap + detailsH, saveStepActive);
 
         int boxMainTextY = compact ? sectionY + 42 : sectionY + 76;
         int boxSubTextY = compact ? sectionY + 60 : sectionY + 92;
@@ -589,15 +605,31 @@ public class ArchivScreen extends Screen {
 
 // ===== Structure file =====
         guiGraphics.drawString(this.font, "1. Structure File", structureX + 12, sectionY + 12, COLOR_TEXT);
-        guiGraphics.drawString(this.font, "Drop .schem / .schematic here", structureX + 45, boxMainTextY, COLOR_TEXT);
-        guiGraphics.drawString(this.font, "Supports .schem and .schematic files", structureX + 26, boxSubTextY, COLOR_TEXT_DIM);
-        drawButtonBox(guiGraphics, "Browse File", structureX + (structureW / 2) - 60, boxButtonY, 120, 28, false);
+
+        if (compactTopSections) {
+            guiGraphics.drawString(this.font, "Selected format: .schem / .schematic", structureX + 12, sectionY + 34, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, "Ready for metadata step", structureX + 12, sectionY + 50, COLOR_TEXT);
+        } else {
+            guiGraphics.drawString(this.font, "Drop .schem / .schematic here", structureX + 45, boxMainTextY, COLOR_TEXT);
+            guiGraphics.drawString(this.font, "Supports .schem and .schematic files", structureX + 26, boxSubTextY, COLOR_TEXT_DIM);
+            drawButtonBox(guiGraphics, "Browse File", structureX + (structureW / 2) - 60, boxButtonY, 120, 28, false);
+        }
+
+        drawInactiveOverlay(guiGraphics, structureX, sectionY, structureW, topBoxH, !fileStepActive);
 
 // ===== Preview image =====
         guiGraphics.drawString(this.font, "2. Preview Image (Optional)", imageX + 12, sectionY + 12, COLOR_TEXT);
-        guiGraphics.drawString(this.font, "Drop image here", imageX + 40, boxMainTextY, COLOR_TEXT);
-        guiGraphics.drawString(this.font, "PNG or JPG", imageX + 70, boxSubTextY, COLOR_TEXT_DIM);
-        drawButtonBox(guiGraphics, "Browse Image", imageX + (imageW / 2) - 60, boxButtonY, 120, 28, false);
+
+        if (compactTopSections) {
+            guiGraphics.drawString(this.font, "Preview image: optional", imageX + 12, sectionY + 34, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, "You can add or replace it later", imageX + 12, sectionY + 50, COLOR_TEXT);
+        } else {
+            guiGraphics.drawString(this.font, "Drop image here", imageX + 40, boxMainTextY, COLOR_TEXT);
+            guiGraphics.drawString(this.font, "PNG or JPG", imageX + 70, boxSubTextY, COLOR_TEXT_DIM);
+            drawButtonBox(guiGraphics, "Browse Image", imageX + (imageW / 2) - 60, boxButtonY, 120, 28, false);
+        }
+
+        drawInactiveOverlay(guiGraphics, imageX, sectionY, imageW, topBoxH, !imageStepActive);
 
         // ===== Preview lateral =====
         guiGraphics.drawString(this.font, "3. Asset Preview", previewX + 12, sectionY + 12, COLOR_TEXT);
@@ -624,8 +656,10 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(this.font, "Format", previewX + 12, previewInfoY + 76, COLOR_TEXT_DIM);
         guiGraphics.drawString(this.font, ".schem", previewX + 90, previewInfoY + 76, COLOR_TEXT);
 
+        drawInactiveOverlay(guiGraphics, previewX, sectionY, previewColumnW, topBoxH + detailsGap + detailsH, !saveStepActive);
+
         // ===== Details =====
-        drawStepPanel(guiGraphics, innerX, detailsY, leftAreaW, detailsH, selectedImportStep == 3);
+        drawStepPanel(guiGraphics, innerX, detailsY, leftAreaW, detailsH, detailsStepActive);
         guiGraphics.drawString(this.font, "4. Asset Details", innerX + 12, detailsY + 12, COLOR_TEXT);
 
         int formX = innerX + 12;
@@ -663,6 +697,8 @@ public class ArchivScreen extends Screen {
         drawControlBox(guiGraphics, "Tags...", formX, formY3, wideFieldW, fieldH);
         drawControlBox(guiGraphics, "File Info...", formX + wideFieldW + fieldGap, formY3, wideFieldW, fieldH);
 
+        drawInactiveOverlay(guiGraphics, innerX, detailsY, leftAreaW, detailsH, !detailsStepActive);
+
         // ===== Ações inferiores =====
         int buttonH = 28;
         int saveW = 88;
@@ -672,7 +708,18 @@ public class ArchivScreen extends Screen {
         int saveX = innerX + innerW - saveW;
         int cancelX = saveX - fieldGap - cancelW;
         int resetX = cancelX - fieldGap - resetW;
-        boolean saveStepActive = selectedImportStep == 4;
+
+        if (saveStepActive) {
+            int actionsGroupX = resetX - 10;
+            int actionsGroupY = actionsY - 18;
+            int actionsGroupW = (saveX + saveW) - actionsGroupX + 10;
+            int actionsGroupH = buttonH + 30;
+
+            drawStepPanel(guiGraphics, actionsGroupX, actionsGroupY, actionsGroupW, actionsGroupH, true);
+        }
+        if (saveStepActive) {
+            guiGraphics.drawString(this.font, "Ready to save asset", resetX, actionsY - 14, COLOR_BORDER_ACTIVE);
+        }
 
         drawButtonBox(guiGraphics, "Reset", resetX, actionsY, resetW, buttonH, false);
         drawButtonBox(guiGraphics, "Cancel", cancelX, actionsY, cancelW, buttonH, false);
