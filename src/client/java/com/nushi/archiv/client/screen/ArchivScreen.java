@@ -30,6 +30,7 @@ public class ArchivScreen extends Screen {
     private final Screen parent;
 
     private final List<ArchivAsset> mockAssets;
+    private final List<ArchivAsset> savedAssets = new ArrayList<>();
 
     private final String[] categories = {
             "All",
@@ -151,16 +152,15 @@ public class ArchivScreen extends Screen {
     }
 
     private List<ArchivAsset> getVisibleAssets() {
-        // Se a categoria selecionada for "All", mostra tudo.
+        List<ArchivAsset> sourceAssets = "My Assets".equals(selectedTopTab) ? savedAssets : mockAssets;
+
         if (selectedCategory.equals("All")) {
-            return mockAssets;
+            return sourceAssets;
         }
 
-        // Caso contrário, criamos uma nova lista só com os assets
-        // cuja macroCategory bate com a categoria selecionada.
         List<ArchivAsset> filteredAssets = new ArrayList<>();
 
-        for (ArchivAsset asset : mockAssets) {
+        for (ArchivAsset asset : sourceAssets) {
             if (asset.getMacroCategory().equals(selectedCategory)) {
                 filteredAssets.add(asset);
             }
@@ -249,6 +249,39 @@ public class ArchivScreen extends Screen {
         selectedImportStep = 1;
     }
 
+        private int getImportVariantCount() {
+            String[] parts = mockVariants.split(",");
+            return Math.max(1, parts.length);
+        }
+
+        private int getImportChipColor() {
+            return switch (mockMacroCategory) {
+                case "Medieval" -> 0xFF2D9CDB;
+                case "Nature" -> 0xFF2DBE73;
+                case "Fantasy" -> 0xFF8A5CFF;
+                case "Cyberpunk" -> 0xFFDA8A2D;
+                case "Organic" -> 0xFF57C784;
+                case "Modern" -> 0xFF73C8FF;
+                case "Industrial" -> 0xFFB88A4A;
+                case "Sci-fi" -> 0xFF4DA6FF;
+                default -> 0xFF73C8FF;
+            };
+        }
+
+        private ArchivAsset buildSavedAssetFromImport() {
+            return new ArchivAsset(
+                    mockAssetName,
+                    mockMacroCategory,
+                    mockType,
+                    mockMinecraftVersion,
+                    mockPreviewImageSelected ? MOCK_PREVIEW_IMAGE_COLOR : MOCK_NO_PREVIEW_IMAGE_COLOR,
+                    getImportChipColor(),
+                    getImportVariantCount(),
+                    false,
+                    false
+            );
+        }
+
     private String fitTextToWidth(String text, int maxWidth) {
         if (this.font.width(text) <= maxWidth) {
             return text;
@@ -269,209 +302,206 @@ public class ArchivScreen extends Screen {
         return result + ellipsis;
     }
 
-    @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        // botão esquerdo do mouse = 0
-        if (event.button() != 0) {
-            return super.mouseClicked(event, doubleClick);
-        }
-
-        int margin = 20;
-
-        int rootX = margin;
-        int rootY = margin;
-        int rootW = this.width - (margin * 2);
-        int rootH = this.height - (margin * 2);
-
-        int headerH = 58;
-        int footerH = 24;
-        int sidebarW = 180;
-
-        int tabY = rootY + 10;
-        int tabX = rootX + 150;
-        int tabW = 110;
-        int tabH = 38;
-        int tabGap = 8;
-
-        int myAssetsX = tabX + (tabW + tabGap);
-        int myAssetsW = tabW + 10;
-
-        int importX = tabX + (tabW + tabGap) * 2 + 10;
-        int settingsX = tabX + (tabW + tabGap) * 3 + 10;
-
-        int bodyY = rootY + headerH;
-        int bodyH = rootH - headerH - footerH;
-
-        int contentX = rootX + sidebarW;
-        int contentY = bodyY;
-        int contentW = rootW - sidebarW;
-        int contentH = bodyH;
-
-        int itemX = rootX + 12;
-        int itemY = bodyY + 34;
-        int itemW = sidebarW - 24;
-        int itemH = 34;
-        int itemGap = 40;
-
-        double mouseX = event.x();
-        double mouseY = event.y();
-
-        boolean insideBrowseTab = mouseX >= tabX && mouseX <= tabX + tabW
-                && mouseY >= tabY && mouseY <= tabY + tabH;
-
-        boolean insideMyAssetsTab = mouseX >= myAssetsX && mouseX <= myAssetsX + myAssetsW
-                && mouseY >= tabY && mouseY <= tabY + tabH;
-
-        boolean insideImportTab = mouseX >= importX && mouseX <= importX + tabW
-                && mouseY >= tabY && mouseY <= tabY + tabH;
-
-        boolean insideSettingsTab = mouseX >= settingsX && mouseX <= settingsX + tabW
-                && mouseY >= tabY && mouseY <= tabY + tabH;
-
-        if (insideBrowseTab) {
-            selectedTopTab = "Browse";
-            return true;
-        }
-
-        if (insideMyAssetsTab) {
-            selectedTopTab = "My Assets";
-            return true;
-        }
-
-        if (insideImportTab) {
-            selectedTopTab = "Import";
-            selectedImportStep = 1;
-            return true;
-        }
-
-        if (insideSettingsTab) {
-            selectedTopTab = "Settings";
-            return true;
-        }
-
-        if ("Import".equals(selectedTopTab)) {
-            int stepX = rootX + 12;
-            int stepY = bodyY + 34;
-            int stepW = 156;
-            int stepH = 34;
-            int stepGap = 40;
-
-            for (int i = 0; i < 4; i++) {
-                int currentY = stepY + (i * stepGap);
-
-                if (isInside(mouseX, mouseY, stepX, currentY, stepW, stepH)) {
-                    selectedImportStep = i + 1;
-                    return true;
-                }
+        @Override
+        public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+            if (event.button() != 0) {
+                return super.mouseClicked(event, doubleClick);
             }
 
-            ImportLayout layout = buildImportLayout(contentX, contentY, contentW, contentH);
+            int margin = 20;
 
-            // ===== clique fake no botão Browse/Replace File =====
-            if (selectedImportStep == 1) {
-                if (mockStructureFileSelected) {
-                    int replaceButtonW = 108;
-                    int replaceButtonH = 24;
-                    int replaceButtonX = layout.structureX + layout.structureW - replaceButtonW - 20;
-                    int replaceButtonY = layout.sectionY + 34;
+            int rootX = margin;
+            int rootY = margin;
+            int rootW = this.width - (margin * 2);
+            int rootH = this.height - (margin * 2);
 
-                    if (isInside(mouseX, mouseY, replaceButtonX, replaceButtonY, replaceButtonW, replaceButtonH)) {
-                        mockStructureFileSelected = false;
-                        mockAssetSaved = false;
-                        return true;
-                    }
-                } else {
-                    int browseFileButtonX = layout.structureX + (layout.structureW / 2) - 60;
+            int headerH = 58;
+            int footerH = 24;
+            int sidebarW = 180;
 
-                    if (isInside(mouseX, mouseY, browseFileButtonX, layout.boxButtonY, 120, 28)) {
-                        mockStructureFileSelected = true;
-                        mockAssetSaved = false;
-                        return true;
-                    }
-                }
-            }
+            int tabY = rootY + 10;
+            int tabX = rootX + 150;
+            int tabW = 110;
+            int tabH = 38;
+            int tabGap = 8;
 
-            if (selectedImportStep == 2) {
-                if (mockPreviewImageSelected) {
-                    int replaceButtonW = 118;
-                    int replaceButtonH = 24;
-                    int replaceButtonX = layout.imageX + (layout.imageW / 2) - (replaceButtonW / 2);
-                    int replaceButtonY = layout.sectionY + layout.topBoxH - replaceButtonH - 8;
+            int myAssetsX = tabX + (tabW + tabGap);
+            int myAssetsW = tabW + 10;
 
-                    if (isInside(mouseX, mouseY, replaceButtonX, replaceButtonY, replaceButtonW, replaceButtonH)) {
-                        mockPreviewImageSelected = false;
-                        mockAssetSaved = false;
-                        return true;
-                    }
-                } else {
-                    int browseImageButtonX = layout.imageX + (layout.imageW / 2) - 60;
+            int importX = tabX + (tabW + tabGap) * 2 + 10;
+            int settingsX = tabX + (tabW + tabGap) * 3 + 10;
 
-                    if (isInside(mouseX, mouseY, browseImageButtonX, layout.boxButtonY, 120, 28)) {
-                        mockPreviewImageSelected = true;
-                        mockAssetSaved = false;
-                        return true;
-                    }
-                }
-            }
+            int bodyY = rootY + headerH;
+            int bodyH = rootH - headerH - footerH;
 
-            if (selectedImportStep == 3) {
-                if (isInside(
-                        mouseX,
-                        mouseY,
-                        layout.detailsActionX,
-                        layout.detailsActionY,
-                        layout.detailsActionW,
-                        layout.detailsActionH
-                )) {
-                    mockDetailsFilled = !mockDetailsFilled;
-                    mockAssetSaved = false;
-                    return true;
-                }
-            }
+            int contentX = rootX + sidebarW;
+            int contentY = bodyY;
+            int contentW = rootW - sidebarW;
+            int contentH = bodyH;
 
+            int itemX = rootX + 12;
+            int itemY = bodyY + 34;
+            int itemW = sidebarW - 24;
+            int itemH = 34;
+            int itemGap = 40;
 
+            double mouseX = event.x();
+            double mouseY = event.y();
 
-// Reset
-            if (isInside(mouseX, mouseY, layout.resetX, layout.actionsY, layout.resetW, layout.buttonH)) {
-                if (hasImportData()) {
-                    resetImportState();
-                    return true;
-                }
-            }
+            boolean insideBrowseTab = mouseX >= tabX && mouseX <= tabX + tabW
+                    && mouseY >= tabY && mouseY <= tabY + tabH;
 
-// Cancel
-            if (isInside(mouseX, mouseY, layout.cancelX, layout.actionsY, layout.cancelW, layout.buttonH)) {
-                this.onClose();
+            boolean insideMyAssetsTab = mouseX >= myAssetsX && mouseX <= myAssetsX + myAssetsW
+                    && mouseY >= tabY && mouseY <= tabY + tabH;
+
+            boolean insideImportTab = mouseX >= importX && mouseX <= importX + tabW
+                    && mouseY >= tabY && mouseY <= tabY + tabH;
+
+            boolean insideSettingsTab = mouseX >= settingsX && mouseX <= settingsX + tabW
+                    && mouseY >= tabY && mouseY <= tabY + tabH;
+
+            if (insideBrowseTab) {
+                selectedTopTab = "Browse";
                 return true;
             }
 
-// Save
-            if (isInside(mouseX, mouseY, layout.saveX, layout.actionsY, layout.saveW, layout.buttonH)) {
-                if (isImportReady()) {
-                    mockAssetSaved = true;
-                    selectedImportStep = 4;
+            if (insideMyAssetsTab) {
+                selectedTopTab = "My Assets";
+                return true;
+            }
+
+            if (insideImportTab) {
+                selectedTopTab = "Import";
+                selectedImportStep = 1;
+                return true;
+            }
+
+            if (insideSettingsTab) {
+                selectedTopTab = "Settings";
+                return true;
+            }
+
+            if ("Import".equals(selectedTopTab)) {
+                int stepX = rootX + 12;
+                int stepY = bodyY + 34;
+                int stepW = 156;
+                int stepH = 34;
+                int stepGapLocal = 40;
+
+                for (int i = 0; i < 4; i++) {
+                    int currentY = stepY + (i * stepGapLocal);
+
+                    if (isInside(mouseX, mouseY, stepX, currentY, stepW, stepH)) {
+                        selectedImportStep = i + 1;
+                        return true;
+                    }
+                }
+
+                ImportLayout layout = buildImportLayout(contentX, contentY, contentW, contentH);
+
+                if (selectedImportStep == 1) {
+                    if (mockStructureFileSelected) {
+                        int replaceButtonW = 108;
+                        int replaceButtonH = 24;
+                        int replaceButtonX = layout.structureX + layout.structureW - replaceButtonW - 20;
+                        int replaceButtonY = layout.sectionY + 34;
+
+                        if (isInside(mouseX, mouseY, replaceButtonX, replaceButtonY, replaceButtonW, replaceButtonH)) {
+                            mockStructureFileSelected = false;
+                            mockAssetSaved = false;
+                            return true;
+                        }
+                    } else {
+                        int browseFileButtonX = layout.structureX + (layout.structureW / 2) - 60;
+
+                        if (isInside(mouseX, mouseY, browseFileButtonX, layout.boxButtonY, 120, 28)) {
+                            mockStructureFileSelected = true;
+                            mockAssetSaved = false;
+                            return true;
+                        }
+                    }
+                }
+
+                if (selectedImportStep == 2) {
+                    if (mockPreviewImageSelected) {
+                        int replaceButtonW = 118;
+                        int replaceButtonH = 24;
+                        int replaceButtonX = layout.imageX + (layout.imageW / 2) - (replaceButtonW / 2);
+                        int replaceButtonY = layout.sectionY + layout.topBoxH - replaceButtonH - 8;
+
+                        if (isInside(mouseX, mouseY, replaceButtonX, replaceButtonY, replaceButtonW, replaceButtonH)) {
+                            mockPreviewImageSelected = false;
+                            mockAssetSaved = false;
+                            return true;
+                        }
+                    } else {
+                        int browseImageButtonX = layout.imageX + (layout.imageW / 2) - 60;
+
+                        if (isInside(mouseX, mouseY, browseImageButtonX, layout.boxButtonY, 120, 28)) {
+                            mockPreviewImageSelected = true;
+                            mockAssetSaved = false;
+                            return true;
+                        }
+                    }
+                }
+
+                if (selectedImportStep == 3) {
+                    if (isInside(
+                            mouseX,
+                            mouseY,
+                            layout.detailsActionX,
+                            layout.detailsActionY,
+                            layout.detailsActionW,
+                            layout.detailsActionH
+                    )) {
+                        mockDetailsFilled = !mockDetailsFilled;
+                        mockAssetSaved = false;
+                        return true;
+                    }
+                }
+
+                if (isInside(mouseX, mouseY, layout.resetX, layout.actionsY, layout.resetW, layout.buttonH)) {
+                    if (hasImportData()) {
+                        resetImportState();
+                        return true;
+                    }
+                }
+
+                if (isInside(mouseX, mouseY, layout.cancelX, layout.actionsY, layout.cancelW, layout.buttonH)) {
+                    this.onClose();
                     return true;
+                }
+
+                if (isInside(mouseX, mouseY, layout.saveX, layout.actionsY, layout.saveW, layout.buttonH)) {
+                    if (isImportReady() && !mockAssetSaved) {
+                        ArchivAsset savedAsset = buildSavedAssetFromImport();
+                        savedAssets.add(0, savedAsset);
+
+                        mockAssetSaved = true;
+                        selectedImportStep = 4;
+                        selectedTopTab = "My Assets";
+                        selectedCategory = "All";
+                        return true;
+                    }
                 }
             }
 
-        }
+            if ("Browse".equals(selectedTopTab) || "My Assets".equals(selectedTopTab)) {
+                for (int i = 0; i < categories.length; i++) {
+                    int currentY = itemY + (i * itemGap);
 
-        if ("Browse".equals(selectedTopTab)) {
-            for (int i = 0; i < categories.length; i++) {
-                int currentY = itemY + (i * itemGap);
+                    boolean insideX = mouseX >= itemX && mouseX <= itemX + itemW;
+                    boolean insideY = mouseY >= currentY && mouseY <= currentY + itemH;
 
-                boolean insideX = mouseX >= itemX && mouseX <= itemX + itemW;
-                boolean insideY = mouseY >= currentY && mouseY <= currentY + itemH;
-
-                if (insideX && insideY) {
-                    selectedCategory = categories[i];
-                    return true;
+                    if (insideX && insideY) {
+                        selectedCategory = categories[i];
+                        return true;
+                    }
                 }
             }
-        }
 
-        return super.mouseClicked(event, doubleClick);
-    }
+            return super.mouseClicked(event, doubleClick);
+        }
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float delta) {
@@ -498,8 +528,11 @@ public class ArchivScreen extends Screen {
         int contentW = rootW - sidebarW;
         int contentH = bodyH;
 
-        boolean browseActive = "Browse".equals(selectedTopTab);
-        List<ArchivAsset> visibleAssets = getVisibleAssets();
+            boolean browseActive = "Browse".equals(selectedTopTab);
+            boolean myAssetsActive = "My Assets".equals(selectedTopTab);
+            boolean libraryTabActive = browseActive || myAssetsActive;
+
+            List<ArchivAsset> visibleAssets = getVisibleAssets();
 
         // Container principal
         drawPanel(guiGraphics, rootX, rootY, rootW, rootH, COLOR_ROOT, COLOR_BORDER);
@@ -528,21 +561,21 @@ public class ArchivScreen extends Screen {
         drawTopTab(guiGraphics, "Settings", tabX + (tabW + tabGap) * 3 + 10, tabY, tabW, tabH, "Settings".equals(selectedTopTab));
 
         // ===== Sidebar content =====
-        if (browseActive) {
-            guiGraphics.drawString(this.font, "CATEGORIES", rootX + 16, bodyY + 14, COLOR_TEXT_DIM);
+            if (libraryTabActive) {
+                guiGraphics.drawString(this.font, "CATEGORIES", rootX + 16, bodyY + 14, COLOR_TEXT_DIM);
 
-            int categoryY = bodyY + 34;
-            for (int i = 0; i < categories.length; i++) {
-                boolean active = categories[i].equals(selectedCategory);
-                drawSidebarItem(guiGraphics, categories[i], rootX + 12, categoryY, sidebarW - 24, 34, active);
-                categoryY += 40;
+                int categoryY = bodyY + 34;
+                for (int i = 0; i < categories.length; i++) {
+                    boolean active = categories[i].equals(selectedCategory);
+                    drawSidebarItem(guiGraphics, categories[i], rootX + 12, categoryY, sidebarW - 24, 34, active);
+                    categoryY += 40;
+                }
+            } else if (!"Import".equals(selectedTopTab)) {
+                guiGraphics.drawString(this.font, "SECTION", rootX + 16, bodyY + 14, COLOR_TEXT_DIM);
+                guiGraphics.drawString(this.font, selectedTopTab, rootX + 16, bodyY + 34, COLOR_TEXT);
             }
-        } else if (!"Import".equals(selectedTopTab)) {
-            guiGraphics.drawString(this.font, "SECTION", rootX + 16, bodyY + 14, COLOR_TEXT_DIM);
-            guiGraphics.drawString(this.font, selectedTopTab, rootX + 16, bodyY + 34, COLOR_TEXT);
-        }
 
-        if (browseActive) {
+            if (libraryTabActive) {
         // ===== Toolbar / controls =====
         int toolbarY = contentY + 14;
         int innerPadding = 18;
@@ -584,28 +617,40 @@ public class ArchivScreen extends Screen {
         int rowGap = 16;
         int cardH = (cardsAreaH - (rowGap * (rows - 1))) / rows;
 
-        if (visibleAssets.isEmpty()) {
-            drawEmptyState(guiGraphics, cardsAreaX, cardsAreaY, cardsAreaW, cardsAreaH);
-        } else {
-            for (int i = 0; i < visibleAssets.size(); i++) {
-                ArchivAsset asset = visibleAssets.get(i);
+                if (visibleAssets.isEmpty()) {
+                    if (myAssetsActive) {
+                        drawEmptyState(
+                                guiGraphics,
+                                cardsAreaX,
+                                cardsAreaY,
+                                cardsAreaW,
+                                cardsAreaH,
+                                "No saved assets yet",
+                                "Import an asset and click Save to see it here."
+                        );
+                    } else {
+                        drawEmptyState(guiGraphics, cardsAreaX, cardsAreaY, cardsAreaW, cardsAreaH);
+                    }
+                } else {
+                    for (int i = 0; i < visibleAssets.size(); i++) {
+                        ArchivAsset asset = visibleAssets.get(i);
 
-                int column = i % columns;
-                int row = i / columns;
+                        int column = i % columns;
+                        int row = i / columns;
 
-                int cardX = cardsAreaX + column * (cardW + cardsGap);
-                int cardY = cardsAreaY + row * (cardH + rowGap);
+                        int cardX = cardsAreaX + column * (cardW + cardsGap);
+                        int cardY = cardsAreaY + row * (cardH + rowGap);
 
-                drawAssetCard(
-                        guiGraphics,
-                        cardX,
-                        cardY,
-                        cardW,
-                        cardH,
-                        asset
-                );
-            }
-        }
+                        drawAssetCard(
+                                guiGraphics,
+                                cardX,
+                                cardY,
+                                cardW,
+                                cardH,
+                                asset
+                        );
+                    }
+                }
 
         } else if ("Import".equals(selectedTopTab)) {
             drawImportTab(guiGraphics, rootX, rootY, rootW, rootH, bodyY, bodyH, contentX, contentY, contentW, contentH);
@@ -618,12 +663,13 @@ public class ArchivScreen extends Screen {
         int footerY = rootY + rootH - footerH + 8;
         guiGraphics.drawString(this.font, "WorldEdit: pending", rootX + 12, footerY, COLOR_SUCCESS);
         guiGraphics.drawString(this.font, "Preview pipeline: planned", rootX + 140, footerY, COLOR_TEXT_DIM);
-        if (browseActive) {
-            String assetCountText = visibleAssets.size() + " / " + mockAssets.size() + " assets";
-            guiGraphics.drawString(this.font, assetCountText, rootX + rootW - 120, footerY, COLOR_TEXT_DIM);
-        } else {
-            guiGraphics.drawString(this.font, selectedTopTab, rootX + rootW - 80, footerY, COLOR_TEXT_DIM);
-        }
+                if (libraryTabActive) {
+                    int totalAssets = myAssetsActive ? savedAssets.size() : mockAssets.size();
+                    String assetCountText = visibleAssets.size() + " / " + totalAssets + " assets";
+                    guiGraphics.drawString(this.font, assetCountText, rootX + rootW - 120, footerY, COLOR_TEXT_DIM);
+                } else {
+                    guiGraphics.drawString(this.font, selectedTopTab, rootX + rootW - 80, footerY, COLOR_TEXT_DIM);
+                }
 
         super.render(guiGraphics, mouseX, mouseY, delta);
     }
@@ -717,38 +763,38 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(this.font, label, textX, textY, textColor);
     }
 
-    private void drawEmptyState(GuiGraphics guiGraphics, int x, int y, int width, int height) {
-        // Painel interno da área vazia
-        int panelWidth = 320;
-        int panelHeight = 90;
+        private void drawEmptyState(GuiGraphics guiGraphics, int x, int y, int width, int height, String title, String subtitle) {
+            int panelWidth = 320;
+            int panelHeight = 90;
 
-        int panelX = x + (width / 2) - (panelWidth / 2);
-        int panelY = y + (height / 2) - (panelHeight / 2);
+            int panelX = x + (width / 2) - (panelWidth / 2);
+            int panelY = y + (height / 2) - (panelHeight / 2);
 
-        drawPanel(guiGraphics, panelX, panelY, panelWidth, panelHeight, COLOR_PANEL, COLOR_BORDER);
+            drawPanel(guiGraphics, panelX, panelY, panelWidth, panelHeight, COLOR_PANEL, COLOR_BORDER);
 
-        String title = "No assets found";
-        String subtitle = "Try another category or import new assets.";
+            int titleWidth = this.font.width(title);
+            int subtitleWidth = this.font.width(subtitle);
 
-        int titleWidth = this.font.width(title);
-        int subtitleWidth = this.font.width(subtitle);
+            guiGraphics.drawString(
+                    this.font,
+                    title,
+                    panelX + (panelWidth / 2) - (titleWidth / 2),
+                    panelY + 24,
+                    COLOR_TEXT
+            );
 
-        guiGraphics.drawString(
-                this.font,
-                title,
-                panelX + (panelWidth / 2) - (titleWidth / 2),
-                panelY + 24,
-                COLOR_TEXT
-        );
+            guiGraphics.drawString(
+                    this.font,
+                    subtitle,
+                    panelX + (panelWidth / 2) - (subtitleWidth / 2),
+                    panelY + 44,
+                    COLOR_TEXT_DIM
+            );
+        }
 
-        guiGraphics.drawString(
-                this.font,
-                subtitle,
-                panelX + (panelWidth / 2) - (subtitleWidth / 2),
-                panelY + 44,
-                COLOR_TEXT_DIM
-        );
-    }
+        private void drawEmptyState(GuiGraphics guiGraphics, int x, int y, int width, int height) {
+            drawEmptyState(guiGraphics, x, y, width, height, "No assets found", "Try another category or import new assets.");
+        }
 
     private void drawTabPlaceholder(GuiGraphics guiGraphics, int x, int y, int width, int height, String tabName) {
         int panelWidth = 360;
@@ -1017,10 +1063,10 @@ public class ArchivScreen extends Screen {
         drawStepPanel(guiGraphics, innerX, detailsY, leftAreaW, detailsH, detailsStepActive);
         guiGraphics.drawString(this.font, "4. Asset Details", innerX + 12, detailsY + 12, COLOR_TEXT);
 
-        int detailsActionW = 92;
-        int detailsActionH = 20;
-        int detailsActionX = innerX + leftAreaW - detailsActionW - 12;
-        int detailsActionY = detailsY + 10;
+        int detailsActionW = layout.detailsActionW;
+        int detailsActionH = layout.detailsActionH;
+        int detailsActionX = layout.detailsActionX;
+        int detailsActionY = layout.detailsActionY;
 
         if (detailsStepActive) {
             drawButtonBox(
@@ -1074,14 +1120,14 @@ public class ArchivScreen extends Screen {
         drawInactiveOverlay(guiGraphics, innerX, detailsY, leftAreaW, detailsH, !detailsStepActive);
 
         // ===== Ações inferiores =====
-        int buttonH = 28;
-        int saveW = 88;
-        int cancelW = 90;
-        int resetW = 90;
+        int buttonH = layout.buttonH;
+        int saveW = layout.saveW;
+        int cancelW = layout.cancelW;
+        int resetW = layout.resetW;
 
-        int saveX = innerX + innerW - saveW;
-        int cancelX = saveX - fieldGap - cancelW;
-        int resetX = cancelX - fieldGap - resetW;
+        int saveX = layout.saveX;
+        int cancelX = layout.cancelX;
+        int resetX = layout.resetX;
 
         if (saveStepActive) {
             int actionsGroupX = resetX - 10;
