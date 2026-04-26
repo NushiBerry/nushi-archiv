@@ -47,6 +47,7 @@ public class ArchivScreen extends Screen {
     private String selectedCategory = "All";
     private String selectedTopTab = "Browse";
     private int selectedImportStep = 1;
+    private boolean myAssetsFavoritesOnly = false;
     private boolean mockStructureFileSelected = false;
     private final String mockStructureFileName = "stone_tower.schem";
     private final String mockStructureFileFormat = ".schem";
@@ -227,15 +228,17 @@ public class ArchivScreen extends Screen {
 
     private List<ArchivAsset> getVisibleAssets() {
         List<ArchivAsset> sourceAssets = "My Assets".equals(selectedTopTab) ? savedAssets : mockAssets;
-
-        if (selectedCategory.equals("All")) {
-            return sourceAssets;
-        }
-
         List<ArchivAsset> filteredAssets = new ArrayList<>();
 
         for (ArchivAsset asset : sourceAssets) {
-            if (asset.getMacroCategory().equals(selectedCategory)) {
+            boolean categoryMatches = selectedCategory.equals("All")
+                    || asset.getMacroCategory().equals(selectedCategory);
+
+            boolean favoriteMatches = !"My Assets".equals(selectedTopTab)
+                    || !myAssetsFavoritesOnly
+                    || asset.isFavorite();
+
+            if (categoryMatches && favoriteMatches) {
                 filteredAssets.add(asset);
             }
         }
@@ -604,6 +607,7 @@ public class ArchivScreen extends Screen {
                         selectedImportStep = 4;
                         selectedTopTab = "My Assets";
                         selectedCategory = "All";
+                        myAssetsFavoritesOnly = false;
                         return true;
                     }
                 }
@@ -625,6 +629,17 @@ public class ArchivScreen extends Screen {
             if ("My Assets".equals(selectedTopTab)) {
                 int innerPadding = 18;
                 int toolbarY = contentY + 14;
+
+                int searchX = contentX + innerPadding;
+                int searchW = 280;
+
+                int filterX = searchX + searchW + 12;
+                int filterW = 110;
+
+                if (isInside(mouseX, mouseY, filterX, toolbarY, filterW, 34)) {
+                    myAssetsFavoritesOnly = !myAssetsFavoritesOnly;
+                    return true;
+                }
 
                 int cardsAreaX = contentX + innerPadding;
                 int cardsAreaY = toolbarY + 50;
@@ -664,6 +679,17 @@ public class ArchivScreen extends Screen {
             if ("My Assets".equals(selectedTopTab)) {
                 int innerPadding = 18;
                 int toolbarY = contentY + 14;
+
+                int searchX = contentX + innerPadding;
+                int searchW = 280;
+
+                int filterX = searchX + searchW + 12;
+                int filterW = 110;
+
+                if (isInside(mouseX, mouseY, filterX, toolbarY, filterW, 34)) {
+                    myAssetsFavoritesOnly = !myAssetsFavoritesOnly;
+                    return true;
+                }
 
                 int cardsAreaX = contentX + innerPadding;
                 int cardsAreaY = toolbarY + 50;
@@ -797,8 +823,12 @@ public class ArchivScreen extends Screen {
         int listX = gridX + gridW + 8;
         int listW = 60;
 
+        String filterLabel = myAssetsActive
+                ? (myAssetsFavoritesOnly ? "Fav Only" : "Favorites")
+                : "Filter";
+
         drawControlBox(guiGraphics, "Search assets...", searchX, toolbarY, searchW, 34);
-        drawControlBox(guiGraphics, "Filter", filterX, toolbarY, filterW, 34);
+        drawControlBox(guiGraphics, filterLabel, filterX, toolbarY, filterW, 34);
         guiGraphics.drawString(this.font, "Sort by:", sortLabelX, toolbarY + 12, COLOR_TEXT_DIM);
         drawControlBox(guiGraphics, "Newest", sortBoxX, toolbarY, sortBoxW, 34);
         guiGraphics.drawString(this.font, "View:", viewLabelX, toolbarY + 12, COLOR_TEXT_DIM);
@@ -820,15 +850,27 @@ public class ArchivScreen extends Screen {
 
                 if (visibleAssets.isEmpty()) {
                     if (myAssetsActive) {
-                        drawEmptyState(
-                                guiGraphics,
-                                cardsAreaX,
-                                cardsAreaY,
-                                cardsAreaW,
-                                cardsAreaH,
-                                "No saved assets yet",
-                                "Import an asset and click Save to see it here."
-                        );
+                        if (myAssetsFavoritesOnly) {
+                            drawEmptyState(
+                                    guiGraphics,
+                                    cardsAreaX,
+                                    cardsAreaY,
+                                    cardsAreaW,
+                                    cardsAreaH,
+                                    "No favorite assets yet",
+                                    "Star a saved asset to see it here."
+                            );
+                        } else {
+                            drawEmptyState(
+                                    guiGraphics,
+                                    cardsAreaX,
+                                    cardsAreaY,
+                                    cardsAreaW,
+                                    cardsAreaH,
+                                    "No saved assets yet",
+                                    "Import an asset and click Save to see it here."
+                            );
+                        }
                     } else {
                         drawEmptyState(guiGraphics, cardsAreaX, cardsAreaY, cardsAreaW, cardsAreaH);
                     }
