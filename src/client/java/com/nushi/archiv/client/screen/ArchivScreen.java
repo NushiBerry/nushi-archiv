@@ -843,18 +843,35 @@ public class ArchivScreen extends Screen {
         drawSidebarItem(guiGraphics, "3. Details", stepX, bodyY + 34 + (stepGap * 2), stepW, stepH, selectedImportStep == 3);
         drawSidebarItem(guiGraphics, "4. Save Asset", stepX, bodyY + 34 + (stepGap * 3), stepW, stepH, selectedImportStep == 4);
 
-        // ===== Área útil interna =====
-        int pad = 18;
-        int innerX = contentX + pad;
-        int innerY = contentY + pad;
-        int innerW = contentW - (pad * 2);
-        int innerH = contentH - (pad * 2);
+        // ===== Layout do Import =====
+        ImportLayout layout = buildImportLayout(contentX, contentY, contentW, contentH);
 
-// Se a altura útil estiver pequena, usamos layout compacto
         boolean compact = true;
+        int detailsGap = compact ? 10 : 16;
 
-        int titleBlockH = compact ? 48 : 40;
-        int gap = compact ? 12 : 16;
+        int innerX = layout.innerX;
+        int innerY = layout.innerY;
+        int innerW = layout.innerW;
+        int innerH = layout.innerH;
+
+        int sectionY = layout.sectionY;
+
+        int previewColumnW = layout.previewColumnW;
+        int leftAreaW = layout.leftAreaW;
+
+        int topBoxH = layout.topBoxH;
+        int structureW = layout.structureW;
+        int imageW = layout.imageW;
+
+        int structureX = layout.structureX;
+        int imageX = layout.imageX;
+        int previewX = layout.previewX;
+
+        int detailsY = layout.detailsY;
+        int detailsH = layout.detailsH;
+        int actionsY = layout.actionsY;
+
+        int boxButtonY = layout.boxButtonY;
 
         String importStepLabel = getImportStepLabel();
         String importStepSubtitle = getImportStepSubtitle();
@@ -865,35 +882,6 @@ public class ArchivScreen extends Screen {
         int stepLabelWidth = this.font.width(importStepLabel);
         guiGraphics.drawString(this.font, importStepLabel, innerX + innerW - stepLabelWidth, innerY, COLOR_BORDER_ACTIVE);
 
-// ===== Geometria principal =====
-        int sectionY = innerY + titleBlockH;
-
-        int previewColumnW = compact ? 210 : 220;
-        int leftAreaW = innerW - previewColumnW - gap;
-
-        int topBoxH = compactTopSections ? 72 : (compact ? 118 : 170);
-        int actionsBarH = 28;
-        int actionsBottomMargin = compact ? 8 : 18;
-        int detailsGap = compact ? 10 : 16;
-
-// No step 4, reservamos mais espaço entre o painel de details e a área final
-        int actionsGap = saveStepActive ? 28 : (compact ? 8 : 12);
-
-        int structureW = (leftAreaW * 58) / 100;
-        int imageW = leftAreaW - structureW - gap;
-
-        int structureX = innerX;
-        int imageX = structureX + structureW + gap;
-        int previewX = innerX + leftAreaW + gap;
-
-        int detailsY = sectionY + topBoxH + detailsGap;
-
-// Botões ficam ancorados no fundo da área útil do conteúdo
-        int actionsY = innerY + innerH - actionsBottomMargin - actionsBarH;
-
-// O painel de details ocupa só o espaço até um pouco antes dos botões
-        int detailsH = actionsY - actionsGap - detailsY;
-
         // ===== Blocos superiores =====
         drawStepPanel(guiGraphics, structureX, sectionY, structureW, topBoxH, fileStepActive);
         drawStepPanel(guiGraphics, imageX, sectionY, imageW, topBoxH, imageStepActive);
@@ -901,7 +889,6 @@ public class ArchivScreen extends Screen {
 
         int boxMainTextY = compact ? sectionY + 42 : sectionY + 76;
         int boxSubTextY = compact ? sectionY + 60 : sectionY + 92;
-        int boxButtonY = compact ? sectionY + 80 : sectionY + 118;
 
 // ===== Structure file =====
             guiGraphics.drawString(this.font, "1. Structure File", structureX + 12, sectionY + 12, COLOR_TEXT);
