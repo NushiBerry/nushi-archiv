@@ -249,6 +249,11 @@ public class ArchivScreen extends Screen {
         selectedImportStep = 1;
     }
 
+    private void beginFreshImportSession() {
+        resetImportState();
+        selectedTopTab = "Import";
+    }
+
         private int getImportVariantCount() {
             String[] parts = mockVariants.split(",");
             return Math.max(1, parts.length);
@@ -371,8 +376,11 @@ public class ArchivScreen extends Screen {
             }
 
             if (insideImportTab) {
-                selectedTopTab = "Import";
-                selectedImportStep = 1;
+                if (!"Import".equals(selectedTopTab)) {
+                    beginFreshImportSession();
+                } else {
+                    selectedImportStep = 1;
+                }
                 return true;
             }
 
