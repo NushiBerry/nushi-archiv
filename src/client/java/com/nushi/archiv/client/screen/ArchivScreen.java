@@ -43,6 +43,7 @@ public class ArchivScreen extends Screen {
 
     private String selectedCategory = "All";
     private String selectedTopTab = "Browse";
+    private int selectedImportStep = 1;
 
     // Construtor da tela.
     public ArchivScreen(Component title, Screen parent) {
@@ -157,12 +158,33 @@ public class ArchivScreen extends Screen {
 
         if (insideImportTab) {
             selectedTopTab = "Import";
+            selectedImportStep = 1;
             return true;
         }
 
         if (insideSettingsTab) {
             selectedTopTab = "Settings";
             return true;
+        }
+
+        if ("Import".equals(selectedTopTab)) {
+            int stepX = rootX + 12;
+            int stepY = bodyY + 34;
+            int stepW = 156;
+            int stepH = 34;
+            int stepGap = 40;
+
+            for (int i = 0; i < 4; i++) {
+                int currentY = stepY + (i * stepGap);
+
+                boolean insideStepX = mouseX >= stepX && mouseX <= stepX + stepW;
+                boolean insideStepY = mouseY >= currentY && mouseY <= currentY + stepH;
+
+                if (insideStepX && insideStepY) {
+                    selectedImportStep = i + 1;
+                    return true;
+                }
+            }
         }
 
         if ("Browse".equals(selectedTopTab)) {
@@ -475,10 +497,10 @@ public class ArchivScreen extends Screen {
         int stepH = 34;
         int stepGap = 40;
 
-        drawSidebarItem(guiGraphics, "1. Select File", stepX, bodyY + 34, stepW, stepH, true);
-        drawSidebarItem(guiGraphics, "2. Preview Image", stepX, bodyY + 34 + stepGap, stepW, stepH, false);
-        drawSidebarItem(guiGraphics, "3. Details", stepX, bodyY + 34 + (stepGap * 2), stepW, stepH, false);
-        drawSidebarItem(guiGraphics, "4. Save Asset", stepX, bodyY + 34 + (stepGap * 3), stepW, stepH, false);
+        drawSidebarItem(guiGraphics, "1. Select File", stepX, bodyY + 34, stepW, stepH, selectedImportStep == 1);
+        drawSidebarItem(guiGraphics, "2. Preview Image", stepX, bodyY + 34 + stepGap, stepW, stepH, selectedImportStep == 2);
+        drawSidebarItem(guiGraphics, "3. Details", stepX, bodyY + 34 + (stepGap * 2), stepW, stepH, selectedImportStep == 3);
+        drawSidebarItem(guiGraphics, "4. Save Asset", stepX, bodyY + 34 + (stepGap * 3), stepW, stepH, selectedImportStep == 4);
 
         // ===== Área útil interna =====
         int pad = 18;
