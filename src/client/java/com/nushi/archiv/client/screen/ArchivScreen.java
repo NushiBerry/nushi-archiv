@@ -2,6 +2,7 @@ package com.nushi.archiv.client.screen;
 
 import com.nushi.archiv.client.model.ArchivAsset;
 import com.nushi.archiv.client.repository.MockAssetRepository;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -60,6 +61,7 @@ public class ArchivScreen extends Screen {
 
     private String selectedLibraryAssetName = null;
     private String libraryActionMessage = "No asset selected";
+    private EditBox browseSearchBox;
 
     private boolean mockStructureFileSelected = false;
     private final String mockStructureFileName = "stone_tower.schem";
@@ -261,6 +263,43 @@ public class ArchivScreen extends Screen {
                         .bounds(closeX, closeY, closeButtonSize, closeButtonSize)
                         .build()
         );
+        int margin = 20;
+
+        int rootX = margin;
+        int rootY = margin;
+        int rootW = this.width - (margin * 2);
+
+        int headerH = 58;
+        int sidebarW = 180;
+
+        int bodyY = rootY + headerH;
+
+        int contentX = rootX + sidebarW;
+        int contentY = bodyY;
+
+        int innerPadding = 18;
+        int toolbarY = contentY + 14;
+
+        int searchX = contentX + innerPadding;
+        int searchW = 280;
+
+        browseSearchBox = new EditBox(
+                this.font,
+                searchX + 4,
+                toolbarY + 4,
+                searchW - 8,
+                26,
+                Component.literal("Search assets")
+        );
+
+        browseSearchBox.setBordered(false);
+        browseSearchBox.setMaxLength(64);
+        browseSearchBox.setTextColor(COLOR_TEXT);
+        browseSearchBox.setTextColorUneditable(COLOR_TEXT_DIM);
+        browseSearchBox.setHint(Component.literal("Search assets..."));
+        browseSearchBox.setResponder(value -> syncLibrarySelectionWithVisibleAssets());
+
+        this.addRenderableWidget(browseSearchBox);
     }
 
     @Override
@@ -277,13 +316,21 @@ public class ArchivScreen extends Screen {
             List<ArchivAsset> sourceAssets = new ArrayList<>(mockAssets);
             sourceAssets.addAll(savedAssets);
 
+            String searchQuery = getBrowseSearchQuery();
+
             for (ArchivAsset asset : sourceAssets) {
                 boolean categoryMatches = selectedCategory.equals("All")
                         || asset.getMacroCategory().equals(selectedCategory);
 
                 boolean favoriteMatches = !browseFavoritesOnly || asset.isFavorite();
 
-                if (categoryMatches && favoriteMatches) {
+                boolean searchMatches = searchQuery.isBlank()
+                        || asset.getName().toLowerCase().contains(searchQuery)
+                        || asset.getType().toLowerCase().contains(searchQuery)
+                        || asset.getMacroCategory().toLowerCase().contains(searchQuery)
+                        || asset.getVersion().toLowerCase().contains(searchQuery);
+
+                if (categoryMatches && favoriteMatches && searchMatches) {
                     filteredAssets.add(asset);
                 }
             }
@@ -685,10 +732,23 @@ public class ArchivScreen extends Screen {
         return browseFavoritesOnly ? "Favorites only" : "All assets";
     }
 
+    private String getBrowseSearchQuery() {
+        if (browseSearchBox == null) {
+            return "";
+        }
+
+        return browseSearchBox.getValue().trim().toLowerCase();
+    }
+
     private String getBrowseSummaryText(List<ArchivAsset> visibleAssets) {
+        String searchLabel = getBrowseSearchQuery().isBlank()
+                ? "None"
+                : browseSearchBox.getValue().trim();
+
         return "Category: " + selectedCategory
                 + "  •  Filter: " + getBrowseFavoritesLabel()
                 + "  •  Sort: " + browseSortMode
+                + "  •  Search: " + searchLabel
                 + "  •  Results: " + visibleAssets.size();
     }
 
@@ -737,6 +797,10 @@ public class ArchivScreen extends Screen {
 
         double mouseX = event.x();
         double mouseY = event.y();
+        if (browseSearchBox != null && !isInside(mouseX, mouseY, browseSearchBox.getX(), browseSearchBox.getY(), browseSearchBox.getWidth(), browseSearchBox.getHeight())) {
+            browseSearchBox.setFocused(false);
+            this.setFocused(null);
+        }
 
         boolean insideBrowseTab = mouseX >= tabX && mouseX <= tabX + tabW
                 && mouseY >= tabY && mouseY <= tabY + tabH;
@@ -910,6 +974,14 @@ public class ArchivScreen extends Screen {
             int sortBoxX = sortLabelX + 60;
             int sortBoxW = 120;
 
+            if (isInside(mouseX, mouseY, searchX, toolbarY, searchW, 34)) {
+                if (browseSearchBox != null) {
+                    browseSearchBox.setFocused(true);
+                    this.setFocused(browseSearchBox);
+                }
+                return true;
+            }
+
             if (isInside(mouseX, mouseY, filterX, toolbarY, filterW, 34)) {
                 browseFavoritesOnly = !browseFavoritesOnly;
                 syncLibrarySelectionWithVisibleAssets();
@@ -1065,6 +1137,14 @@ public class ArchivScreen extends Screen {
         boolean browseActive = "Browse".equals(selectedTopTab);
         boolean myAssetsActive = "My Assets".equals(selectedTopTab);
         boolean libraryTabActive = browseActive || myAssetsActive;
+        if (browseSearchBox != null) {
+            browseSearchBox.visible = browseActive;
+            browseSearchBox.active = browseActive;
+
+            if (!browseActive) {
+                browseSearchBox.setFocused(false);
+            }
+        }
 
         List<ArchivAsset> visibleAssets = getVisibleAssets();
 
@@ -1385,7 +1465,7 @@ public class ArchivScreen extends Screen {
         int listX = gridX + gridW + 8;
         int listW = 60;
 
-        drawControlBox(guiGraphics, "Search assets...", searchX, toolbarY, searchW, 34);
+        drawPanel(guiGraphics, searchX, toolbarY, searchW, 34, COLOR_PANEL, COLOR_BORDER);
         String filterLabel = browseFavoritesOnly ? "Fav Only" : "Filter";
         drawControlBox(guiGraphics, filterLabel, filterX, toolbarY, filterW, 34);
         guiGraphics.drawString(this.font, "Sort by:", sortLabelX, toolbarY + 12, COLOR_TEXT_DIM);
