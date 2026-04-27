@@ -54,6 +54,7 @@ public class ArchivScreen extends Screen {
     private String selectedCategory = "All";
     private String selectedTopTab = "Browse";
     private String selectedMyAssetsSection = "All Assets";
+    private boolean browseFavoritesOnly = false;
     private int selectedImportStep = 1;
 
     private String selectedLibraryAssetName = null;
@@ -208,10 +209,31 @@ public class ArchivScreen extends Screen {
         int cardH;
     }
 
+    private static class AssetCardLayout {
+        int previewX;
+        int previewY;
+        int previewW;
+        int previewH;
+
+        int favoriteX;
+        int favoriteY;
+        int favoriteW;
+        int favoriteH;
+
+        int overlayX;
+        int overlayW;
+
+        int loadY;
+        int loadH;
+
+        int detailsY;
+        int detailsH;
+    }
+
     public ArchivScreen(Component title, Screen parent) {
         super(title);
         this.parent = parent;
-        this.mockAssets = new ArrayList<>(MockAssetRepository.getAllAssets());
+        this.mockAssets = new ArrayList<>();
 
         for (ArchivAsset asset : this.mockAssets) {
             if (asset.isHighlighted()) {
@@ -255,7 +277,12 @@ public class ArchivScreen extends Screen {
             sourceAssets.addAll(savedAssets);
 
             for (ArchivAsset asset : sourceAssets) {
-                if (selectedCategory.equals("All") || asset.getMacroCategory().equals(selectedCategory)) {
+                boolean categoryMatches = selectedCategory.equals("All")
+                        || asset.getMacroCategory().equals(selectedCategory);
+
+                boolean favoriteMatches = !browseFavoritesOnly || asset.isFavorite();
+
+                if (categoryMatches && favoriteMatches) {
                     filteredAssets.add(asset);
                 }
             }
@@ -395,10 +422,42 @@ public class ArchivScreen extends Screen {
         layout.cardsGap = 14;
         layout.rowGap = 16;
         layout.columns = 3;
-        layout.rows = 2;
+        layout.rows = 1;
 
         layout.cardW = (layout.cardsAreaW - (layout.cardsGap * (layout.columns - 1))) / layout.columns;
-        layout.cardH = (layout.cardsAreaH - (layout.rowGap * (layout.rows - 1))) / layout.rows;
+        layout.cardH = 150;
+
+        return layout;
+    }
+
+    private AssetCardLayout buildAssetCardLayout(int x, int y, int width, int height) {
+        AssetCardLayout layout = new AssetCardLayout();
+
+        layout.previewX = x + 1;
+        layout.previewY = y + 1;
+        layout.previewW = width - 2;
+        layout.previewH = Math.max(80, (int) (height * 0.55));
+
+        layout.favoriteX = x + width - 24;
+        layout.favoriteY = y + 4;
+        layout.favoriteW = 20;
+        layout.favoriteH = 20;
+
+        layout.overlayX = x + 30;
+        layout.overlayW = width - 60;
+
+        int overlayGap = 6;
+        int loadH = 24;
+        int detailsH = 22;
+        int totalOverlayH = loadH + overlayGap + detailsH;
+
+        int overlayStartY = layout.previewY + Math.max(8, (layout.previewH - totalOverlayH) / 2);
+
+        layout.loadY = overlayStartY;
+        layout.loadH = loadH;
+
+        layout.detailsY = overlayStartY + loadH + overlayGap;
+        layout.detailsH = detailsH;
 
         return layout;
     }
@@ -546,6 +605,25 @@ public class ArchivScreen extends Screen {
         libraryActionMessage = action + ": " + asset.getName();
     }
 
+    private void syncLibrarySelectionWithVisibleAssets() {
+        List<ArchivAsset> visibleAssets = getVisibleAssets();
+
+        if (visibleAssets.isEmpty()) {
+            selectedLibraryAssetName = null;
+            libraryActionMessage = "No asset selected";
+            return;
+        }
+
+        for (ArchivAsset asset : visibleAssets) {
+            if (isLibraryAssetSelected(asset)) {
+                libraryActionMessage = "Selected: " + asset.getName();
+                return;
+            }
+        }
+
+        selectLibraryAsset(visibleAssets.get(0));
+    }
+
     private String fitTextToWidth(String text, int maxWidth) {
         if (this.font.width(text) <= maxWidth) {
             return text;
@@ -684,6 +762,7 @@ public class ArchivScreen extends Screen {
                     if (isInside(mouseX, mouseY, browseFileButtonX, layout.boxButtonY, 120, 28)) {
                         mockStructureFileSelected = true;
                         mockAssetSaved = false;
+                        selectedImportStep = 2;
                         return true;
                     }
                 }
@@ -707,6 +786,7 @@ public class ArchivScreen extends Screen {
                     if (isInside(mouseX, mouseY, browseImageButtonX, layout.boxButtonY, 120, 28)) {
                         mockPreviewImageSelected = true;
                         mockAssetSaved = false;
+                        selectedImportStep = 3;
                         return true;
                     }
                 }
@@ -716,6 +796,11 @@ public class ArchivScreen extends Screen {
                 if (isInside(mouseX, mouseY, layout.detailsActionX, layout.detailsActionY, layout.detailsActionW, layout.detailsActionH)) {
                     mockDetailsFilled = !mockDetailsFilled;
                     mockAssetSaved = false;
+
+                    if (mockDetailsFilled) {
+                        selectedImportStep = 4;
+                    }
+
                     return true;
                 }
             }
@@ -757,8 +842,26 @@ public class ArchivScreen extends Screen {
 
                 if (isInside(mouseX, mouseY, itemX, currentY, itemW, itemH)) {
                     selectedCategory = categories[i];
+                    syncLibrarySelectionWithVisibleAssets();
                     return true;
                 }
+            }
+        }
+
+        if ("Browse".equals(selectedTopTab)) {
+            int innerPadding = 18;
+            int toolbarY = contentY + 14;
+
+            int searchX = contentX + innerPadding;
+            int searchW = 280;
+
+            int filterX = searchX + searchW + 12;
+            int filterW = 110;
+
+            if (isInside(mouseX, mouseY, filterX, toolbarY, filterW, 34)) {
+                browseFavoritesOnly = !browseFavoritesOnly;
+                syncLibrarySelectionWithVisibleAssets();
+                return true;
             }
         }
 
@@ -804,29 +907,23 @@ public class ArchivScreen extends Screen {
                 int cardX = layout.cardsAreaX + column * (layout.cardW + layout.cardsGap);
                 int cardY = layout.cardsAreaY + row * (layout.cardH + layout.rowGap);
 
-                int favoriteBoxX = cardX + layout.cardW - 24;
-                int favoriteBoxY = cardY + 4;
+                AssetCardLayout cardLayout = buildAssetCardLayout(cardX, cardY, layout.cardW, layout.cardH);
 
-                if (isInside(mouseX, mouseY, favoriteBoxX, favoriteBoxY, 20, 20)) {
+                if (isInside(mouseX, mouseY, cardLayout.favoriteX, cardLayout.favoriteY, cardLayout.favoriteW, cardLayout.favoriteH)) {
                     toggleAssetFavorite(asset);
+                    syncLibrarySelectionWithVisibleAssets();
                     return true;
                 }
 
                 boolean selected = isLibraryAssetSelected(asset);
 
                 if (selected) {
-                    int overlayButtonW = layout.cardW - 60;
-                    int overlayX = cardX + 30;
-
-                    int loadButtonY = cardY + 30;
-                    int detailsButtonY = cardY + 60;
-
-                    if (isInside(mouseX, mouseY, overlayX, loadButtonY, overlayButtonW, 24)) {
+                    if (isInside(mouseX, mouseY, cardLayout.overlayX, cardLayout.loadY, cardLayout.overlayW, cardLayout.loadH)) {
                         setLibraryAction("Load pending", asset);
                         return true;
                     }
 
-                    if (isInside(mouseX, mouseY, overlayX, detailsButtonY, overlayButtonW, 22)) {
+                    if (isInside(mouseX, mouseY, cardLayout.overlayX, cardLayout.detailsY, cardLayout.overlayW, cardLayout.detailsH)) {
                         setLibraryAction("Details pending", asset);
                         return true;
                     }
@@ -852,29 +949,23 @@ public class ArchivScreen extends Screen {
                 int cardX = layout.cardsAreaX + column * (layout.cardW + layout.cardsGap);
                 int cardY = layout.cardsAreaY + row * (layout.cardH + layout.rowGap);
 
-                int favoriteBoxX = cardX + layout.cardW - 24;
-                int favoriteBoxY = cardY + 4;
+                AssetCardLayout cardLayout = buildAssetCardLayout(cardX, cardY, layout.cardW, layout.cardH);
 
-                if (isInside(mouseX, mouseY, favoriteBoxX, favoriteBoxY, 20, 20)) {
+                if (isInside(mouseX, mouseY, cardLayout.favoriteX, cardLayout.favoriteY, cardLayout.favoriteW, cardLayout.favoriteH)) {
                     toggleAssetFavorite(asset);
+                    syncLibrarySelectionWithVisibleAssets();
                     return true;
                 }
 
                 boolean selected = isLibraryAssetSelected(asset);
 
                 if (selected) {
-                    int overlayButtonW = layout.cardW - 60;
-                    int overlayX = cardX + 30;
-
-                    int loadButtonY = cardY + 30;
-                    int detailsButtonY = cardY + 60;
-
-                    if (isInside(mouseX, mouseY, overlayX, loadButtonY, overlayButtonW, 24)) {
+                    if (isInside(mouseX, mouseY, cardLayout.overlayX, cardLayout.loadY, cardLayout.overlayW, cardLayout.loadH)) {
                         setLibraryAction("Load pending", asset);
                         return true;
                     }
 
-                    if (isInside(mouseX, mouseY, overlayX, detailsButtonY, overlayButtonW, 22)) {
+                    if (isInside(mouseX, mouseY, cardLayout.overlayX, cardLayout.detailsY, cardLayout.overlayW, cardLayout.detailsH)) {
                         setLibraryAction("Details pending", asset);
                         return true;
                     }
@@ -1230,7 +1321,8 @@ public class ArchivScreen extends Screen {
         int listW = 60;
 
         drawControlBox(guiGraphics, "Search assets...", searchX, toolbarY, searchW, 34);
-        drawControlBox(guiGraphics, "Filter", filterX, toolbarY, filterW, 34);
+        String filterLabel = browseFavoritesOnly ? "Fav Only" : "Filter";
+        drawControlBox(guiGraphics, filterLabel, filterX, toolbarY, filterW, 34);
         guiGraphics.drawString(this.font, "Sort by:", sortLabelX, toolbarY + 12, COLOR_TEXT_DIM);
         drawControlBox(guiGraphics, "Newest", sortBoxX, toolbarY, sortBoxW, 34);
         guiGraphics.drawString(this.font, "View:", viewLabelX, toolbarY + 12, COLOR_TEXT_DIM);
@@ -1657,39 +1749,51 @@ public class ArchivScreen extends Screen {
         int border = selected ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
         drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, border);
 
-        int previewX = x + 1;
-        int previewY = y + 1;
-        int previewW = width - 2;
-        int previewH = Math.max(80, (int) (height * 0.55));
+        AssetCardLayout layout = buildAssetCardLayout(x, y, width, height);
 
-        guiGraphics.fill(previewX, previewY, previewX + previewW, previewY + previewH, asset.getPreviewColor());
+        guiGraphics.fill(
+                layout.previewX,
+                layout.previewY,
+                layout.previewX + layout.previewW,
+                layout.previewY + layout.previewH,
+                asset.getPreviewColor()
+        );
 
         String previewText = "PREVIEW";
         int textWidth = this.font.width(previewText);
         guiGraphics.drawString(
                 this.font,
                 previewText,
-                previewX + (previewW / 2) - (textWidth / 2),
-                previewY + (previewH / 2) - 4,
+                layout.previewX + (layout.previewW / 2) - (textWidth / 2),
+                layout.previewY + (layout.previewH / 2) - 4,
                 0xFFFFFFFF
         );
 
-        guiGraphics.drawString(this.font, asset.isFavorite() ? "★" : "☆", x + width - 16, y + 10, 0xFFFFD45A);
+        guiGraphics.drawString(
+                this.font,
+                asset.isFavorite() ? "★" : "☆",
+                layout.favoriteX + 4,
+                layout.favoriteY + 6,
+                0xFFFFD45A
+        );
 
         if (selected) {
-            guiGraphics.fill(previewX, previewY, previewX + previewW, previewY + previewH, 0x55000000);
+            guiGraphics.fill(
+                    layout.previewX,
+                    layout.previewY,
+                    layout.previewX + layout.previewW,
+                    layout.previewY + layout.previewH,
+                    0x55000000
+            );
 
-            int overlayButtonW = width - 60;
-            int overlayX = x + 30;
+            drawPanel(guiGraphics, layout.overlayX, layout.loadY, layout.overlayW, layout.loadH, 0xFF2F9BE6, 0xFF73C8FF);
+            drawPanel(guiGraphics, layout.overlayX, layout.detailsY, layout.overlayW, layout.detailsH, 0xFF1A2638, COLOR_BORDER);
 
-            drawPanel(guiGraphics, overlayX, y + 30, overlayButtonW, 24, 0xFF2F9BE6, 0xFF73C8FF);
-            drawPanel(guiGraphics, overlayX, y + 60, overlayButtonW, 22, 0xFF1A2638, COLOR_BORDER);
-
-            guiGraphics.drawString(this.font, "Load", x + (width / 2) - 12, y + 38, 0xFFFFFFFF);
-            guiGraphics.drawString(this.font, "Details", x + (width / 2) - 18, y + 67, 0xFFE5EEF8);
+            guiGraphics.drawString(this.font, "Load", x + (width / 2) - 12, layout.loadY + 8, 0xFFFFFFFF);
+            guiGraphics.drawString(this.font, "Details", x + (width / 2) - 18, layout.detailsY + 7, 0xFFE5EEF8);
         }
 
-        int infoY = y + previewH + 12;
+        int infoY = y + layout.previewH + 12;
         guiGraphics.drawString(this.font, asset.getName(), x + 12, infoY, COLOR_TEXT);
         guiGraphics.drawString(this.font, asset.getVersion(), x + 12, infoY + 14, COLOR_TEXT_DIM);
 
