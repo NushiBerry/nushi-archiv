@@ -54,6 +54,7 @@ public class ArchivScreen extends Screen {
     private String selectedCategory = "All";
     private String selectedTopTab = "Browse";
     private String selectedMyAssetsSection = "All Assets";
+    private String browseSortMode = "Newest";
     private boolean browseFavoritesOnly = false;
     private int selectedImportStep = 1;
 
@@ -287,6 +288,7 @@ public class ArchivScreen extends Screen {
                 }
             }
 
+            applyBrowseSort(filteredAssets);
             return filteredAssets;
         }
 
@@ -385,7 +387,7 @@ public class ArchivScreen extends Screen {
         int toolbarY = contentY + 14;
 
         layout.cardsAreaX = contentX + innerPadding;
-        layout.cardsAreaY = toolbarY + 50;
+        layout.cardsAreaY = toolbarY + 78;
         layout.cardsAreaW = contentW - (innerPadding * 2);
         layout.cardsAreaH = (contentY + contentH - 16) - layout.cardsAreaY;
 
@@ -436,7 +438,15 @@ public class ArchivScreen extends Screen {
         layout.previewX = x + 1;
         layout.previewY = y + 1;
         layout.previewW = width - 2;
-        layout.previewH = Math.max(80, (int) (height * 0.55));
+
+        int minPreviewHeight = 72;
+        int minBodyHeight = 56;
+        int preferredPreviewHeight = (int) (height * 0.55);
+
+        layout.previewH = Math.min(
+                Math.max(minPreviewHeight, preferredPreviewHeight),
+                height - minBodyHeight
+        );
 
         layout.favoriteX = x + width - 24;
         layout.favoriteY = y + 4;
@@ -624,6 +634,33 @@ public class ArchivScreen extends Screen {
         selectLibraryAsset(visibleAssets.get(0));
     }
 
+    private void cycleBrowseSortMode() {
+        browseSortMode = switch (browseSortMode) {
+            case "Newest" -> "Oldest";
+            case "Oldest" -> "A-Z";
+            case "A-Z" -> "Z-A";
+            default -> "Newest";
+        };
+    }
+
+    private void applyBrowseSort(List<ArchivAsset> assets) {
+        switch (browseSortMode) {
+            case "Oldest" -> {
+                List<ArchivAsset> reversed = new ArrayList<>();
+                for (int i = assets.size() - 1; i >= 0; i--) {
+                    reversed.add(assets.get(i));
+                }
+                assets.clear();
+                assets.addAll(reversed);
+            }
+            case "A-Z" -> assets.sort((a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+            case "Z-A" -> assets.sort((a, b) -> b.getName().compareToIgnoreCase(a.getName()));
+            case "Newest" -> {
+                // mantém a ordem atual
+            }
+        }
+    }
+
     private String fitTextToWidth(String text, int maxWidth) {
         if (this.font.width(text) <= maxWidth) {
             return text;
@@ -642,6 +679,17 @@ public class ArchivScreen extends Screen {
         }
 
         return result + ellipsis;
+    }
+
+    private String getBrowseFavoritesLabel() {
+        return browseFavoritesOnly ? "Favorites only" : "All assets";
+    }
+
+    private String getBrowseSummaryText(List<ArchivAsset> visibleAssets) {
+        return "Category: " + selectedCategory
+                + "  •  Filter: " + getBrowseFavoritesLabel()
+                + "  •  Sort: " + browseSortMode
+                + "  •  Results: " + visibleAssets.size();
     }
 
     @Override
@@ -858,8 +906,18 @@ public class ArchivScreen extends Screen {
             int filterX = searchX + searchW + 12;
             int filterW = 110;
 
+            int sortLabelX = filterX + filterW + 18;
+            int sortBoxX = sortLabelX + 60;
+            int sortBoxW = 120;
+
             if (isInside(mouseX, mouseY, filterX, toolbarY, filterW, 34)) {
                 browseFavoritesOnly = !browseFavoritesOnly;
+                syncLibrarySelectionWithVisibleAssets();
+                return true;
+            }
+
+            if (isInside(mouseX, mouseY, sortBoxX, toolbarY, sortBoxW, 34)) {
+                cycleBrowseSortMode();
                 syncLibrarySelectionWithVisibleAssets();
                 return true;
             }
@@ -1121,6 +1179,13 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(this.font, label, x + 12, textY, COLOR_TEXT_DIM);
     }
 
+    private void drawInfoStrip(GuiGraphics guiGraphics, String label, int x, int y, int width, int height) {
+        drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
+
+        int textY = y + (height - this.font.lineHeight) / 2;
+        guiGraphics.drawString(this.font, label, x + 12, textY, COLOR_TEXT_DIM);
+    }
+
     private void drawFieldBox(GuiGraphics guiGraphics, String text, int x, int y, int width, int height, boolean filled) {
         drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
 
@@ -1324,10 +1389,16 @@ public class ArchivScreen extends Screen {
         String filterLabel = browseFavoritesOnly ? "Fav Only" : "Filter";
         drawControlBox(guiGraphics, filterLabel, filterX, toolbarY, filterW, 34);
         guiGraphics.drawString(this.font, "Sort by:", sortLabelX, toolbarY + 12, COLOR_TEXT_DIM);
-        drawControlBox(guiGraphics, "Newest", sortBoxX, toolbarY, sortBoxW, 34);
+        drawControlBox(guiGraphics, browseSortMode, sortBoxX, toolbarY, sortBoxW, 34);
         guiGraphics.drawString(this.font, "View:", viewLabelX, toolbarY + 12, COLOR_TEXT_DIM);
         drawControlBox(guiGraphics, "Grid", gridX, toolbarY, gridW, 34);
         drawControlBox(guiGraphics, "List", listX, toolbarY, listW, 34);
+
+        int summaryY = toolbarY + 42;
+        int summaryX = contentX + innerPadding;
+        int summaryW = contentW - (innerPadding * 2);
+
+        drawInfoStrip(guiGraphics, getBrowseSummaryText(visibleAssets), summaryX, summaryY, summaryW, 22);
 
         CardGridLayout layout = buildBrowseGridLayout(contentX, contentY, contentW, contentH);
 
@@ -1794,21 +1865,23 @@ public class ArchivScreen extends Screen {
         }
 
         int infoY = y + layout.previewH + 12;
+        int versionY = infoY + 14;
+        int dotsY = y + height - 16;
+
         guiGraphics.drawString(this.font, asset.getName(), x + 12, infoY, COLOR_TEXT);
-        guiGraphics.drawString(this.font, asset.getVersion(), x + 12, infoY + 14, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, asset.getVersion(), x + 12, versionY, COLOR_TEXT_DIM);
 
         drawChip(guiGraphics, asset.getType(), x + width - 84, infoY - 2, 72, 18, asset.getChipColor());
 
         int visibleDots = Math.min(asset.getVariantCount(), 4);
-        int dotY = infoY + 34;
 
         for (int i = 0; i < visibleDots; i++) {
-            drawDot(guiGraphics, x + 12 + (i * 12), dotY, 0xFF8B6A4A + (i * 0x00111111));
+            drawDot(guiGraphics, x + 12 + (i * 12), dotsY, 0xFF8B6A4A + (i * 0x00111111));
         }
 
         if (asset.getVariantCount() > 4) {
             int remaining = asset.getVariantCount() - 4;
-            guiGraphics.drawString(this.font, "+" + remaining, x + 12 + (visibleDots * 12), infoY + 31, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, "+" + remaining, x + 12 + (visibleDots * 12), dotsY - 1, COLOR_TEXT_DIM);
         }
     }
 
