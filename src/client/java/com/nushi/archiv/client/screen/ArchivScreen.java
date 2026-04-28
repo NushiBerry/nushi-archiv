@@ -63,6 +63,9 @@ public class ArchivScreen extends Screen {
     private String libraryActionMessage = "No asset selected";
     private EditBox browseSearchBox;
 
+    private boolean assetDetailsOpen = false;
+    private String detailsAssetName = null;
+
     private boolean mockStructureFileSelected = false;
     private final String mockStructureFileName = "stone_tower.schem";
     private final String mockStructureFileFormat = ".schem";
@@ -670,6 +673,41 @@ public class ArchivScreen extends Screen {
         return layout;
     }
 
+    private void openAssetDetails(ArchivAsset asset) {
+        assetDetailsOpen = true;
+        detailsAssetName = asset.getName();
+        selectedLibraryAssetName = asset.getName();
+        libraryActionMessage = "Viewing details: " + asset.getName();
+    }
+
+    private void closeAssetDetails() {
+        assetDetailsOpen = false;
+        detailsAssetName = null;
+        libraryActionMessage = selectedLibraryAssetName != null
+                ? "Selected: " + selectedLibraryAssetName
+                : "No asset selected";
+    }
+
+    private ArchivAsset getDetailsAsset() {
+        if (detailsAssetName == null) {
+            return null;
+        }
+
+        for (ArchivAsset asset : savedAssets) {
+            if (asset.getName().equals(detailsAssetName)) {
+                return asset;
+            }
+        }
+
+        for (ArchivAsset asset : mockAssets) {
+            if (asset.getName().equals(detailsAssetName)) {
+                return asset;
+            }
+        }
+
+        return null;
+    }
+
     private boolean isImportReady() {
         return mockStructureFileSelected && mockDetailsFilled;
     }
@@ -945,6 +983,22 @@ public class ArchivScreen extends Screen {
         double mouseX = event.x();
         double mouseY = event.y();
 
+        if (assetDetailsOpen) {
+            int panelW = 360;
+            int panelH = 280;
+            int panelX = (this.width - panelW) / 2;
+            int panelY = (this.height - panelH) / 2;
+
+            int closeSize = 20;
+            int closeX = panelX + panelW - closeSize - 10;
+            int closeY = panelY + 10;
+
+            if (isInside(mouseX, mouseY, closeX, closeY, closeSize, closeSize)) {
+                closeAssetDetails();
+                return true;
+            }
+        }
+
         if (browseSearchBox != null && !isInside(mouseX, mouseY, browseSearchBox.getX(), browseSearchBox.getY(), browseSearchBox.getWidth(), browseSearchBox.getHeight())) {
             browseSearchBox.setFocused(false);
             this.setFocused(null);
@@ -1201,7 +1255,7 @@ public class ArchivScreen extends Screen {
                         }
 
                         if (isInside(mouseX, mouseY, rowLayout.detailsX, rowLayout.detailsY, rowLayout.detailsW, rowLayout.detailsH)) {
-                            setLibraryAction("Details pending", asset);
+                            openAssetDetails(asset);
                             return true;
                         }
                     }
@@ -1240,7 +1294,7 @@ public class ArchivScreen extends Screen {
                         }
 
                         if (isInside(mouseX, mouseY, cardLayout.overlayX, cardLayout.detailsY, cardLayout.overlayW, cardLayout.detailsH)) {
-                            setLibraryAction("Details pending", asset);
+                            openAssetDetails(asset);
                             return true;
                         }
                     }
@@ -1283,7 +1337,7 @@ public class ArchivScreen extends Screen {
                     }
 
                     if (isInside(mouseX, mouseY, cardLayout.overlayX, cardLayout.detailsY, cardLayout.overlayW, cardLayout.detailsH)) {
-                        setLibraryAction("Details pending", asset);
+                        openAssetDetails(asset);
                         return true;
                     }
                 }
@@ -1386,6 +1440,7 @@ public class ArchivScreen extends Screen {
         } else {
             drawTabPlaceholder(guiGraphics, contentX, contentY, contentW, contentH, selectedTopTab);
         }
+        drawAssetDetailsPanel(guiGraphics, rootX, rootY, rootW, bodyY);
 
         drawPanel(guiGraphics, rootX, rootY + rootH - footerH, rootW, footerH, COLOR_PANEL, COLOR_BORDER);
 
@@ -1407,6 +1462,75 @@ public class ArchivScreen extends Screen {
         }
 
         super.render(guiGraphics, mouseX, mouseY, delta);
+    }
+
+    private void drawAssetDetailsPanel(GuiGraphics guiGraphics, int rootX, int rootY, int rootW, int bodyY) {
+        if (!assetDetailsOpen) {
+            return;
+        }
+
+        ArchivAsset asset = getDetailsAsset();
+        if (asset == null) {
+            return;
+        }
+
+        int panelW = 360;
+        int panelH = 280;
+        int panelX = (this.width - panelW) / 2;
+        int panelY = (this.height - panelH) / 2;
+
+        drawPanel(guiGraphics, panelX, panelY, panelW, panelH, COLOR_PANEL_ALT, COLOR_BORDER_ACTIVE);
+
+        guiGraphics.drawString(this.font, "Asset Details", panelX + 14, panelY + 12, COLOR_TEXT);
+
+        int closeSize = 20;
+        int closeX = panelX + panelW - closeSize - 10;
+        int closeY = panelY + 10;
+        drawPanel(guiGraphics, closeX, closeY, closeSize, closeSize, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "X", closeX + 6, closeY + 6, COLOR_TEXT);
+
+        int previewX = panelX + 14;
+        int previewY = panelY + 36;
+        int previewW = panelW - 28;
+        int previewH = 76;
+
+        guiGraphics.fill(previewX, previewY, previewX + previewW, previewY + previewH, asset.getPreviewColor());
+
+        String previewText = "PREVIEW";
+        int previewTextWidth = this.font.width(previewText);
+        guiGraphics.drawString(
+                this.font,
+                previewText,
+                previewX + (previewW - previewTextWidth) / 2,
+                previewY + (previewH / 2) - 4,
+                COLOR_TEXT
+        );
+
+        int infoX = panelX + 16;
+        int infoY = previewY + previewH + 16;
+
+        guiGraphics.drawString(this.font, asset.getName(), infoX, infoY, COLOR_TEXT);
+        guiGraphics.drawString(this.font, ".schem  •  " + asset.getVersion(), infoX, infoY + 16, COLOR_TEXT_DIM);
+
+        int labelX = infoX;
+        int valueX = infoX + 88;
+        int rowY = infoY + 42;
+        int rowGap = 18;
+
+        guiGraphics.drawString(this.font, "Category", labelX, rowY, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, asset.getMacroCategory(), valueX, rowY, COLOR_TEXT);
+
+        rowY += rowGap;
+        guiGraphics.drawString(this.font, "Type", labelX, rowY, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, asset.getType(), valueX, rowY, COLOR_TEXT);
+
+        rowY += rowGap;
+        guiGraphics.drawString(this.font, "Variants", labelX, rowY, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, String.valueOf(asset.getVariantCount()), valueX, rowY, COLOR_TEXT);
+
+        rowY += rowGap;
+        guiGraphics.drawString(this.font, "Favorite", labelX, rowY, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, asset.isFavorite() ? "Yes" : "No", valueX, rowY, COLOR_TEXT);
     }
 
     private void drawPanel(GuiGraphics guiGraphics, int x, int y, int width, int height, int backgroundColor, int borderColor) {
