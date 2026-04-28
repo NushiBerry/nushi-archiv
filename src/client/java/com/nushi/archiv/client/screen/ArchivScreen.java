@@ -236,6 +236,39 @@ public class ArchivScreen extends Screen {
         int rowGap;
     }
 
+    private static class BrowseListRowLayout {
+        int previewX;
+        int previewY;
+        int previewW;
+        int previewH;
+
+        int infoX;
+        int titleY;
+        int versionY;
+        int dotsY;
+
+        int dividerX;
+
+        int chipX;
+        int chipY;
+        int chipW;
+        int chipH;
+
+        int favoriteX;
+        int favoriteY;
+        int favoriteBoxSize;
+
+        int loadX;
+        int loadY;
+        int loadW;
+        int loadH;
+
+        int detailsX;
+        int detailsY;
+        int detailsW;
+        int detailsH;
+    }
+
     private static class AssetCardLayout {
         int previewX;
         int previewY;
@@ -510,6 +543,46 @@ public class ArchivScreen extends Screen {
         layout.listW = contentW - (innerPadding * 2);
         layout.rowH = 84;
         layout.rowGap = 10;
+
+        return layout;
+    }
+
+    private BrowseListRowLayout buildBrowseListRowLayout(int x, int y, int width, int height) {
+        BrowseListRowLayout layout = new BrowseListRowLayout();
+
+        int padding = 12;
+        int rightPadding = 16;
+
+        layout.previewW = 116;
+        layout.previewH = 58;
+        layout.previewX = x + padding;
+        layout.previewY = y + (height - layout.previewH) / 2;
+
+        layout.infoX = layout.previewX + layout.previewW + 14;
+        layout.titleY = y + 18;
+        layout.versionY = y + 34;
+        layout.dotsY = y + 54;
+
+        layout.favoriteBoxSize = 24;
+        layout.favoriteX = x + width - rightPadding - layout.favoriteBoxSize;
+        layout.favoriteY = y + 10;
+
+        layout.detailsW = 82;
+        layout.detailsH = 24;
+        layout.detailsX = x + width - rightPadding - layout.favoriteBoxSize - 14 - layout.detailsW;
+        layout.detailsY = y + height - layout.detailsH - 12;
+
+        layout.loadW = 78;
+        layout.loadH = 24;
+        layout.loadX = layout.detailsX - 8 - layout.loadW;
+        layout.loadY = layout.detailsY;
+
+        layout.chipW = 92;
+        layout.chipH = 24;
+        layout.chipX = layout.loadX - 14 - layout.chipW;
+        layout.chipY = y + 14;
+
+        layout.dividerX = layout.chipX - 18;
 
         return layout;
     }
@@ -1104,13 +1177,9 @@ public class ArchivScreen extends Screen {
                     ArchivAsset asset = visibleAssets.get(i);
                     int rowY = layout.listY + i * (layout.rowH + layout.rowGap);
 
-                    int rightPadding = 16;
+                    BrowseListRowLayout rowLayout = buildBrowseListRowLayout(layout.listX, rowY, layout.listW, layout.rowH);
 
-                    int favoriteBoxSize = 24;
-                    int favoriteX = layout.listX + layout.listW - rightPadding - favoriteBoxSize;
-                    int favoriteY = rowY + 10;
-
-                    if (isInside(mouseX, mouseY, favoriteX, favoriteY, favoriteBoxSize, favoriteBoxSize)) {
+                    if (isInside(mouseX, mouseY, rowLayout.favoriteX, rowLayout.favoriteY, rowLayout.favoriteBoxSize, rowLayout.favoriteBoxSize)) {
                         toggleAssetFavorite(asset);
                         syncLibrarySelectionWithVisibleAssets();
                         return true;
@@ -1119,21 +1188,12 @@ public class ArchivScreen extends Screen {
                     boolean selected = isLibraryAssetSelected(asset);
 
                     if (selected) {
-                        int loadW = 78;
-                        int detailsW = 82;
-                        int buttonH = 24;
-                        int buttonGap = 8;
-
-                        int detailsX = layout.listX + layout.listW - rightPadding - detailsW - 26;
-                        int loadX = detailsX - buttonGap - loadW;
-                        int buttonY = rowY + layout.rowH - buttonH - 12;
-
-                        if (isInside(mouseX, mouseY, loadX, buttonY, loadW, buttonH)) {
+                        if (isInside(mouseX, mouseY, rowLayout.loadX, rowLayout.loadY, rowLayout.loadW, rowLayout.loadH)) {
                             setLibraryAction("Load pending", asset);
                             return true;
                         }
 
-                        if (isInside(mouseX, mouseY, detailsX, buttonY, detailsW, buttonH)) {
+                        if (isInside(mouseX, mouseY, rowLayout.detailsX, rowLayout.detailsY, rowLayout.detailsW, rowLayout.detailsH)) {
                             setLibraryAction("Details pending", asset);
                             return true;
                         }
@@ -2024,96 +2084,59 @@ public class ArchivScreen extends Screen {
         int border = selected ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
         drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, border);
 
-        int padding = 12;
+        BrowseListRowLayout layout = buildBrowseListRowLayout(x, y, width, height);
 
-        // =========================
-        // 1) Preview
-        // =========================
-        int previewW = 116;
-        int previewH = 58;
-        int previewX = x + padding;
-        int previewY = y + (height - previewH) / 2;
-
-        guiGraphics.fill(previewX, previewY, previewX + previewW, previewY + previewH, asset.getPreviewColor());
+        // preview
+        guiGraphics.fill(
+                layout.previewX,
+                layout.previewY,
+                layout.previewX + layout.previewW,
+                layout.previewY + layout.previewH,
+                asset.getPreviewColor()
+        );
 
         String previewText = "PREVIEW";
         int previewTextWidth = this.font.width(previewText);
         guiGraphics.drawString(
                 this.font,
                 previewText,
-                previewX + (previewW / 2) - (previewTextWidth / 2),
-                previewY + (previewH / 2) - 4,
+                layout.previewX + (layout.previewW / 2) - (previewTextWidth / 2),
+                layout.previewY + (layout.previewH / 2) - 4,
                 0xFFFFFFFF
         );
 
-        // =========================
-        // 2) Informações do asset
-        // =========================
-        int infoX = previewX + previewW + 14;
-        int titleY = y + 18;
-        int versionY = y + 34;
-        int dotsY = y + 54;
-
-        guiGraphics.drawString(this.font, asset.getName(), infoX, titleY, COLOR_TEXT);
-        guiGraphics.drawString(this.font, asset.getVersion(), infoX, versionY, COLOR_TEXT_DIM);
+        // infos
+        guiGraphics.drawString(this.font, asset.getName(), layout.infoX, layout.titleY, COLOR_TEXT);
+        guiGraphics.drawString(this.font, asset.getVersion(), layout.infoX, layout.versionY, COLOR_TEXT_DIM);
 
         int visibleDots = Math.min(asset.getVariantCount(), 4);
         for (int i = 0; i < visibleDots; i++) {
-            drawDot(guiGraphics, infoX + (i * 12), dotsY, 0xFF8B6A4A + (i * 0x00111111));
+            drawDot(guiGraphics, layout.infoX + (i * 12), layout.dotsY, 0xFF8B6A4A + (i * 0x00111111));
         }
 
         if (asset.getVariantCount() > 4) {
             int remaining = asset.getVariantCount() - 4;
-            guiGraphics.drawString(this.font, "+" + remaining, infoX + (visibleDots * 12), dotsY - 1, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, "+" + remaining, layout.infoX + (visibleDots * 12), layout.dotsY - 1, COLOR_TEXT_DIM);
         }
 
-        // =========================
-        // 3) Layout da área direita
-        // =========================
-        int rightPadding = 16;
+        // divisor sutil entre info e ações
+        guiGraphics.fill(layout.dividerX, y + 12, layout.dividerX + 1, y + height - 12, COLOR_BORDER);
 
-        int loadW = 78;
-        int detailsW = 82;
-        int buttonH = 24;
-        int buttonGap = 8;
+        // chip
+        drawChip(guiGraphics, asset.getType(), layout.chipX, layout.chipY, layout.chipW, layout.chipH, asset.getChipColor());
 
-        int detailsX = x + width - rightPadding - detailsW - 26; // deixa espaço pra estrela à direita
-        int loadX = detailsX - buttonGap - loadW;
-        int buttonY = y + height - buttonH - 12;
-
-        int chipW = 92;
-        int chipH = 24;
-        int chipGap = 14;
-        int chipX = loadX - chipGap - chipW;
-        int chipY = y + 14;
-
-        // Chip mais à esquerda, sobrando espaço pros botões
-        drawChip(guiGraphics, asset.getType(), chipX, chipY, chipW, chipH, asset.getChipColor());
-
-        // =========================
-// 4) Favorito (mais destacado no modo List)
-// =========================
-        int favoriteBoxSize = 24;
-        int favoriteX = x + width - rightPadding - favoriteBoxSize;
-        int favoriteY = y + 10;
-
+        // favorito
         String favoriteText = asset.isFavorite() ? "★" : "☆";
+        guiGraphics.drawString(this.font, favoriteText, layout.favoriteX + 6, layout.favoriteY + 5, 0xFFFFD45A);
+        guiGraphics.drawString(this.font, favoriteText, layout.favoriteX + 7, layout.favoriteY + 5, 0xFFFFD45A);
 
-// desenha a estrela com mais destaque, sem usar scale/push/pop
-        guiGraphics.drawString(this.font, favoriteText, favoriteX + 6, favoriteY + 5, 0xFFFFD45A);
-
-// desenha uma segunda vez com 1px de offset pra ficar mais "forte"
-        guiGraphics.drawString(this.font, favoriteText, favoriteX + 7, favoriteY + 5, 0xFFFFD45A);
-
-        // =========================
-        // 5) Botões só quando selecionado
-        // =========================
+        // botões só quando selecionado
         if (selected) {
-            drawPanel(guiGraphics, loadX, buttonY, loadW, buttonH, 0xFF2F9BE6, 0xFF73C8FF);
-            drawPanel(guiGraphics, detailsX, buttonY, detailsW, buttonH, 0xFF1A2638, COLOR_BORDER);
+            drawPanel(guiGraphics, layout.loadX, layout.loadY, layout.loadW, layout.loadH, 0xFF2F9BE6, 0xFF73C8FF);
+            drawPanel(guiGraphics, layout.detailsX, layout.detailsY, layout.detailsW, layout.detailsH, 0xFF1A2638, COLOR_BORDER);
 
-            guiGraphics.drawString(this.font, "Load", loadX + 24, buttonY + 8, 0xFFFFFFFF);
-            guiGraphics.drawString(this.font, "Details", detailsX + 18, buttonY + 8, 0xFFE5EEF8);
+            guiGraphics.drawString(this.font, "Load", layout.loadX + 24, layout.loadY + 8, 0xFFFFFFFF);
+            guiGraphics.drawString(this.font, "Details", layout.detailsX + 18, layout.detailsY + 8, 0xFFE5EEF8);
         }
     }
 
