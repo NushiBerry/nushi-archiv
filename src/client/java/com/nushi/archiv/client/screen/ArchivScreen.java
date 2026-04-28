@@ -541,8 +541,8 @@ public class ArchivScreen extends Screen {
         layout.listX = contentX + innerPadding;
         layout.listY = toolbarY + 78;
         layout.listW = contentW - (innerPadding * 2);
-        layout.rowH = 84;
-        layout.rowGap = 10;
+        layout.rowH = 68;
+        layout.rowGap = 8;
 
         return layout;
     }
@@ -550,39 +550,46 @@ public class ArchivScreen extends Screen {
     private BrowseListRowLayout buildBrowseListRowLayout(int x, int y, int width, int height) {
         BrowseListRowLayout layout = new BrowseListRowLayout();
 
-        int padding = 12;
-        int rightPadding = 16;
+        int padding = 10;
+        int rightPadding = 18;
+        int menuDotsReserve = 18;
+        int gapBetweenButtons = 8;
 
-        layout.previewW = 116;
-        layout.previewH = 58;
+        // preview
+        layout.previewW = 84;
+        layout.previewH = 42;
         layout.previewX = x + padding;
         layout.previewY = y + (height - layout.previewH) / 2;
 
+        // infos
         layout.infoX = layout.previewX + layout.previewW + 14;
-        layout.titleY = y + 18;
-        layout.versionY = y + 34;
-        layout.dotsY = y + 54;
+        layout.titleY = y + 14;
+        layout.versionY = y + 28;
+        layout.dotsY = y + 42;
 
-        layout.favoriteBoxSize = 24;
-        layout.favoriteX = x + width - rightPadding - layout.favoriteBoxSize;
-        layout.favoriteY = y + 10;
+        // botões na direita, com folga da borda
+        layout.loadW = 70;
+        layout.loadH = 22;
+        layout.detailsW = 76;
+        layout.detailsH = 22;
 
-        layout.detailsW = 82;
-        layout.detailsH = 24;
-        layout.detailsX = x + width - rightPadding - layout.favoriteBoxSize - 14 - layout.detailsW;
-        layout.detailsY = y + height - layout.detailsH - 12;
+        layout.detailsX = x + width - rightPadding - menuDotsReserve - layout.detailsW;
+        layout.detailsY = y + (height - layout.detailsH) / 2;
 
-        layout.loadW = 78;
-        layout.loadH = 24;
-        layout.loadX = layout.detailsX - 8 - layout.loadW;
+        layout.loadX = layout.detailsX - gapBetweenButtons - layout.loadW;
         layout.loadY = layout.detailsY;
 
-        layout.chipW = 92;
-        layout.chipH = 24;
-        layout.chipX = layout.loadX - 14 - layout.chipW;
-        layout.chipY = y + 14;
+        // divisória antes da área de ações
+        layout.dividerX = layout.loadX - 18;
 
-        layout.dividerX = layout.chipX - 18;
+        // estrela entre badge e divisória
+        layout.favoriteBoxSize = 16;
+        layout.favoriteX = layout.dividerX - 24;
+        layout.favoriteY = y + 12;
+
+        // badge mais em cima
+        layout.chipH = 18;
+        layout.chipY = y + 10;
 
         return layout;
     }
@@ -2066,7 +2073,10 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(this.font, asset.getName(), x + 12, infoY, COLOR_TEXT);
         guiGraphics.drawString(this.font, asset.getVersion(), x + 12, versionY, COLOR_TEXT_DIM);
 
-        drawChip(guiGraphics, asset.getType(), x + width - 84, infoY - 2, 72, 18, asset.getChipColor());
+        int chipW = getChipWidth(asset.getType());
+        int chipX = x + width - 12 - chipW;
+
+        drawChip(guiGraphics, asset.getType(), chipX, infoY - 2, chipW, 18, asset.getChipColor());
 
         int visibleDots = Math.min(asset.getVariantCount(), 4);
 
@@ -2081,8 +2091,8 @@ public class ArchivScreen extends Screen {
     }
 
     private void drawBrowseListRow(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset, boolean selected) {
-        int border = selected ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
-        drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, border);
+        int borderColor = selected ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
+        drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, borderColor);
 
         BrowseListRowLayout layout = buildBrowseListRowLayout(x, y, width, height);
 
@@ -2100,49 +2110,98 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(
                 this.font,
                 previewText,
-                layout.previewX + (layout.previewW / 2) - (previewTextWidth / 2),
+                layout.previewX + (layout.previewW - previewTextWidth) / 2,
                 layout.previewY + (layout.previewH / 2) - 4,
-                0xFFFFFFFF
+                COLOR_TEXT
         );
 
-        // infos
+        // nome + metadado
         guiGraphics.drawString(this.font, asset.getName(), layout.infoX, layout.titleY, COLOR_TEXT);
-        guiGraphics.drawString(this.font, asset.getVersion(), layout.infoX, layout.versionY, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, ".schem  •  " + asset.getVersion(), layout.infoX, layout.versionY, COLOR_TEXT_DIM);
 
-        int visibleDots = Math.min(asset.getVariantCount(), 4);
-        for (int i = 0; i < visibleDots; i++) {
-            drawDot(guiGraphics, layout.infoX + (i * 12), layout.dotsY, 0xFF8B6A4A + (i * 0x00111111));
+        int variantsToShow = Math.min(asset.getVariantCount(), 4);
+        for (int i = 0; i < variantsToShow; i++) {
+            drawDot(guiGraphics, layout.infoX + (i * 11), layout.dotsY, 0xFFB79263);
         }
 
         if (asset.getVariantCount() > 4) {
             int remaining = asset.getVariantCount() - 4;
-            guiGraphics.drawString(this.font, "+" + remaining, layout.infoX + (visibleDots * 12), layout.dotsY - 1, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, "+" + remaining, layout.infoX + (variantsToShow * 11), layout.dotsY - 1, COLOR_TEXT_DIM);
         }
 
-        // divisor sutil entre info e ações
-        guiGraphics.fill(layout.dividerX, y + 12, layout.dividerX + 1, y + height - 12, COLOR_BORDER);
+        // badge dinâmica
+        int chipW = getChipWidth(asset.getType());
+        int chipX = layout.favoriteX - 10 - chipW;
 
-        // chip
-        drawChip(guiGraphics, asset.getType(), layout.chipX, layout.chipY, layout.chipW, layout.chipH, asset.getChipColor());
+        drawChip(
+                guiGraphics,
+                asset.getType(),
+                chipX,
+                layout.chipY,
+                chipW,
+                layout.chipH,
+                asset.getChipColor()
+        );
 
-        // favorito
-        String favoriteText = asset.isFavorite() ? "★" : "☆";
-        guiGraphics.drawString(this.font, favoriteText, layout.favoriteX + 6, layout.favoriteY + 5, 0xFFFFD45A);
-        guiGraphics.drawString(this.font, favoriteText, layout.favoriteX + 7, layout.favoriteY + 5, 0xFFFFD45A);
+        // estrela mais destacada sem usar scale
+        String star = asset.isFavorite() ? "★" : "☆";
+        guiGraphics.drawString(this.font, star, layout.favoriteX, layout.favoriteY, 0xFFFFD54A);
+        guiGraphics.drawString(this.font, star, layout.favoriteX + 1, layout.favoriteY, 0xFFFFD54A);
 
-        // botões só quando selecionado
+        // divisória
+        guiGraphics.fill(
+                layout.dividerX,
+                y + 10,
+                layout.dividerX + 1,
+                y + height - 10,
+                COLOR_BORDER
+        );
+
+        // botões à direita, centralizados
         if (selected) {
-            drawPanel(guiGraphics, layout.loadX, layout.loadY, layout.loadW, layout.loadH, 0xFF2F9BE6, 0xFF73C8FF);
+            drawPanel(guiGraphics, layout.loadX, layout.loadY, layout.loadW, layout.loadH, 0xFF3AA0E6, COLOR_BORDER_ACTIVE);
             drawPanel(guiGraphics, layout.detailsX, layout.detailsY, layout.detailsW, layout.detailsH, 0xFF1A2638, COLOR_BORDER);
 
-            guiGraphics.drawString(this.font, "Load", layout.loadX + 24, layout.loadY + 8, 0xFFFFFFFF);
-            guiGraphics.drawString(this.font, "Details", layout.detailsX + 18, layout.detailsY + 8, 0xFFE5EEF8);
+            guiGraphics.drawString(
+                    this.font,
+                    "Load",
+                    layout.loadX + (layout.loadW - this.font.width("Load")) / 2,
+                    layout.loadY + 7,
+                    COLOR_TEXT
+            );
+
+            guiGraphics.drawString(
+                    this.font,
+                    "Details",
+                    layout.detailsX + (layout.detailsW - this.font.width("Details")) / 2,
+                    layout.detailsY + 7,
+                    COLOR_TEXT
+            );
         }
+
+        // 3 pontinhos no canto direito
+        int menuDotsX = x + width - 18;
+        int menuDotsY = y + (height / 2) - 6;
+        drawVerticalDots(guiGraphics, menuDotsX, menuDotsY, COLOR_TEXT_DIM);
+    }
+
+    private int getChipWidth(String label) {
+        return this.font.width(label) + 16;
     }
 
     private void drawChip(GuiGraphics guiGraphics, String label, int x, int y, int width, int height, int color) {
         drawPanel(guiGraphics, x, y, width, height, color, color);
-        guiGraphics.drawString(this.font, label, x + 8, y + 6, 0xFFFFFFFF);
+
+        int textX = x + 8;
+        int textY = y + (height - this.font.lineHeight) / 2;
+
+        guiGraphics.drawString(this.font, label, textX, textY, 0xFFFFFFFF);
+    }
+
+    private void drawVerticalDots(GuiGraphics guiGraphics, int x, int y, int color) {
+        guiGraphics.fill(x, y, x + 2, y + 2, color);
+        guiGraphics.fill(x, y + 5, x + 2, y + 7, color);
+        guiGraphics.fill(x, y + 10, x + 2, y + 12, color);
     }
 
     private void drawDot(GuiGraphics guiGraphics, int x, int y, int color) {
