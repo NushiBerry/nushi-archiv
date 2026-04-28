@@ -61,6 +61,10 @@ public class ArchivScreen extends Screen {
 
     private String selectedLibraryAssetName = null;
     private String libraryActionMessage = "No asset selected";
+
+    private String loadedAssetName = null;
+    private final List<String> recentLoadedAssetNames = new ArrayList<>();
+
     private EditBox browseSearchBox;
 
     private boolean assetDetailsOpen = false;
@@ -426,21 +430,31 @@ public class ArchivScreen extends Screen {
         }
 
         if ("My Assets".equals(selectedTopTab)) {
+            if ("Recent".equals(selectedMyAssetsSection)) {
+                List<ArchivAsset> recentAssets = new ArrayList<>();
+
+                for (String recentName : recentLoadedAssetNames) {
+                    for (ArchivAsset asset : savedAssets) {
+                        if (asset.getName().equals(recentName)) {
+                            recentAssets.add(asset);
+                            break;
+                        }
+                    }
+                }
+
+                return recentAssets;
+            }
+
             for (ArchivAsset asset : savedAssets) {
                 boolean include = switch (selectedMyAssetsSection) {
                     case "All Assets", "Imported" -> true;
                     case "Favorites" -> asset.isFavorite();
-                    case "Recent" -> true;
                     default -> false;
                 };
 
                 if (include) {
                     filteredAssets.add(asset);
                 }
-            }
-
-            if ("Recent".equals(selectedMyAssetsSection) && filteredAssets.size() > 4) {
-                return new ArrayList<>(filteredAssets.subList(0, 4));
             }
 
             return filteredAssets;
@@ -680,6 +694,23 @@ public class ArchivScreen extends Screen {
         libraryActionMessage = "Viewing details: " + asset.getName();
     }
 
+    private void loadAsset(ArchivAsset asset) {
+        // fecha o modal sem apagar a mensagem final de load
+        assetDetailsOpen = false;
+        detailsAssetName = null;
+
+        loadedAssetName = asset.getName();
+        selectedLibraryAssetName = asset.getName();
+        libraryActionMessage = "Loaded: " + asset.getName();
+
+        recentLoadedAssetNames.remove(asset.getName());
+        recentLoadedAssetNames.add(0, asset.getName());
+
+        if (recentLoadedAssetNames.size() > 12) {
+            recentLoadedAssetNames.remove(recentLoadedAssetNames.size() - 1);
+        }
+    }
+
     private void closeAssetDetails() {
         assetDetailsOpen = false;
         detailsAssetName = null;
@@ -788,7 +819,7 @@ public class ArchivScreen extends Screen {
     }
 
     private int getRecentAssetsCount() {
-        return Math.min(savedAssets.size(), 4);
+        return recentLoadedAssetNames.size();
     }
 
     private boolean myAssetsShowsImportedGrid() {
@@ -1250,7 +1281,7 @@ public class ArchivScreen extends Screen {
 
                     if (selected) {
                         if (isInside(mouseX, mouseY, rowLayout.loadX, rowLayout.loadY, rowLayout.loadW, rowLayout.loadH)) {
-                            setLibraryAction("Load pending", asset);
+                            loadAsset(asset);
                             return true;
                         }
 
@@ -1289,7 +1320,7 @@ public class ArchivScreen extends Screen {
 
                     if (selected) {
                         if (isInside(mouseX, mouseY, cardLayout.overlayX, cardLayout.loadY, cardLayout.overlayW, cardLayout.loadH)) {
-                            setLibraryAction("Load pending", asset);
+                            loadAsset(asset);
                             return true;
                         }
 
@@ -1332,7 +1363,7 @@ public class ArchivScreen extends Screen {
 
                 if (selected) {
                     if (isInside(mouseX, mouseY, cardLayout.overlayX, cardLayout.loadY, cardLayout.overlayW, cardLayout.loadH)) {
-                        setLibraryAction("Load pending", asset);
+                        loadAsset(asset);
                         return true;
                     }
 
