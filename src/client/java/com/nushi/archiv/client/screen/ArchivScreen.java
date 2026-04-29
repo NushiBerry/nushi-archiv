@@ -868,6 +868,10 @@ public class ArchivScreen extends Screen {
         return selectedLibraryAssetName != null && selectedLibraryAssetName.equals(asset.getName());
     }
 
+    private boolean isAssetLoaded(ArchivAsset asset) {
+        return loadedAssetName != null && loadedAssetName.equals(asset.getName());
+    }
+
     private void selectLibraryAsset(ArchivAsset asset) {
         selectedLibraryAssetName = asset.getName();
         libraryActionMessage = "Selected: " + asset.getName();
@@ -1504,6 +1508,7 @@ public class ArchivScreen extends Screen {
         if (asset == null) {
             return;
         }
+        boolean loaded = isAssetLoaded(asset);
 
         int panelW = 360;
         int panelH = 280;
@@ -1541,7 +1546,19 @@ public class ArchivScreen extends Screen {
         int infoY = previewY + previewH + 16;
 
         guiGraphics.drawString(this.font, asset.getName(), infoX, infoY, COLOR_TEXT);
-        guiGraphics.drawString(this.font, ".schem  •  " + asset.getVersion(), infoX, infoY + 16, COLOR_TEXT_DIM);
+
+        String detailsMeta = ".schem  •  " + asset.getVersion();
+        guiGraphics.drawString(this.font, detailsMeta, infoX, infoY + 16, COLOR_TEXT_DIM);
+
+        if (loaded) {
+            guiGraphics.drawString(
+                    this.font,
+                    "• Loaded",
+                    infoX + this.font.width(detailsMeta) + 8,
+                    infoY + 16,
+                    COLOR_SUCCESS
+            );
+        }
 
         int labelX = infoX;
         int valueX = infoX + 88;
@@ -2198,9 +2215,17 @@ public class ArchivScreen extends Screen {
     }
 
     private void drawAssetCard(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset, boolean selected) {
-        int border = selected ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
+        boolean loaded = isAssetLoaded(asset);
+
+        int border = selected
+                ? COLOR_BORDER_ACTIVE
+                : (loaded ? COLOR_SUCCESS : COLOR_BORDER);
+
         drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, border);
 
+        if (loaded) {
+            guiGraphics.fill(x + 1, y + 1, x + width - 1, y + 3, COLOR_SUCCESS);
+        }
         AssetCardLayout layout = buildAssetCardLayout(x, y, width, height);
 
         guiGraphics.fill(layout.previewX, layout.previewY, layout.previewX + layout.previewW, layout.previewY + layout.previewH, asset.getPreviewColor());
@@ -2226,7 +2251,19 @@ public class ArchivScreen extends Screen {
         int dotsY = y + height - 16;
 
         guiGraphics.drawString(this.font, asset.getName(), x + 12, infoY, COLOR_TEXT);
-        guiGraphics.drawString(this.font, asset.getVersion(), x + 12, versionY, COLOR_TEXT_DIM);
+
+        String versionText = asset.getVersion();
+        guiGraphics.drawString(this.font, versionText, x + 12, versionY, COLOR_TEXT_DIM);
+
+        if (loaded) {
+            guiGraphics.drawString(
+                    this.font,
+                    "• Loaded",
+                    x + 12 + this.font.width(versionText) + 8,
+                    versionY,
+                    COLOR_SUCCESS
+            );
+        }
 
         int chipW = getChipWidth(asset.getType());
         int chipX = x + width - 12 - chipW;
@@ -2246,8 +2283,17 @@ public class ArchivScreen extends Screen {
     }
 
     private void drawBrowseListRow(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset, boolean selected) {
-        int borderColor = selected ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
+        boolean loaded = isAssetLoaded(asset);
+
+        int borderColor = selected
+                ? COLOR_BORDER_ACTIVE
+                : (loaded ? COLOR_SUCCESS : COLOR_BORDER);
+
         drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, borderColor);
+
+        if (loaded) {
+            guiGraphics.fill(x + 1, y + 1, x + width - 1, y + 3, COLOR_SUCCESS);
+        }
 
         BrowseListRowLayout layout = buildBrowseListRowLayout(x, y, width, height);
 
@@ -2272,7 +2318,18 @@ public class ArchivScreen extends Screen {
 
         // nome + metadado
         guiGraphics.drawString(this.font, asset.getName(), layout.infoX, layout.titleY, COLOR_TEXT);
-        guiGraphics.drawString(this.font, ".schem  •  " + asset.getVersion(), layout.infoX, layout.versionY, COLOR_TEXT_DIM);
+        String metaText = ".schem  •  " + asset.getVersion();
+        guiGraphics.drawString(this.font, metaText, layout.infoX, layout.versionY, COLOR_TEXT_DIM);
+
+        if (loaded) {
+            guiGraphics.drawString(
+                    this.font,
+                    "• Loaded",
+                    layout.infoX + this.font.width(metaText) + 8,
+                    layout.versionY,
+                    COLOR_SUCCESS
+            );
+        }
 
         int variantsToShow = Math.min(asset.getVariantCount(), 4);
         for (int i = 0; i < variantsToShow; i++) {
