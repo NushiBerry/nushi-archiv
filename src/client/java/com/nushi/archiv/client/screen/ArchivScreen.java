@@ -70,6 +70,9 @@ public class ArchivScreen extends Screen {
     private boolean assetDetailsOpen = false;
     private String detailsAssetName = null;
 
+    private boolean listMenuOpen = false;
+    private String listMenuAssetName = null;
+
     private boolean mockStructureFileSelected = false;
     private final String mockStructureFileName = "stone_tower.schem";
     private final String mockStructureFileFormat = ".schem";
@@ -274,6 +277,14 @@ public class ArchivScreen extends Screen {
         int detailsY;
         int detailsW;
         int detailsH;
+
+        int menuDotsX;
+        int menuDotsY;
+
+        int menuX;
+        int menuY;
+        int menuW;
+        int menuH;
     }
 
     private static class AssetCardLayout {
@@ -608,6 +619,14 @@ public class ArchivScreen extends Screen {
         layout.chipH = 18;
         layout.chipY = y + 10;
 
+        layout.menuDotsX = x + width - 18;
+        layout.menuDotsY = y + (height / 2) - 6;
+
+        layout.menuW = 112;
+        layout.menuH = 22;
+        layout.menuX = x + width - layout.menuW - 28;
+        layout.menuY = y + 8;
+
         return layout;
     }
 
@@ -688,13 +707,75 @@ public class ArchivScreen extends Screen {
     }
 
     private void openAssetDetails(ArchivAsset asset) {
+        closeListMenu();
         assetDetailsOpen = true;
         detailsAssetName = asset.getName();
         selectedLibraryAssetName = asset.getName();
         libraryActionMessage = "Viewing details: " + asset.getName();
     }
 
+    private boolean isSavedAsset(ArchivAsset asset) {
+        for (ArchivAsset savedAsset : savedAssets) {
+            if (savedAsset.getName().equals(asset.getName())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void openListMenu(ArchivAsset asset) {
+        if (!isSavedAsset(asset)) {
+            return;
+        }
+
+        listMenuOpen = true;
+        listMenuAssetName = asset.getName();
+        selectedLibraryAssetName = asset.getName();
+    }
+
+    private void closeListMenu() {
+        listMenuOpen = false;
+        listMenuAssetName = null;
+    }
+
+    private boolean isListMenuOpenFor(ArchivAsset asset) {
+        return listMenuOpen
+                && listMenuAssetName != null
+                && listMenuAssetName.equals(asset.getName());
+    }
+
+    private void deleteAsset(ArchivAsset asset) {
+        if (!isSavedAsset(asset)) {
+            return;
+        }
+
+        String deletedName = asset.getName();
+
+        savedAssets.removeIf(savedAsset -> savedAsset.getName().equals(deletedName));
+        recentLoadedAssetNames.remove(deletedName);
+
+        if (deletedName.equals(loadedAssetName)) {
+            loadedAssetName = null;
+        }
+
+        if (deletedName.equals(detailsAssetName)) {
+            assetDetailsOpen = false;
+            detailsAssetName = null;
+        }
+
+        if (deletedName.equals(selectedLibraryAssetName)) {
+            selectedLibraryAssetName = null;
+        }
+
+        closeListMenu();
+        syncLibrarySelectionWithVisibleAssets();
+        libraryActionMessage = "Deleted: " + deletedName;
+    }
+
     private void loadAsset(ArchivAsset asset) {
+        closeListMenu();
+
         // fecha o modal sem apagar a mensagem final de load
         assetDetailsOpen = false;
         detailsAssetName = null;
@@ -1275,7 +1356,25 @@ public class ArchivScreen extends Screen {
 
                     BrowseListRowLayout rowLayout = buildBrowseListRowLayout(layout.listX, rowY, layout.listW, layout.rowH);
 
+                    boolean savedAsset = isSavedAsset(asset);
+
+                    if (savedAsset && isListMenuOpenFor(asset)
+                            && isInside(mouseX, mouseY, rowLayout.menuX, rowLayout.menuY, rowLayout.menuW, rowLayout.menuH)) {
+                        deleteAsset(asset);
+                        return true;
+                    }
+
+                    if (savedAsset && isInside(mouseX, mouseY, rowLayout.menuDotsX - 4, rowLayout.menuDotsY - 4, 14, 18)) {
+                        if (isListMenuOpenFor(asset)) {
+                            closeListMenu();
+                        } else {
+                            openListMenu(asset);
+                        }
+                        return true;
+                    }
+
                     if (isInside(mouseX, mouseY, rowLayout.favoriteX, rowLayout.favoriteY, rowLayout.favoriteBoxSize, rowLayout.favoriteBoxSize)) {
+                        closeListMenu();
                         toggleAssetFavorite(asset);
                         syncLibrarySelectionWithVisibleAssets();
                         return true;
@@ -1296,9 +1395,13 @@ public class ArchivScreen extends Screen {
                     }
 
                     if (isInside(mouseX, mouseY, layout.listX, rowY, layout.listW, layout.rowH)) {
+                        closeListMenu();
                         selectLibraryAsset(asset);
                         return true;
                     }
+                }
+                if (listMenuOpen) {
+                    closeListMenu();
                 }
             } else {
                 CardGridLayout layout = buildBrowseGridLayout(contentX, contentY, contentW, contentH);
@@ -2391,10 +2494,15 @@ public class ArchivScreen extends Screen {
             );
         }
 
-        // 3 pontinhos no canto direito
-        int menuDotsX = x + width - 18;
-        int menuDotsY = y + (height / 2) - 6;
-        drawVerticalDots(guiGraphics, menuDotsX, menuDotsY, COLOR_TEXT_DIM);
+        // 3 pontinhos no canto direito, só para assets salvos
+        if (isSavedAsset(asset)) {
+            drawVerticalDots(guiGraphics, layout.menuDotsX, layout.menuDotsY, COLOR_TEXT_DIM);
+
+            if (isListMenuOpenFor(asset)) {
+                drawPanel(guiGraphics, layout.menuX, layout.menuY, layout.menuW, layout.menuH, 0xFF2A1820, 0xFFB54B63);
+                guiGraphics.drawString(this.font, "Delete Asset", layout.menuX + 10, layout.menuY + 7, 0xFFFFD7DE);
+            }
+        }
     }
 
     private int getChipWidth(String label) {
