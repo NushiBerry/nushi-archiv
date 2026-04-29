@@ -70,6 +70,9 @@ public class ArchivScreen extends Screen {
     private boolean assetDetailsOpen = false;
     private String detailsAssetName = null;
 
+    private boolean deleteConfirmOpen = false;
+    private String deleteConfirmAssetName = null;
+
     private boolean listMenuOpen = false;
     private String listMenuAssetName = null;
 
@@ -306,6 +309,14 @@ public class ArchivScreen extends Screen {
 
         int detailsY;
         int detailsH;
+
+        int menuDotsX;
+        int menuDotsY;
+
+        int menuX;
+        int menuY;
+        int menuW;
+        int menuH;
     }
 
     public ArchivScreen(Component title, Screen parent) {
@@ -703,6 +714,14 @@ public class ArchivScreen extends Screen {
         layout.detailsY = overlayStartY + loadH + overlayGap;
         layout.detailsH = detailsH;
 
+        layout.menuDotsX = x + 8;
+        layout.menuDotsY = y + 8;
+
+        layout.menuW = 112;
+        layout.menuH = 22;
+        layout.menuX = x + 8;
+        layout.menuY = y + 24;
+
         return layout;
     }
 
@@ -712,6 +731,76 @@ public class ArchivScreen extends Screen {
         detailsAssetName = asset.getName();
         selectedLibraryAssetName = asset.getName();
         libraryActionMessage = "Viewing details: " + asset.getName();
+    }
+
+    private void drawDeleteConfirmModal(GuiGraphics guiGraphics) {
+        if (!deleteConfirmOpen) {
+            return;
+        }
+
+        ArchivAsset asset = getDeleteConfirmAsset();
+        if (asset == null) {
+            return;
+        }
+
+        guiGraphics.fill(0, 0, this.width, this.height, 0x88000000);
+
+        int panelW = 340;
+        int panelH = 150;
+        int panelX = (this.width - panelW) / 2;
+        int panelY = (this.height - panelH) / 2;
+
+        drawPanel(guiGraphics, panelX, panelY, panelW, panelH, COLOR_PANEL_ALT, 0xFFB54B63);
+
+        guiGraphics.drawString(this.font, "Delete Asset", panelX + 14, panelY + 14, 0xFFFFD7DE);
+
+        String line1 = "Are you sure you want to delete:";
+        String line2 = asset.getName() + "?";
+
+        guiGraphics.drawString(this.font, line1, panelX + 14, panelY + 42, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, line2, panelX + 14, panelY + 58, COLOR_TEXT);
+
+        guiGraphics.drawString(this.font, "This action cannot be undone.", panelX + 14, panelY + 82, COLOR_TEXT_DIM);
+
+        int buttonY = panelY + panelH - 36;
+        int cancelW = 90;
+        int deleteW = 96;
+        int gap = 10;
+
+        int deleteX = panelX + panelW - 14 - deleteW;
+        int cancelX = deleteX - gap - cancelW;
+
+        drawPanel(guiGraphics, cancelX, buttonY, cancelW, 24, COLOR_PANEL, COLOR_BORDER);
+        drawPanel(guiGraphics, deleteX, buttonY, deleteW, 24, 0xFF7B2438, 0xFFB54B63);
+
+        guiGraphics.drawString(this.font, "Cancel", cancelX + 23, buttonY + 8, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Delete", deleteX + 25, buttonY + 8, 0xFFFFFFFF);
+    }
+
+    private void openDeleteConfirm(ArchivAsset asset) {
+        closeListMenu();
+        deleteConfirmOpen = true;
+        deleteConfirmAssetName = asset.getName();
+        selectedLibraryAssetName = asset.getName();
+    }
+
+    private void closeDeleteConfirm() {
+        deleteConfirmOpen = false;
+        deleteConfirmAssetName = null;
+    }
+
+    private ArchivAsset getDeleteConfirmAsset() {
+        if (deleteConfirmAssetName == null) {
+            return null;
+        }
+
+        for (ArchivAsset asset : savedAssets) {
+            if (asset.getName().equals(deleteConfirmAssetName)) {
+                return asset;
+            }
+        }
+
+        return null;
     }
 
     private boolean isSavedAsset(ArchivAsset asset) {
@@ -1115,6 +1204,37 @@ public class ArchivScreen extends Screen {
             }
         }
 
+        if (deleteConfirmOpen) {
+            int panelW = 340;
+            int panelH = 150;
+            int panelX = (this.width - panelW) / 2;
+            int panelY = (this.height - panelH) / 2;
+
+            int buttonY = panelY + panelH - 36;
+            int cancelW = 90;
+            int deleteW = 96;
+            int gap = 10;
+
+            int deleteX = panelX + panelW - 14 - deleteW;
+            int cancelX = deleteX - gap - cancelW;
+
+            if (isInside(mouseX, mouseY, cancelX, buttonY, cancelW, 24)) {
+                closeDeleteConfirm();
+                return true;
+            }
+
+            if (isInside(mouseX, mouseY, deleteX, buttonY, deleteW, 24)) {
+                ArchivAsset asset = getDeleteConfirmAsset();
+                if (asset != null) {
+                    deleteAsset(asset);
+                }
+                closeDeleteConfirm();
+                return true;
+            }
+
+            return true;
+        }
+
         if (browseSearchBox != null && !isInside(mouseX, mouseY, browseSearchBox.getX(), browseSearchBox.getY(), browseSearchBox.getWidth(), browseSearchBox.getHeight())) {
             browseSearchBox.setFocused(false);
             this.setFocused(null);
@@ -1360,7 +1480,7 @@ public class ArchivScreen extends Screen {
 
                     if (savedAsset && isListMenuOpenFor(asset)
                             && isInside(mouseX, mouseY, rowLayout.menuX, rowLayout.menuY, rowLayout.menuW, rowLayout.menuH)) {
-                        deleteAsset(asset);
+                        openDeleteConfirm(asset);
                         return true;
                     }
 
@@ -1417,7 +1537,25 @@ public class ArchivScreen extends Screen {
 
                     AssetCardLayout cardLayout = buildAssetCardLayout(cardX, cardY, layout.cardW, layout.cardH);
 
+                    boolean savedAsset = isSavedAsset(asset);
+
+                    if (savedAsset && isListMenuOpenFor(asset)
+                            && isInside(mouseX, mouseY, cardLayout.menuX, cardLayout.menuY, cardLayout.menuW, cardLayout.menuH)) {
+                        openDeleteConfirm(asset);
+                        return true;
+                    }
+
+                    if (savedAsset && isInside(mouseX, mouseY, cardLayout.menuDotsX - 4, cardLayout.menuDotsY - 4, 14, 18)) {
+                        if (isListMenuOpenFor(asset)) {
+                            closeListMenu();
+                        } else {
+                            openListMenu(asset);
+                        }
+                        return true;
+                    }
+
                     if (isInside(mouseX, mouseY, cardLayout.favoriteX, cardLayout.favoriteY, cardLayout.favoriteW, cardLayout.favoriteH)) {
+                        closeListMenu();
                         toggleAssetFavorite(asset);
                         syncLibrarySelectionWithVisibleAssets();
                         return true;
@@ -1438,9 +1576,13 @@ public class ArchivScreen extends Screen {
                     }
 
                     if (isInside(mouseX, mouseY, cardX, cardY, layout.cardW, layout.cardH)) {
+                        closeListMenu();
                         selectLibraryAsset(asset);
                         return true;
                     }
+                }
+                if (listMenuOpen) {
+                    closeListMenu();
                 }
             }
         }
@@ -1460,7 +1602,25 @@ public class ArchivScreen extends Screen {
 
                 AssetCardLayout cardLayout = buildAssetCardLayout(cardX, cardY, layout.cardW, layout.cardH);
 
+                boolean savedAsset = isSavedAsset(asset);
+
+                if (savedAsset && isListMenuOpenFor(asset)
+                        && isInside(mouseX, mouseY, cardLayout.menuX, cardLayout.menuY, cardLayout.menuW, cardLayout.menuH)) {
+                    openDeleteConfirm(asset);
+                    return true;
+                }
+
+                if (savedAsset && isInside(mouseX, mouseY, cardLayout.menuDotsX - 4, cardLayout.menuDotsY - 4, 14, 18)) {
+                    if (isListMenuOpenFor(asset)) {
+                        closeListMenu();
+                    } else {
+                        openListMenu(asset);
+                    }
+                    return true;
+                }
+
                 if (isInside(mouseX, mouseY, cardLayout.favoriteX, cardLayout.favoriteY, cardLayout.favoriteW, cardLayout.favoriteH)) {
+                    closeListMenu();
                     toggleAssetFavorite(asset);
                     syncLibrarySelectionWithVisibleAssets();
                     return true;
@@ -1481,9 +1641,13 @@ public class ArchivScreen extends Screen {
                 }
 
                 if (isInside(mouseX, mouseY, cardX, cardY, layout.cardW, layout.cardH)) {
+                    closeListMenu();
                     selectLibraryAsset(asset);
                     return true;
                 }
+            }
+            if (listMenuOpen) {
+                closeListMenu();
             }
         }
 
@@ -1579,6 +1743,7 @@ public class ArchivScreen extends Screen {
             drawTabPlaceholder(guiGraphics, contentX, contentY, contentW, contentH, selectedTopTab);
         }
         drawAssetDetailsPanel(guiGraphics, rootX, rootY, rootW, bodyY);
+        drawDeleteConfirmModal(guiGraphics);
 
         drawPanel(guiGraphics, rootX, rootY + rootH - footerH, rootW, footerH, COLOR_PANEL, COLOR_BORDER);
 
@@ -1948,6 +2113,9 @@ public class ArchivScreen extends Screen {
                     int cardY = layout.cardsAreaY + row * (layout.cardH + layout.rowGap);
 
                     drawAssetCard(guiGraphics, cardX, cardY, layout.cardW, layout.cardH, asset, isLibraryAssetSelected(asset));
+                }
+                if (listMenuOpen) {
+                    closeListMenu();
                 }
             }
         }
@@ -2382,6 +2550,15 @@ public class ArchivScreen extends Screen {
         if (asset.getVariantCount() > 4) {
             int remaining = asset.getVariantCount() - 4;
             guiGraphics.drawString(this.font, "+" + remaining, x + 12 + (visibleDots * 12), dotsY - 1, COLOR_TEXT_DIM);
+        }
+
+        if (isSavedAsset(asset)) {
+            drawVerticalDots(guiGraphics, layout.menuDotsX, layout.menuDotsY, COLOR_TEXT_DIM);
+
+            if (isListMenuOpenFor(asset)) {
+                drawPanel(guiGraphics, layout.menuX, layout.menuY, layout.menuW, layout.menuH, 0xFF2A1820, 0xFFB54B63);
+                guiGraphics.drawString(this.font, "Delete Asset", layout.menuX + 10, layout.menuY + 7, 0xFFFFD7DE);
+            }
         }
     }
 
