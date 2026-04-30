@@ -2065,6 +2065,80 @@ public class ArchivScreen extends Screen {
     }
 
     @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        ScreenChromeLayout chrome = buildChromeLayout();
+
+        if (browseScrollbarDragging && "Browse".equals(selectedTopTab)) {
+            ScrollbarLayout scrollbar = buildBrowseScrollbarLayout(
+                    chrome.contentX,
+                    chrome.contentY,
+                    chrome.contentW,
+                    chrome.contentH
+            );
+
+            int desiredThumbY = (int) event.y() - browseScrollbarDragOffset;
+            int clampedThumbY = clampInt(
+                    desiredThumbY,
+                    scrollbar.trackY,
+                    scrollbar.trackY + scrollbar.trackH - scrollbar.thumbH
+            );
+
+            int movableTrack = scrollbar.trackH - scrollbar.thumbH;
+            if (movableTrack > 0) {
+                browseScrollOffset = ((clampedThumbY - scrollbar.trackY) * browseMaxScroll) / movableTrack;
+            } else {
+                browseScrollOffset = 0;
+            }
+
+            return true;
+        }
+
+        if (myAssetsScrollbarDragging && "My Assets".equals(selectedTopTab)) {
+            ScrollbarLayout scrollbar = buildMyAssetsScrollbarLayout(
+                    chrome.contentX,
+                    chrome.contentY,
+                    chrome.contentW,
+                    chrome.contentH
+            );
+
+            int desiredThumbY = (int) event.y() - myAssetsScrollbarDragOffset;
+            int clampedThumbY = clampInt(
+                    desiredThumbY,
+                    scrollbar.trackY,
+                    scrollbar.trackY + scrollbar.trackH - scrollbar.thumbH
+            );
+
+            int movableTrack = scrollbar.trackH - scrollbar.thumbH;
+            if (movableTrack > 0) {
+                myAssetsScrollOffset = ((clampedThumbY - scrollbar.trackY) * myAssetsMaxScroll) / movableTrack;
+            } else {
+                myAssetsScrollOffset = 0;
+            }
+
+            return true;
+        }
+
+        return super.mouseDragged(event, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        if (event.button() == 0) {
+            if (browseScrollbarDragging) {
+                browseScrollbarDragging = false;
+                return true;
+            }
+
+            if (myAssetsScrollbarDragging) {
+                myAssetsScrollbarDragging = false;
+                return true;
+            }
+        }
+
+        return super.mouseReleased(event);
+    }
+
+    @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float delta) {
         guiGraphics.fill(0, 0, this.width, this.height, COLOR_BACKGROUND);
 
