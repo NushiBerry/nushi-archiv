@@ -136,7 +136,25 @@ public class ArchivScreen extends Screen {
             )
     };
 
+
+
     private int currentImportPresetIndex = 0;
+
+    private int browseScrollOffset = 0;
+    private int browseMaxScroll = 0;
+    private boolean browseScrollbarDragging = false;
+    private int browseScrollbarDragOffset = 0;
+
+    private int myAssetsScrollOffset = 0;
+    private int myAssetsMaxScroll = 0;
+    private boolean myAssetsScrollbarDragging = false;
+    private int myAssetsScrollbarDragOffset = 0;
+
+    private final CollectionEntry[] collectionEntries = new CollectionEntry[] {
+            new CollectionEntry("Medieval Village Kit", 43, 0xFF6C89B8, 0xFF6D4BC8),
+            new CollectionEntry("Nature Props", 28, 0xFF4E7C57, 0xFF3D9B63),
+            new CollectionEntry("Cyberpunk Signs", 21, 0xFF3A4F84, 0xFFDA8A2D)
+    };
 
     private static class BrowseToolbarLayout {
         int toolbarY;
@@ -224,6 +242,20 @@ public class ArchivScreen extends Screen {
             this.tags = tags;
             this.fileInfo = fileInfo;
             this.chipColor = chipColor;
+        }
+    }
+
+    private static class CollectionEntry {
+        final String name;
+        final int assetCount;
+        final int previewColor;
+        final int accentColor;
+
+        CollectionEntry(String name, int assetCount, int previewColor, int accentColor) {
+            this.name = name;
+            this.assetCount = assetCount;
+            this.previewColor = previewColor;
+            this.accentColor = accentColor;
         }
     }
 
@@ -319,6 +351,86 @@ public class ArchivScreen extends Screen {
         int menuH;
     }
 
+    private static class AssetDetailsModalLayout {
+        int panelX;
+        int panelY;
+        int panelW;
+        int panelH;
+
+        int closeX;
+        int closeY;
+        int closeSize;
+
+        int previewX;
+        int previewY;
+        int previewW;
+        int previewH;
+
+        int chipX;
+        int chipY;
+
+        int closeButtonX;
+        int closeButtonY;
+        int closeButtonW;
+        int closeButtonH;
+
+        int loadButtonX;
+        int loadButtonY;
+        int loadButtonW;
+        int loadButtonH;
+    }
+
+
+    private static class ScreenChromeLayout {
+        int margin;
+        int rootX;
+        int rootY;
+        int rootW;
+        int rootH;
+        int headerH;
+        int footerH;
+        int sidebarW;
+        int bodyY;
+        int bodyH;
+        int contentX;
+        int contentY;
+        int contentW;
+        int contentH;
+        int tabY;
+        int tabX;
+        int tabW;
+        int tabH;
+        int tabGap;
+        int myAssetsX;
+        int myAssetsW;
+        int importX;
+        int settingsX;
+        int sidebarItemX;
+        int sidebarItemY;
+        int sidebarItemW;
+        int sidebarItemH;
+        int sidebarItemGap;
+    }
+
+    private static class ViewportLayout {
+        int x;
+        int y;
+        int w;
+        int h;
+    }
+
+    private static class ScrollbarLayout {
+        int trackX;
+        int trackY;
+        int trackW;
+        int trackH;
+
+        int thumbX;
+        int thumbY;
+        int thumbW;
+        int thumbH;
+    }
+
     public ArchivScreen(Component title, Screen parent) {
         super(title);
         this.parent = parent;
@@ -327,6 +439,7 @@ public class ArchivScreen extends Screen {
 
     @Override
     protected void init() {
+        ScreenChromeLayout chrome = buildChromeLayout();
         int closeButtonSize = 24;
         int closeX = this.width - 20 - closeButtonSize;
         int closeY = 20;
@@ -337,20 +450,7 @@ public class ArchivScreen extends Screen {
                         .build()
         );
 
-        int margin = 20;
-        int rootX = margin;
-        int rootY = margin;
-        int rootW = this.width - (margin * 2);
-
-        int headerH = 58;
-        int sidebarW = 180;
-        int bodyY = rootY + headerH;
-
-        int contentX = rootX + sidebarW;
-        int contentY = bodyY;
-        int contentW = rootW - sidebarW;
-
-        BrowseToolbarLayout toolbar = buildBrowseToolbarLayout(contentX, contentY, contentW);
+        BrowseToolbarLayout toolbar = buildBrowseToolbarLayout(chrome.contentX, chrome.contentY, chrome.contentW);
 
         browseSearchBox = new EditBox(
                 this.font,
@@ -366,7 +466,10 @@ public class ArchivScreen extends Screen {
         browseSearchBox.setTextColor(COLOR_TEXT);
         browseSearchBox.setTextColorUneditable(COLOR_TEXT_DIM);
         browseSearchBox.setHint(Component.literal("Search assets..."));
-        browseSearchBox.setResponder(value -> syncLibrarySelectionWithVisibleAssets());
+        browseSearchBox.setResponder(value -> {
+            resetBrowseScroll();
+            syncLibrarySelectionWithVisibleAssets();
+        });
 
         this.addRenderableWidget(browseSearchBox);
     }
@@ -419,6 +522,74 @@ public class ArchivScreen extends Screen {
         layout.toolbarY = toolbarY;
 
         return layout;
+    }
+
+    private ScreenChromeLayout buildChromeLayout() {
+        ScreenChromeLayout layout = new ScreenChromeLayout();
+
+        layout.margin = 20;
+        layout.rootX = layout.margin;
+        layout.rootY = layout.margin;
+        layout.rootW = this.width - (layout.margin * 2);
+        layout.rootH = this.height - (layout.margin * 2);
+
+        layout.headerH = 58;
+        layout.footerH = 24;
+        layout.sidebarW = 180;
+
+        layout.bodyY = layout.rootY + layout.headerH;
+        layout.bodyH = layout.rootH - layout.headerH - layout.footerH;
+
+        layout.contentX = layout.rootX + layout.sidebarW;
+        layout.contentY = layout.bodyY;
+        layout.contentW = layout.rootW - layout.sidebarW;
+        layout.contentH = layout.bodyH;
+
+        layout.tabY = layout.rootY + 10;
+        layout.tabX = layout.rootX + 150;
+        layout.tabW = 110;
+        layout.tabH = 38;
+        layout.tabGap = 8;
+
+        layout.myAssetsX = layout.tabX + (layout.tabW + layout.tabGap);
+        layout.myAssetsW = layout.tabW + 10;
+        layout.importX = layout.tabX + (layout.tabW + layout.tabGap) * 2 + 10;
+        layout.settingsX = layout.tabX + (layout.tabW + layout.tabGap) * 3 + 10;
+
+        layout.sidebarItemX = layout.rootX + 12;
+        layout.sidebarItemY = layout.bodyY + 34;
+        layout.sidebarItemW = layout.sidebarW - 24;
+        layout.sidebarItemH = 34;
+        layout.sidebarItemGap = 40;
+
+        return layout;
+    }
+
+    private ViewportLayout buildBrowseViewportLayout(ScreenChromeLayout chrome) {
+        ViewportLayout layout = new ViewportLayout();
+        int innerPadding = 18;
+        int toolbarY = chrome.contentY + 14;
+
+        layout.x = chrome.contentX + innerPadding;
+        layout.y = toolbarY + 78;
+        layout.w = chrome.contentW - (innerPadding * 2) - 16;
+        layout.h = (chrome.contentY + chrome.contentH - 16) - layout.y;
+
+        return layout;
+    }
+
+    private void resetBrowseScroll() {
+        browseScrollOffset = 0;
+        browseScrollbarDragging = false;
+    }
+
+    private void resetMyAssetsScroll() {
+        myAssetsScrollOffset = 0;
+        myAssetsScrollbarDragging = false;
+    }
+
+    private int clampInt(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private List<ArchivAsset> getVisibleAssets() {
@@ -549,41 +720,51 @@ public class ArchivScreen extends Screen {
         return layout;
     }
 
-    private CardGridLayout buildBrowseGridLayout(int contentX, int contentY, int contentW, int contentH) {
+    private CardGridLayout buildBrowseGridLayout(int contentX, int contentY, int contentW, int assetCount, int scrollOffset) {
         CardGridLayout layout = new CardGridLayout();
 
         int innerPadding = 18;
+        int scrollbarReserve = 16;
         int toolbarY = contentY + 14;
 
         layout.cardsAreaX = contentX + innerPadding;
-        layout.cardsAreaY = toolbarY + 78;
-        layout.cardsAreaW = contentW - (innerPadding * 2);
-        layout.cardsAreaH = (contentY + contentH - 16) - layout.cardsAreaY;
+        layout.cardsAreaY = toolbarY + 78 - scrollOffset;
+        layout.cardsAreaW = contentW - (innerPadding * 2) - scrollbarReserve;
 
         layout.cardsGap = 14;
         layout.rowGap = 16;
         layout.columns = 3;
-        layout.rows = 2;
+        layout.rows = Math.max(1, (Math.max(assetCount, 1) + layout.columns - 1) / layout.columns);
 
         layout.cardW = (layout.cardsAreaW - (layout.cardsGap * (layout.columns - 1))) / layout.columns;
-        layout.cardH = (layout.cardsAreaH - (layout.rowGap * (layout.rows - 1))) / layout.rows;
+        layout.cardH = 150;
+        layout.cardsAreaH = (layout.cardH * layout.rows) + (layout.rowGap * (layout.rows - 1));
 
         return layout;
     }
 
-    private BrowseListLayout buildBrowseListLayout(int contentX, int contentY, int contentW, int contentH) {
+    private BrowseListLayout buildBrowseListLayout(int contentX, int contentY, int contentW, int scrollOffset) {
         BrowseListLayout layout = new BrowseListLayout();
 
         int innerPadding = 18;
+        int scrollbarReserve = 16;
         int toolbarY = contentY + 14;
 
         layout.listX = contentX + innerPadding;
-        layout.listY = toolbarY + 78;
-        layout.listW = contentW - (innerPadding * 2);
+        layout.listY = toolbarY + 78 - scrollOffset;
+        layout.listW = contentW - (innerPadding * 2) - scrollbarReserve;
         layout.rowH = 68;
         layout.rowGap = 8;
 
         return layout;
+    }
+
+    private int getBrowseListContentHeight(int assetCount, BrowseListLayout layout) {
+        if (assetCount <= 0) {
+            return 160;
+        }
+
+        return (assetCount * layout.rowH) + ((assetCount - 1) * layout.rowGap);
     }
 
     private BrowseListRowLayout buildBrowseListRowLayout(int x, int y, int width, int height) {
@@ -647,32 +828,85 @@ public class ArchivScreen extends Screen {
         return Math.min(assetCount, maxRows);
     }
 
-    private CardGridLayout buildMyAssetsImportedGridLayout(int contentX, int contentY, int contentW, int contentH) {
+    private CardGridLayout buildMyAssetsImportedGridLayout(int contentX, int contentW, int importedTitleY, int assetCount) {
         CardGridLayout layout = new CardGridLayout();
 
         int innerPadding = 18;
-        int titleX = contentX + innerPadding;
-        int titleY = contentY + 16;
 
-        int statsY = titleY + 40;
-        int statH = 68;
-        int quickY = statsY + statH + 18;
-        int quickButtonY = quickY + 14;
-        int quickButtonH = 30;
-        int importedTitleY = quickButtonY + quickButtonH + 20;
-
-        layout.cardsAreaX = titleX;
+        layout.cardsAreaX = contentX + innerPadding;
         layout.cardsAreaY = importedTitleY + 18;
         layout.cardsAreaW = contentW - (innerPadding * 2);
-        layout.cardsAreaH = (contentY + contentH - 16) - layout.cardsAreaY;
 
         layout.cardsGap = 14;
         layout.rowGap = 16;
         layout.columns = 3;
-        layout.rows = 1;
+        layout.rows = Math.max(1, (Math.max(assetCount, 1) + layout.columns - 1) / layout.columns);
 
         layout.cardW = (layout.cardsAreaW - (layout.cardsGap * (layout.columns - 1))) / layout.columns;
         layout.cardH = 150;
+        layout.cardsAreaH = (layout.cardH * layout.rows) + (layout.rowGap * (layout.rows - 1));
+
+        return layout;
+    }
+
+    private ScrollbarLayout buildMyAssetsScrollbarLayout(int contentX, int contentY, int contentW, int contentH) {
+        ScrollbarLayout layout = new ScrollbarLayout();
+
+        layout.trackW = 8;
+        layout.trackX = contentX + contentW - 12;
+        layout.trackY = contentY + 10;
+        layout.trackH = contentH - 20;
+
+        layout.thumbW = 8;
+
+        if (myAssetsMaxScroll <= 0) {
+            layout.thumbH = layout.trackH;
+            layout.thumbX = layout.trackX;
+            layout.thumbY = layout.trackY;
+            return layout;
+        }
+
+        int viewportH = contentH - 2;
+        int contentTotalH = viewportH + myAssetsMaxScroll;
+
+        layout.thumbH = Math.max(24, (layout.trackH * viewportH) / Math.max(contentTotalH, 1));
+
+        int movableTrack = layout.trackH - layout.thumbH;
+        layout.thumbY = layout.trackY + (myAssetsScrollOffset * movableTrack) / Math.max(myAssetsMaxScroll, 1);
+        layout.thumbX = layout.trackX;
+
+        return layout;
+    }
+
+    private ScrollbarLayout buildBrowseScrollbarLayout(int contentX, int contentY, int contentW, int contentH) {
+        ScrollbarLayout layout = new ScrollbarLayout();
+
+        int toolbarY = contentY + 14;
+        int viewportY = toolbarY + 78;
+        int viewportBottom = contentY + contentH - 16;
+
+        layout.trackW = 8;
+        layout.trackX = contentX + contentW - 12;
+        layout.trackY = viewportY + 2;
+        layout.trackH = viewportBottom - viewportY - 4;
+
+        layout.thumbW = 8;
+
+        if (browseMaxScroll <= 0) {
+            layout.thumbH = layout.trackH;
+            layout.thumbX = layout.trackX;
+            layout.thumbY = layout.trackY;
+            return layout;
+        }
+
+        int viewportH = viewportBottom - viewportY;
+        int contentTotalH = viewportH + browseMaxScroll;
+
+        layout.thumbH = Math.max(24, (layout.trackH * viewportH) / Math.max(contentTotalH, 1));
+
+        int movableTrack = layout.trackH - layout.thumbH;
+        layout.thumbY = layout.trackY + (browseScrollOffset * movableTrack) / Math.max(browseMaxScroll, 1);
+        layout.thumbX = layout.trackX;
 
         return layout;
     }
@@ -723,6 +957,82 @@ public class ArchivScreen extends Screen {
         layout.menuY = y + 24;
 
         return layout;
+    }
+
+    private AssetDetailsModalLayout buildAssetDetailsModalLayout(ArchivAsset asset) {
+        AssetDetailsModalLayout layout = new AssetDetailsModalLayout();
+
+        layout.panelW = 420;
+        layout.panelH = 312;
+        layout.panelX = (this.width - layout.panelW) / 2;
+        layout.panelY = (this.height - layout.panelH) / 2;
+
+        layout.closeSize = 20;
+        layout.closeX = layout.panelX + layout.panelW - layout.closeSize - 12;
+        layout.closeY = layout.panelY + 12;
+
+        layout.previewX = layout.panelX + 16;
+        layout.previewY = layout.panelY + 44;
+        layout.previewW = layout.panelW - 32;
+        layout.previewH = 96;
+
+        int chipW = getChipWidth(asset.getType());
+        layout.chipX = layout.panelX + layout.panelW - chipW - 48;
+        layout.chipY = layout.panelY + 14;
+
+        layout.closeButtonW = 90;
+        layout.closeButtonH = 24;
+        layout.loadButtonW = 84;
+        layout.loadButtonH = 24;
+
+        layout.closeButtonY = layout.panelY + layout.panelH - 34;
+        layout.loadButtonY = layout.closeButtonY;
+        layout.closeButtonX = layout.panelX + layout.panelW - 16 - layout.closeButtonW;
+        layout.loadButtonX = layout.closeButtonX - 10 - layout.loadButtonW;
+
+        return layout;
+    }
+
+    private int getMyAssetsImportedTitleY(int contentY) {
+        int titleY = contentY + 16;
+        int statsY = titleY + 40;
+        int statH = 68;
+        int quickY = statsY + statH + 18;
+        int quickButtonY = quickY + 14;
+        int quickButtonH = 30;
+
+        int currentY = quickButtonY + quickButtonH + 20;
+
+        if ("All Assets".equals(selectedMyAssetsSection)) {
+            int collectionCardH = 88;
+            currentY += 18 + collectionCardH + 20;
+
+            if (!getRecentAssets(4).isEmpty()) {
+                int recentCardH = 62;
+                currentY += 18 + recentCardH + 20;
+            }
+        }
+
+        return currentY;
+    }
+
+    private List<ArchivAsset> getRecentAssets(int limit) {
+        List<ArchivAsset> recentAssets = new ArrayList<>();
+
+        for (String recentName : recentLoadedAssetNames) {
+            for (ArchivAsset asset : savedAssets) {
+                if (asset.getName().equals(recentName)) {
+                    recentAssets.add(asset);
+                    break;
+                }
+            }
+
+            if (recentAssets.size() >= limit) {
+                break;
+            }
+        }
+
+        return recentAssets;
     }
 
     private void openAssetDetails(ArchivAsset asset) {
@@ -1148,60 +1458,32 @@ public class ArchivScreen extends Screen {
             return super.mouseClicked(event, doubleClick);
         }
 
-        int margin = 20;
-
-        int rootX = margin;
-        int rootY = margin;
-        int rootW = this.width - (margin * 2);
-        int rootH = this.height - (margin * 2);
-
-        int headerH = 58;
-        int footerH = 24;
-        int sidebarW = 180;
-
-        int tabY = rootY + 10;
-        int tabX = rootX + 150;
-        int tabW = 110;
-        int tabH = 38;
-        int tabGap = 8;
-
-        int myAssetsX = tabX + (tabW + tabGap);
-        int myAssetsW = tabW + 10;
-
-        int importX = tabX + (tabW + tabGap) * 2 + 10;
-        int settingsX = tabX + (tabW + tabGap) * 3 + 10;
-
-        int bodyY = rootY + headerH;
-        int bodyH = rootH - headerH - footerH;
-
-        int contentX = rootX + sidebarW;
-        int contentY = bodyY;
-        int contentW = rootW - sidebarW;
-        int contentH = bodyH;
-
-        int itemX = rootX + 12;
-        int itemY = bodyY + 34;
-        int itemW = sidebarW - 24;
-        int itemH = 34;
-        int itemGap = 40;
-
+        ScreenChromeLayout chrome = buildChromeLayout();
         double mouseX = event.x();
         double mouseY = event.y();
 
         if (assetDetailsOpen) {
-            int panelW = 360;
-            int panelH = 280;
-            int panelX = (this.width - panelW) / 2;
-            int panelY = (this.height - panelH) / 2;
+            ArchivAsset asset = getDetailsAsset();
+            if (asset != null) {
+                AssetDetailsModalLayout modal = buildAssetDetailsModalLayout(asset);
 
-            int closeSize = 20;
-            int closeX = panelX + panelW - closeSize - 10;
-            int closeY = panelY + 10;
+                if (isInside(mouseX, mouseY, modal.closeX, modal.closeY, modal.closeSize, modal.closeSize)) {
+                    closeAssetDetails();
+                    return true;
+                }
 
-            if (isInside(mouseX, mouseY, closeX, closeY, closeSize, closeSize)) {
-                closeAssetDetails();
-                return true;
+                if (isInside(mouseX, mouseY, modal.closeButtonX, modal.closeButtonY, modal.closeButtonW, modal.closeButtonH)) {
+                    closeAssetDetails();
+                    return true;
+                }
+
+                if (isInside(mouseX, mouseY, modal.loadButtonX, modal.loadButtonY, modal.loadButtonW, modal.loadButtonH)) {
+                    loadAsset(asset);
+                    return true;
+                }
             }
+
+            return true;
         }
 
         if (deleteConfirmOpen) {
@@ -1240,25 +1522,20 @@ public class ArchivScreen extends Screen {
             this.setFocused(null);
         }
 
-        boolean insideBrowseTab = mouseX >= tabX && mouseX <= tabX + tabW
-                && mouseY >= tabY && mouseY <= tabY + tabH;
-
-        boolean insideMyAssetsTab = mouseX >= myAssetsX && mouseX <= myAssetsX + myAssetsW
-                && mouseY >= tabY && mouseY <= tabY + tabH;
-
-        boolean insideImportTab = mouseX >= importX && mouseX <= importX + tabW
-                && mouseY >= tabY && mouseY <= tabY + tabH;
-
-        boolean insideSettingsTab = mouseX >= settingsX && mouseX <= settingsX + tabW
-                && mouseY >= tabY && mouseY <= tabY + tabH;
+        boolean insideBrowseTab = isInside(mouseX, mouseY, chrome.tabX, chrome.tabY, chrome.tabW, chrome.tabH);
+        boolean insideMyAssetsTab = isInside(mouseX, mouseY, chrome.myAssetsX, chrome.tabY, chrome.myAssetsW, chrome.tabH);
+        boolean insideImportTab = isInside(mouseX, mouseY, chrome.importX, chrome.tabY, chrome.tabW, chrome.tabH);
+        boolean insideSettingsTab = isInside(mouseX, mouseY, chrome.settingsX, chrome.tabY, chrome.tabW, chrome.tabH);
 
         if (insideBrowseTab) {
             selectedTopTab = "Browse";
+            resetBrowseScroll();
             return true;
         }
 
         if (insideMyAssetsTab) {
             selectedTopTab = "My Assets";
+            resetMyAssetsScroll();
             return true;
         }
 
@@ -1277,22 +1554,16 @@ public class ArchivScreen extends Screen {
         }
 
         if ("Import".equals(selectedTopTab)) {
-            int stepX = rootX + 12;
-            int stepY = bodyY + 34;
-            int stepW = 156;
-            int stepH = 34;
-            int stepGapLocal = 40;
-
             for (int i = 0; i < 4; i++) {
-                int currentY = stepY + (i * stepGapLocal);
+                int currentY = chrome.bodyY + 34 + (i * 40);
 
-                if (isInside(mouseX, mouseY, stepX, currentY, stepW, stepH)) {
+                if (isInside(mouseX, mouseY, chrome.rootX + 12, currentY, 156, 34)) {
                     selectedImportStep = i + 1;
                     return true;
                 }
             }
 
-            ImportLayout layout = buildImportLayout(contentX, contentY, contentW, contentH);
+            ImportLayout layout = buildImportLayout(chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
 
             if (selectedImportStep == 1) {
                 if (mockStructureFileSelected) {
@@ -1381,6 +1652,7 @@ public class ArchivScreen extends Screen {
                     selectedTopTab = "My Assets";
                     selectedCategory = "All";
                     selectedMyAssetsSection = "All Assets";
+                    resetMyAssetsScroll();
                     return true;
                 }
             }
@@ -1388,18 +1660,19 @@ public class ArchivScreen extends Screen {
 
         if ("Browse".equals(selectedTopTab)) {
             for (int i = 0; i < categories.length; i++) {
-                int currentY = itemY + (i * itemGap);
+                int currentY = chrome.sidebarItemY + (i * chrome.sidebarItemGap);
 
-                if (isInside(mouseX, mouseY, itemX, currentY, itemW, itemH)) {
+                if (isInside(mouseX, mouseY, chrome.sidebarItemX, currentY, chrome.sidebarItemW, chrome.sidebarItemH)) {
                     selectedCategory = categories[i];
+                    resetBrowseScroll();
                     syncLibrarySelectionWithVisibleAssets();
                     return true;
                 }
             }
-        }
 
-        if ("Browse".equals(selectedTopTab)) {
-            BrowseToolbarLayout toolbar = buildBrowseToolbarLayout(contentX, contentY, contentW);
+            BrowseToolbarLayout toolbar = buildBrowseToolbarLayout(chrome.contentX, chrome.contentY, chrome.contentW);
+            ViewportLayout viewport = buildBrowseViewportLayout(chrome);
+            ScrollbarLayout browseScrollbar = buildBrowseScrollbarLayout(chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
 
             if (isInside(mouseX, mouseY, toolbar.searchX, toolbar.toolbarY, toolbar.searchW, 34)) {
                 if (browseSearchBox != null) {
@@ -1411,80 +1684,76 @@ public class ArchivScreen extends Screen {
 
             if (isInside(mouseX, mouseY, toolbar.gridX, toolbar.toolbarY, toolbar.gridW, 34) && !browseViewMode.equals("Grid")) {
                 browseViewMode = "Grid";
+                resetBrowseScroll();
                 syncLibrarySelectionWithVisibleAssets();
                 return true;
             }
 
             if (isInside(mouseX, mouseY, toolbar.listX, toolbar.toolbarY, toolbar.listW, 34) && !browseViewMode.equals("List")) {
                 browseViewMode = "List";
+                resetBrowseScroll();
                 syncLibrarySelectionWithVisibleAssets();
                 return true;
             }
 
             if (isInside(mouseX, mouseY, toolbar.filterX, toolbar.toolbarY, toolbar.filterW, 34)) {
                 browseFavoritesOnly = !browseFavoritesOnly;
+                resetBrowseScroll();
                 syncLibrarySelectionWithVisibleAssets();
                 return true;
             }
 
             if (isInside(mouseX, mouseY, toolbar.sortBoxX, toolbar.toolbarY, toolbar.sortBoxW, 34)) {
                 cycleBrowseSortMode();
+                resetBrowseScroll();
                 syncLibrarySelectionWithVisibleAssets();
                 return true;
             }
-        }
 
-        if ("My Assets".equals(selectedTopTab)) {
-            for (int i = 0; i < myAssetsSections.length; i++) {
-                int currentY = itemY + (i * itemGap);
-
-                if (isInside(mouseX, mouseY, itemX, currentY, itemW, itemH)) {
-                    selectedMyAssetsSection = myAssetsSections[i];
-                    return true;
-                }
-            }
-
-            int innerPadding = 18;
-            int titleX = contentX + innerPadding;
-            int titleY = contentY + 16;
-
-            int statsY = titleY + 40;
-            int statH = 68;
-
-            int quickY = statsY + statH + 18;
-            int quickButtonY = quickY + 14;
-            int quickButtonH = 30;
-            int quickGap = 12;
-            int quickW = (contentW - (innerPadding * 2) - (quickGap * 2)) / 3;
-
-            if (isInside(mouseX, mouseY, titleX, quickButtonY, quickW, quickButtonH)) {
-                beginFreshImportSession();
+            if (browseMaxScroll > 0 && isInside(mouseX, mouseY, browseScrollbar.thumbX, browseScrollbar.thumbY, browseScrollbar.thumbW, browseScrollbar.thumbH)) {
+                browseScrollbarDragging = true;
+                browseScrollbarDragOffset = (int) mouseY - browseScrollbar.thumbY;
                 return true;
             }
-        }
 
-        if ("Browse".equals(selectedTopTab)) {
+            if (browseMaxScroll > 0 && isInside(mouseX, mouseY, browseScrollbar.trackX, browseScrollbar.trackY, browseScrollbar.trackW, browseScrollbar.trackH)) {
+                int desiredThumbY = (int) mouseY - (browseScrollbar.thumbH / 2);
+                int clampedThumbY = clampInt(
+                        desiredThumbY,
+                        browseScrollbar.trackY,
+                        browseScrollbar.trackY + browseScrollbar.trackH - browseScrollbar.thumbH
+                );
+
+                int movableTrack = browseScrollbar.trackH - browseScrollbar.thumbH;
+                if (movableTrack > 0) {
+                    browseScrollOffset = ((clampedThumbY - browseScrollbar.trackY) * browseMaxScroll) / movableTrack;
+                } else {
+                    browseScrollOffset = 0;
+                }
+
+                return true;
+            }
+
+            double browseMouseY = mouseY;
+
             List<ArchivAsset> visibleAssets = getVisibleAssets();
 
             if (browseViewMode.equals("List")) {
-                BrowseListLayout layout = buildBrowseListLayout(contentX, contentY, contentW, contentH);
-                int visibleRowCount = getBrowseListVisibleRowCount(contentY, contentH, layout, visibleAssets.size());
+                BrowseListLayout layout = buildBrowseListLayout(chrome.contentX, chrome.contentY, chrome.contentW, browseScrollOffset);
 
-                for (int i = 0; i < visibleRowCount; i++) {
+                for (int i = 0; i < visibleAssets.size(); i++) {
                     ArchivAsset asset = visibleAssets.get(i);
                     int rowY = layout.listY + i * (layout.rowH + layout.rowGap);
-
                     BrowseListRowLayout rowLayout = buildBrowseListRowLayout(layout.listX, rowY, layout.listW, layout.rowH);
-
                     boolean savedAsset = isSavedAsset(asset);
 
                     if (savedAsset && isListMenuOpenFor(asset)
-                            && isInside(mouseX, mouseY, rowLayout.menuX, rowLayout.menuY, rowLayout.menuW, rowLayout.menuH)) {
+                            && isInside(mouseX, browseMouseY, rowLayout.menuX, rowLayout.menuY, rowLayout.menuW, rowLayout.menuH)) {
                         openDeleteConfirm(asset);
                         return true;
                     }
 
-                    if (savedAsset && isInside(mouseX, mouseY, rowLayout.menuDotsX - 4, rowLayout.menuDotsY - 4, 14, 18)) {
+                    if (savedAsset && isInside(mouseX, browseMouseY, rowLayout.menuDotsX - 4, rowLayout.menuDotsY - 4, 14, 18)) {
                         if (isListMenuOpenFor(asset)) {
                             closeListMenu();
                         } else {
@@ -1493,7 +1762,7 @@ public class ArchivScreen extends Screen {
                         return true;
                     }
 
-                    if (isInside(mouseX, mouseY, rowLayout.favoriteX, rowLayout.favoriteY, rowLayout.favoriteBoxSize, rowLayout.favoriteBoxSize)) {
+                    if (isInside(mouseX, browseMouseY, rowLayout.favoriteX, rowLayout.favoriteY, rowLayout.favoriteBoxSize, rowLayout.favoriteBoxSize)) {
                         closeListMenu();
                         toggleAssetFavorite(asset);
                         syncLibrarySelectionWithVisibleAssets();
@@ -1501,51 +1770,49 @@ public class ArchivScreen extends Screen {
                     }
 
                     boolean selected = isLibraryAssetSelected(asset);
-
                     if (selected) {
-                        if (isInside(mouseX, mouseY, rowLayout.loadX, rowLayout.loadY, rowLayout.loadW, rowLayout.loadH)) {
+                        if (isInside(mouseX, browseMouseY, rowLayout.loadX, rowLayout.loadY, rowLayout.loadW, rowLayout.loadH)) {
                             loadAsset(asset);
                             return true;
                         }
 
-                        if (isInside(mouseX, mouseY, rowLayout.detailsX, rowLayout.detailsY, rowLayout.detailsW, rowLayout.detailsH)) {
+                        if (isInside(mouseX, browseMouseY, rowLayout.detailsX, rowLayout.detailsY, rowLayout.detailsW, rowLayout.detailsH)) {
                             openAssetDetails(asset);
                             return true;
                         }
                     }
 
-                    if (isInside(mouseX, mouseY, layout.listX, rowY, layout.listW, layout.rowH)) {
+                    if (isInside(mouseX, browseMouseY, layout.listX, rowY, layout.listW, layout.rowH)) {
                         closeListMenu();
                         selectLibraryAsset(asset);
                         return true;
                     }
                 }
+
                 if (listMenuOpen) {
                     closeListMenu();
                 }
             } else {
-                CardGridLayout layout = buildBrowseGridLayout(contentX, contentY, contentW, contentH);
+                CardGridLayout layout = buildBrowseGridLayout(chrome.contentX, chrome.contentY, chrome.contentW, visibleAssets.size(), browseScrollOffset);
 
                 for (int i = 0; i < visibleAssets.size(); i++) {
                     ArchivAsset asset = visibleAssets.get(i);
 
                     int column = i % layout.columns;
                     int row = i / layout.columns;
-
                     int cardX = layout.cardsAreaX + column * (layout.cardW + layout.cardsGap);
                     int cardY = layout.cardsAreaY + row * (layout.cardH + layout.rowGap);
 
                     AssetCardLayout cardLayout = buildAssetCardLayout(cardX, cardY, layout.cardW, layout.cardH);
-
                     boolean savedAsset = isSavedAsset(asset);
 
                     if (savedAsset && isListMenuOpenFor(asset)
-                            && isInside(mouseX, mouseY, cardLayout.menuX, cardLayout.menuY, cardLayout.menuW, cardLayout.menuH)) {
+                            && isInside(mouseX, browseMouseY, cardLayout.menuX, cardLayout.menuY, cardLayout.menuW, cardLayout.menuH)) {
                         openDeleteConfirm(asset);
                         return true;
                     }
 
-                    if (savedAsset && isInside(mouseX, mouseY, cardLayout.menuDotsX - 4, cardLayout.menuDotsY - 4, 14, 18)) {
+                    if (savedAsset && isInside(mouseX, browseMouseY, cardLayout.menuDotsX - 4, cardLayout.menuDotsY - 4, 14, 18)) {
                         if (isListMenuOpenFor(asset)) {
                             closeListMenu();
                         } else {
@@ -1554,7 +1821,7 @@ public class ArchivScreen extends Screen {
                         return true;
                     }
 
-                    if (isInside(mouseX, mouseY, cardLayout.favoriteX, cardLayout.favoriteY, cardLayout.favoriteW, cardLayout.favoriteH)) {
+                    if (isInside(mouseX, browseMouseY, cardLayout.favoriteX, cardLayout.favoriteY, cardLayout.favoriteW, cardLayout.favoriteH)) {
                         closeListMenu();
                         toggleAssetFavorite(asset);
                         syncLibrarySelectionWithVisibleAssets();
@@ -1562,55 +1829,151 @@ public class ArchivScreen extends Screen {
                     }
 
                     boolean selected = isLibraryAssetSelected(asset);
-
                     if (selected) {
-                        if (isInside(mouseX, mouseY, cardLayout.overlayX, cardLayout.loadY, cardLayout.overlayW, cardLayout.loadH)) {
+                        if (isInside(mouseX, browseMouseY, cardLayout.overlayX, cardLayout.loadY, cardLayout.overlayW, cardLayout.loadH)) {
                             loadAsset(asset);
                             return true;
                         }
 
-                        if (isInside(mouseX, mouseY, cardLayout.overlayX, cardLayout.detailsY, cardLayout.overlayW, cardLayout.detailsH)) {
+                        if (isInside(mouseX, browseMouseY, cardLayout.overlayX, cardLayout.detailsY, cardLayout.overlayW, cardLayout.detailsH)) {
                             openAssetDetails(asset);
                             return true;
                         }
                     }
 
-                    if (isInside(mouseX, mouseY, cardX, cardY, layout.cardW, layout.cardH)) {
+                    if (isInside(mouseX, browseMouseY, cardX, cardY, layout.cardW, layout.cardH)) {
                         closeListMenu();
                         selectLibraryAsset(asset);
                         return true;
                     }
                 }
+
                 if (listMenuOpen) {
                     closeListMenu();
                 }
             }
         }
 
+        if ("My Assets".equals(selectedTopTab)) {
+            for (int i = 0; i < myAssetsSections.length; i++) {
+                int currentY = chrome.sidebarItemY + (i * chrome.sidebarItemGap);
+
+                if (isInside(mouseX, mouseY, chrome.sidebarItemX, currentY, chrome.sidebarItemW, chrome.sidebarItemH)) {
+                    selectedMyAssetsSection = myAssetsSections[i];
+                    resetMyAssetsScroll();
+                    closeListMenu();
+                    return true;
+                }
+            }
+
+            ScrollbarLayout scrollbar = buildMyAssetsScrollbarLayout(chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
+
+            if (myAssetsMaxScroll > 0 && isInside(mouseX, mouseY, scrollbar.thumbX, scrollbar.thumbY, scrollbar.thumbW, scrollbar.thumbH)) {
+                myAssetsScrollbarDragging = true;
+                myAssetsScrollbarDragOffset = (int) mouseY - scrollbar.thumbY;
+                return true;
+            }
+
+            if (myAssetsMaxScroll > 0 && isInside(mouseX, mouseY, scrollbar.trackX, scrollbar.trackY, scrollbar.trackW, scrollbar.trackH)) {
+                int desiredThumbY = (int) mouseY - (scrollbar.thumbH / 2);
+                int clampedThumbY = clampInt(desiredThumbY, scrollbar.trackY, scrollbar.trackY + scrollbar.trackH - scrollbar.thumbH);
+
+                int movableTrack = scrollbar.trackH - scrollbar.thumbH;
+                if (movableTrack > 0) {
+                    myAssetsScrollOffset = ((clampedThumbY - scrollbar.trackY) * myAssetsMaxScroll) / movableTrack;
+                } else {
+                    myAssetsScrollOffset = 0;
+                }
+
+                return true;
+            }
+
+            double myAssetsMouseY = mouseY;
+            if (isInside(mouseX, mouseY, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH)) {
+                myAssetsMouseY += myAssetsScrollOffset;
+            }
+
+            int innerPadding = 18;
+            int titleX = chrome.contentX + innerPadding;
+            int titleBaseY = chrome.contentY + 16;
+            int statsBaseY = titleBaseY + 40;
+            int statH = 68;
+            int quickBaseY = statsBaseY + statH + 18;
+            int quickButtonBaseY = quickBaseY + 14;
+            int quickButtonH = 30;
+            int quickGap = 12;
+            int quickW = (chrome.contentW - (innerPadding * 2) - (quickGap * 2)) / 3;
+
+            if (isInside(mouseX, myAssetsMouseY, titleX, quickButtonBaseY, quickW, quickButtonH)) {
+                beginFreshImportSession();
+                return true;
+            }
+
+            if (isInside(mouseX, myAssetsMouseY, titleX + quickW + quickGap, quickButtonBaseY, quickW, quickButtonH)) {
+                selectedMyAssetsSection = "Collections";
+                libraryActionMessage = "Create Collection not implemented yet";
+                resetMyAssetsScroll();
+                return true;
+            }
+
+            if (isInside(mouseX, myAssetsMouseY, titleX + (quickW + quickGap) * 2, quickButtonBaseY, quickW, quickButtonH)) {
+                selectedMyAssetsSection = "Local Packs";
+                libraryActionMessage = "Local Packs not implemented yet";
+                resetMyAssetsScroll();
+                return true;
+            }
+        }
+
         if ("My Assets".equals(selectedTopTab) && myAssetsShowsImportedGrid()) {
-            CardGridLayout layout = buildMyAssetsImportedGridLayout(contentX, contentY, contentW, contentH);
+            double myAssetsMouseY = mouseY;
+            if (isInside(mouseX, mouseY, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH)) {
+                myAssetsMouseY += myAssetsScrollOffset;
+            }
+
             List<ArchivAsset> visibleAssets = getVisibleAssets();
+            int innerPadding = 18;
+            int titleBaseY = chrome.contentY + 16;
+            int statsBaseY = titleBaseY + 40;
+            int statH = 68;
+            int quickBaseY = statsBaseY + statH + 18;
+            int quickButtonBaseY = quickBaseY + 14;
+            int quickButtonH = 30;
+            int sectionBaseY = quickButtonBaseY + quickButtonH + 20;
+            List<ArchivAsset> recentAssets = getRecentAssets(4);
+            int importedTitleBaseY = sectionBaseY;
+
+            if ("All Assets".equals(selectedMyAssetsSection)) {
+                int collectionBaseY = sectionBaseY + 18;
+                int collectionH = 88;
+                importedTitleBaseY = collectionBaseY + collectionH + 20;
+
+                if (!recentAssets.isEmpty()) {
+                    int recentTitleBaseY = importedTitleBaseY;
+                    int recentCardBaseY = recentTitleBaseY + 18;
+                    int recentH = 62;
+                    importedTitleBaseY = recentCardBaseY + recentH + 20;
+                }
+            }
+
+            CardGridLayout layout = buildMyAssetsImportedGridLayout(chrome.contentX, chrome.contentW, importedTitleBaseY, visibleAssets.size());
 
             for (int i = 0; i < visibleAssets.size(); i++) {
                 ArchivAsset asset = visibleAssets.get(i);
-
                 int column = i % layout.columns;
                 int row = i / layout.columns;
-
                 int cardX = layout.cardsAreaX + column * (layout.cardW + layout.cardsGap);
                 int cardY = layout.cardsAreaY + row * (layout.cardH + layout.rowGap);
-
                 AssetCardLayout cardLayout = buildAssetCardLayout(cardX, cardY, layout.cardW, layout.cardH);
 
                 boolean savedAsset = isSavedAsset(asset);
 
                 if (savedAsset && isListMenuOpenFor(asset)
-                        && isInside(mouseX, mouseY, cardLayout.menuX, cardLayout.menuY, cardLayout.menuW, cardLayout.menuH)) {
+                        && isInside(mouseX, myAssetsMouseY, cardLayout.menuX, cardLayout.menuY, cardLayout.menuW, cardLayout.menuH)) {
                     openDeleteConfirm(asset);
                     return true;
                 }
 
-                if (savedAsset && isInside(mouseX, mouseY, cardLayout.menuDotsX - 4, cardLayout.menuDotsY - 4, 14, 18)) {
+                if (savedAsset && isInside(mouseX, myAssetsMouseY, cardLayout.menuDotsX - 4, cardLayout.menuDotsY - 4, 14, 18)) {
                     if (isListMenuOpenFor(asset)) {
                         closeListMenu();
                     } else {
@@ -1619,7 +1982,7 @@ public class ArchivScreen extends Screen {
                     return true;
                 }
 
-                if (isInside(mouseX, mouseY, cardLayout.favoriteX, cardLayout.favoriteY, cardLayout.favoriteW, cardLayout.favoriteH)) {
+                if (isInside(mouseX, myAssetsMouseY, cardLayout.favoriteX, cardLayout.favoriteY, cardLayout.favoriteW, cardLayout.favoriteH)) {
                     closeListMenu();
                     toggleAssetFavorite(asset);
                     syncLibrarySelectionWithVisibleAssets();
@@ -1627,25 +1990,25 @@ public class ArchivScreen extends Screen {
                 }
 
                 boolean selected = isLibraryAssetSelected(asset);
-
                 if (selected) {
-                    if (isInside(mouseX, mouseY, cardLayout.overlayX, cardLayout.loadY, cardLayout.overlayW, cardLayout.loadH)) {
+                    if (isInside(mouseX, myAssetsMouseY, cardLayout.overlayX, cardLayout.loadY, cardLayout.overlayW, cardLayout.loadH)) {
                         loadAsset(asset);
                         return true;
                     }
 
-                    if (isInside(mouseX, mouseY, cardLayout.overlayX, cardLayout.detailsY, cardLayout.overlayW, cardLayout.detailsH)) {
+                    if (isInside(mouseX, myAssetsMouseY, cardLayout.overlayX, cardLayout.detailsY, cardLayout.overlayW, cardLayout.detailsH)) {
                         openAssetDetails(asset);
                         return true;
                     }
                 }
 
-                if (isInside(mouseX, mouseY, cardX, cardY, layout.cardW, layout.cardH)) {
+                if (isInside(mouseX, myAssetsMouseY, cardX, cardY, layout.cardW, layout.cardH)) {
                     closeListMenu();
                     selectLibraryAsset(asset);
                     return true;
                 }
             }
+
             if (listMenuOpen) {
                 closeListMenu();
             }
@@ -1655,27 +2018,57 @@ public class ArchivScreen extends Screen {
     }
 
     @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        ScreenChromeLayout chrome = buildChromeLayout();
+
+        if ("Browse".equals(selectedTopTab)) {
+            ViewportLayout viewport = buildBrowseViewportLayout(chrome);
+
+            if (!isInside(mouseX, mouseY, viewport.x, viewport.y, viewport.w, viewport.h)) {
+                return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+            }
+
+            if (browseMaxScroll <= 0) {
+                return true;
+            }
+
+            int scrollStep = 18;
+            browseScrollOffset = clampInt(
+                    browseScrollOffset - ((int) verticalAmount * scrollStep),
+                    0,
+                    browseMaxScroll
+            );
+
+            return true;
+        }
+
+        if ("My Assets".equals(selectedTopTab)) {
+            if (!isInside(mouseX, mouseY, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH)) {
+                return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+            }
+
+            if (myAssetsMaxScroll <= 0) {
+                return true;
+            }
+
+            int scrollStep = 18;
+            myAssetsScrollOffset = clampInt(
+                    myAssetsScrollOffset - ((int) verticalAmount * scrollStep),
+                    0,
+                    myAssetsMaxScroll
+            );
+
+            return true;
+        }
+
+        return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+    }
+
+    @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float delta) {
         guiGraphics.fill(0, 0, this.width, this.height, COLOR_BACKGROUND);
 
-        int margin = 20;
-
-        int rootX = margin;
-        int rootY = margin;
-        int rootW = this.width - (margin * 2);
-        int rootH = this.height - (margin * 2);
-
-        int headerH = 58;
-        int footerH = 24;
-        int sidebarW = 180;
-
-        int bodyY = rootY + headerH;
-        int bodyH = rootH - headerH - footerH;
-
-        int contentX = rootX + sidebarW;
-        int contentY = bodyY;
-        int contentW = rootW - sidebarW;
-        int contentH = bodyH;
+        ScreenChromeLayout chrome = buildChromeLayout();
 
         boolean browseActive = "Browse".equals(selectedTopTab);
         boolean myAssetsActive = "My Assets".equals(selectedTopTab);
@@ -1692,66 +2085,61 @@ public class ArchivScreen extends Screen {
 
         List<ArchivAsset> visibleAssets = getVisibleAssets();
 
-        drawPanel(guiGraphics, rootX, rootY, rootW, rootH, COLOR_ROOT, COLOR_BORDER);
-        drawPanel(guiGraphics, rootX, rootY, rootW, headerH, COLOR_PANEL, COLOR_BORDER);
-        drawPanel(guiGraphics, rootX, bodyY, sidebarW, bodyH, COLOR_PANEL, COLOR_BORDER);
-        drawPanel(guiGraphics, contentX, contentY, contentW, contentH, COLOR_ROOT, COLOR_BORDER);
+        drawPanel(guiGraphics, chrome.rootX, chrome.rootY, chrome.rootW, chrome.rootH, COLOR_ROOT, COLOR_BORDER);
+        drawPanel(guiGraphics, chrome.rootX, chrome.rootY, chrome.rootW, chrome.headerH, COLOR_PANEL, COLOR_BORDER);
+        drawPanel(guiGraphics, chrome.rootX, chrome.bodyY, chrome.sidebarW, chrome.bodyH, COLOR_PANEL, COLOR_BORDER);
+        drawPanel(guiGraphics, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH, COLOR_ROOT, COLOR_BORDER);
 
-        guiGraphics.drawString(this.font, "ARCHIV", rootX + 18, rootY + 20, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "ARCHIV", chrome.rootX + 18, chrome.rootY + 20, COLOR_TEXT);
 
-        int tabY = rootY + 10;
-        int tabX = rootX + 150;
-        int tabW = 110;
-        int tabH = 38;
-        int tabGap = 8;
-
-        drawTopTab(guiGraphics, "Browse", tabX, tabY, tabW, tabH, browseActive);
-        drawTopTab(guiGraphics, "My Assets", tabX + (tabW + tabGap), tabY, tabW + 10, tabH, myAssetsActive);
-        drawTopTab(guiGraphics, "Import", tabX + (tabW + tabGap) * 2 + 10, tabY, tabW, tabH, "Import".equals(selectedTopTab));
-        drawTopTab(guiGraphics, "Settings", tabX + (tabW + tabGap) * 3 + 10, tabY, tabW, tabH, "Settings".equals(selectedTopTab));
+        drawTopTab(guiGraphics, "Browse", chrome.tabX, chrome.tabY, chrome.tabW, chrome.tabH, browseActive);
+        drawTopTab(guiGraphics, "My Assets", chrome.myAssetsX, chrome.tabY, chrome.myAssetsW, chrome.tabH, myAssetsActive);
+        drawTopTab(guiGraphics, "Import", chrome.importX, chrome.tabY, chrome.tabW, chrome.tabH, "Import".equals(selectedTopTab));
+        drawTopTab(guiGraphics, "Settings", chrome.settingsX, chrome.tabY, chrome.tabW, chrome.tabH, "Settings".equals(selectedTopTab));
 
         if (browseActive) {
-            guiGraphics.drawString(this.font, "CATEGORIES", rootX + 16, bodyY + 14, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, "CATEGORIES", chrome.rootX + 16, chrome.bodyY + 14, COLOR_TEXT_DIM);
 
-            int categoryY = bodyY + 34;
+            int categoryY = chrome.sidebarItemY;
             for (int i = 0; i < categories.length; i++) {
                 boolean active = categories[i].equals(selectedCategory);
-                drawSidebarItem(guiGraphics, categories[i], rootX + 12, categoryY, sidebarW - 24, 34, active);
-                categoryY += 40;
+                drawSidebarItem(guiGraphics, categories[i], chrome.sidebarItemX, categoryY, chrome.sidebarItemW, chrome.sidebarItemH, active);
+                categoryY += chrome.sidebarItemGap;
             }
         } else if (myAssetsActive) {
-            guiGraphics.drawString(this.font, "MY LIBRARY", rootX + 16, bodyY + 14, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, "MY LIBRARY", chrome.rootX + 16, chrome.bodyY + 14, COLOR_TEXT_DIM);
 
-            int sectionY = bodyY + 34;
+            int sectionY = chrome.sidebarItemY;
             for (int i = 0; i < myAssetsSections.length; i++) {
                 boolean active = myAssetsSections[i].equals(selectedMyAssetsSection);
-                drawSidebarItem(guiGraphics, myAssetsSections[i], rootX + 12, sectionY, sidebarW - 24, 34, active);
-                sectionY += 40;
+                drawSidebarItem(guiGraphics, myAssetsSections[i], chrome.sidebarItemX, sectionY, chrome.sidebarItemW, chrome.sidebarItemH, active);
+                sectionY += chrome.sidebarItemGap;
             }
         } else if (!"Import".equals(selectedTopTab)) {
-            guiGraphics.drawString(this.font, "SECTION", rootX + 16, bodyY + 14, COLOR_TEXT_DIM);
-            guiGraphics.drawString(this.font, selectedTopTab, rootX + 16, bodyY + 34, COLOR_TEXT);
+            guiGraphics.drawString(this.font, "SECTION", chrome.rootX + 16, chrome.bodyY + 14, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, selectedTopTab, chrome.rootX + 16, chrome.bodyY + 34, COLOR_TEXT);
         }
 
         if (browseActive) {
-            drawBrowseTab(guiGraphics, contentX, contentY, contentW, contentH, visibleAssets);
+            drawBrowseTab(guiGraphics, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH, visibleAssets);
         } else if (myAssetsActive) {
-            drawMyAssetsTab(guiGraphics, contentX, contentY, contentW, contentH, visibleAssets);
+            drawMyAssetsTab(guiGraphics, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH, visibleAssets);
         } else if ("Import".equals(selectedTopTab)) {
-            drawImportTab(guiGraphics, rootX, rootY, rootW, rootH, bodyY, bodyH, contentX, contentY, contentW, contentH);
+            drawImportTab(guiGraphics, chrome.rootX, chrome.rootY, chrome.rootW, chrome.rootH, chrome.bodyY, chrome.bodyH, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
         } else {
-            drawTabPlaceholder(guiGraphics, contentX, contentY, contentW, contentH, selectedTopTab);
+            drawTabPlaceholder(guiGraphics, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH, selectedTopTab);
         }
-        drawAssetDetailsPanel(guiGraphics, rootX, rootY, rootW, bodyY);
+
+        drawAssetDetailsPanel(guiGraphics, chrome.rootX, chrome.rootY, chrome.rootW, chrome.bodyY);
         drawDeleteConfirmModal(guiGraphics);
 
-        drawPanel(guiGraphics, rootX, rootY + rootH - footerH, rootW, footerH, COLOR_PANEL, COLOR_BORDER);
+        drawPanel(guiGraphics, chrome.rootX, chrome.rootY + chrome.rootH - chrome.footerH, chrome.rootW, chrome.footerH, COLOR_PANEL, COLOR_BORDER);
 
-        int footerY = rootY + rootH - footerH + 8;
-        guiGraphics.drawString(this.font, "WorldEdit: pending", rootX + 12, footerY, COLOR_SUCCESS);
+        int footerY = chrome.rootY + chrome.rootH - chrome.footerH + 8;
+        guiGraphics.drawString(this.font, "WorldEdit: pending", chrome.rootX + 12, footerY, COLOR_SUCCESS);
 
         String footerMiddleText = libraryTabActive ? libraryActionMessage : "Preview pipeline: planned";
-        guiGraphics.drawString(this.font, footerMiddleText, rootX + 140, footerY, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, footerMiddleText, chrome.rootX + 140, footerY, COLOR_TEXT_DIM);
 
         if (libraryTabActive) {
             int totalAssets = browseActive
@@ -1759,9 +2147,9 @@ public class ArchivScreen extends Screen {
                     : savedAssets.size();
 
             String assetCountText = visibleAssets.size() + " / " + totalAssets + " assets";
-            guiGraphics.drawString(this.font, assetCountText, rootX + rootW - 120, footerY, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, assetCountText, chrome.rootX + chrome.rootW - 120, footerY, COLOR_TEXT_DIM);
         } else {
-            guiGraphics.drawString(this.font, selectedTopTab, rootX + rootW - 80, footerY, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, selectedTopTab, chrome.rootX + chrome.rootW - 80, footerY, COLOR_TEXT_DIM);
         }
 
         super.render(guiGraphics, mouseX, mouseY, delta);
@@ -1776,77 +2164,69 @@ public class ArchivScreen extends Screen {
         if (asset == null) {
             return;
         }
+
         boolean loaded = isAssetLoaded(asset);
+        AssetDetailsModalLayout modal = buildAssetDetailsModalLayout(asset);
 
-        int panelW = 360;
-        int panelH = 280;
-        int panelX = (this.width - panelW) / 2;
-        int panelY = (this.height - panelH) / 2;
+        guiGraphics.fill(0, 0, this.width, this.height, 0x88000000);
+        drawPanel(guiGraphics, modal.panelX, modal.panelY, modal.panelW, modal.panelH, COLOR_PANEL_ALT, COLOR_BORDER_ACTIVE);
 
-        drawPanel(guiGraphics, panelX, panelY, panelW, panelH, COLOR_PANEL_ALT, COLOR_BORDER_ACTIVE);
+        guiGraphics.drawString(this.font, "Asset Details", modal.panelX + 16, modal.panelY + 16, COLOR_TEXT);
+        drawChip(guiGraphics, asset.getType(), modal.chipX, modal.chipY, getChipWidth(asset.getType()), 18, asset.getChipColor());
 
-        guiGraphics.drawString(this.font, "Asset Details", panelX + 14, panelY + 12, COLOR_TEXT);
+        drawPanel(guiGraphics, modal.closeX, modal.closeY, modal.closeSize, modal.closeSize, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "X", modal.closeX + 6, modal.closeY + 6, COLOR_TEXT);
 
-        int closeSize = 20;
-        int closeX = panelX + panelW - closeSize - 10;
-        int closeY = panelY + 10;
-        drawPanel(guiGraphics, closeX, closeY, closeSize, closeSize, COLOR_PANEL, COLOR_BORDER);
-        guiGraphics.drawString(this.font, "X", closeX + 6, closeY + 6, COLOR_TEXT);
-
-        int previewX = panelX + 14;
-        int previewY = panelY + 36;
-        int previewW = panelW - 28;
-        int previewH = 76;
-
-        guiGraphics.fill(previewX, previewY, previewX + previewW, previewY + previewH, asset.getPreviewColor());
+        drawPanel(guiGraphics, modal.previewX - 1, modal.previewY - 1, modal.previewW + 2, modal.previewH + 2, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.fill(modal.previewX, modal.previewY, modal.previewX + modal.previewW, modal.previewY + modal.previewH, asset.getPreviewColor());
 
         String previewText = "PREVIEW";
         int previewTextWidth = this.font.width(previewText);
         guiGraphics.drawString(
                 this.font,
                 previewText,
-                previewX + (previewW - previewTextWidth) / 2,
-                previewY + (previewH / 2) - 4,
+                modal.previewX + (modal.previewW - previewTextWidth) / 2,
+                modal.previewY + (modal.previewH / 2) - 4,
                 COLOR_TEXT
         );
 
-        int infoX = panelX + 16;
-        int infoY = previewY + previewH + 16;
+        int infoX = modal.panelX + 18;
+        int infoY = modal.previewY + modal.previewH + 14;
 
         guiGraphics.drawString(this.font, asset.getName(), infoX, infoY, COLOR_TEXT);
 
         String detailsMeta = ".schem  •  " + asset.getVersion();
         guiGraphics.drawString(this.font, detailsMeta, infoX, infoY + 16, COLOR_TEXT_DIM);
 
+        int metaCursorX = infoX + this.font.width(detailsMeta) + 10;
         if (loaded) {
-            guiGraphics.drawString(
-                    this.font,
-                    "• Loaded",
-                    infoX + this.font.width(detailsMeta) + 8,
-                    infoY + 16,
-                    COLOR_SUCCESS
-            );
+            guiGraphics.drawString(this.font, "• Loaded", metaCursorX, infoY + 16, COLOR_SUCCESS);
+            metaCursorX += this.font.width("• Loaded") + 10;
+        }
+        if (asset.isFavorite()) {
+            guiGraphics.drawString(this.font, "★ Favorite", metaCursorX, infoY + 16, 0xFFFFD54A);
         }
 
-        int labelX = infoX;
-        int valueX = infoX + 88;
-        int rowY = infoY + 42;
-        int rowGap = 18;
+        int infoGridY = infoY + 44;
+        int labelColor = COLOR_TEXT_DIM;
+        int valueColor = COLOR_TEXT;
 
-        guiGraphics.drawString(this.font, "Category", labelX, rowY, COLOR_TEXT_DIM);
-        guiGraphics.drawString(this.font, asset.getMacroCategory(), valueX, rowY, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Category", infoX, infoGridY, labelColor);
+        guiGraphics.drawString(this.font, asset.getMacroCategory(), infoX + 84, infoGridY, valueColor);
 
-        rowY += rowGap;
-        guiGraphics.drawString(this.font, "Type", labelX, rowY, COLOR_TEXT_DIM);
-        guiGraphics.drawString(this.font, asset.getType(), valueX, rowY, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Type", infoX + 190, infoGridY, labelColor);
+        guiGraphics.drawString(this.font, asset.getType(), infoX + 244, infoGridY, valueColor);
 
-        rowY += rowGap;
-        guiGraphics.drawString(this.font, "Variants", labelX, rowY, COLOR_TEXT_DIM);
-        guiGraphics.drawString(this.font, String.valueOf(asset.getVariantCount()), valueX, rowY, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Variants", infoX, infoGridY + 18, labelColor);
+        guiGraphics.drawString(this.font, String.valueOf(asset.getVariantCount()), infoX + 84, infoGridY + 18, valueColor);
 
-        rowY += rowGap;
-        guiGraphics.drawString(this.font, "Favorite", labelX, rowY, COLOR_TEXT_DIM);
-        guiGraphics.drawString(this.font, asset.isFavorite() ? "Yes" : "No", valueX, rowY, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Status", infoX + 190, infoGridY + 18, labelColor);
+        guiGraphics.drawString(this.font, loaded ? "Loaded" : "Idle", infoX + 244, infoGridY + 18, loaded ? COLOR_SUCCESS : valueColor);
+
+        guiGraphics.fill(modal.panelX + 16, modal.closeButtonY - 12, modal.panelX + modal.panelW - 16, modal.closeButtonY - 11, COLOR_BORDER);
+
+        drawButtonBox(guiGraphics, "Close", modal.closeButtonX, modal.closeButtonY, modal.closeButtonW, modal.closeButtonH, false);
+        drawButtonBox(guiGraphics, loaded ? "Loaded" : "Load", modal.loadButtonX, modal.loadButtonY, modal.loadButtonW, modal.loadButtonH, true);
     }
 
     private void drawPanel(GuiGraphics guiGraphics, int x, int y, int width, int height, int backgroundColor, int borderColor) {
@@ -1855,6 +2235,16 @@ public class ArchivScreen extends Screen {
         guiGraphics.fill(x, y + height - 1, x + width, y + height, borderColor);
         guiGraphics.fill(x, y, x + 1, y + height, borderColor);
         guiGraphics.fill(x + width - 1, y, x + width, y + height, borderColor);
+    }
+
+    private void drawScrollbar(GuiGraphics guiGraphics, ScrollbarLayout layout, boolean active) {
+        int trackColor = 0xFF0C1624;
+        int trackBorder = COLOR_BORDER;
+        int thumbColor = active ? COLOR_BORDER_ACTIVE : 0xFF46627E;
+        int thumbBorder = active ? 0xFF73C8FF : 0xFF6D88A3;
+
+        drawPanel(guiGraphics, layout.trackX, layout.trackY, layout.trackW, layout.trackH, trackColor, trackBorder);
+        drawPanel(guiGraphics, layout.thumbX, layout.thumbY, layout.thumbW, layout.thumbH, thumbColor, thumbBorder);
     }
 
     private void drawTopTab(GuiGraphics guiGraphics, String label, int x, int y, int width, int height, boolean active) {
@@ -1982,6 +2372,36 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(this.font, subtitle, x + 16, y + 46, COLOR_TEXT_DIM);
     }
 
+    private void drawCollectionCard(GuiGraphics guiGraphics, int x, int y, int width, int height, CollectionEntry entry) {
+        drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
+
+        int bannerH = 46;
+        guiGraphics.fill(x + 1, y + 1, x + width - 1, y + bannerH, entry.previewColor);
+
+        guiGraphics.drawString(this.font, "COLLECTION", x + 12, y + 16, 0xFFFFFFFF);
+        guiGraphics.drawString(this.font, entry.name, x + 12, y + bannerH + 12, COLOR_TEXT);
+        guiGraphics.drawString(this.font, entry.assetCount + " assets", x + 12, y + bannerH + 26, COLOR_TEXT_DIM);
+
+        int chipW = getChipWidth("Collection");
+        drawChip(guiGraphics, "Collection", x + width - chipW - 12, y + height - 24, chipW, 18, entry.accentColor);
+    }
+
+    private void drawRecentMiniCard(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset) {
+        drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
+
+        int bannerH = 34;
+        guiGraphics.fill(x + 1, y + 1, x + width - 1, y + bannerH, asset.getPreviewColor());
+
+        String previewText = "PREVIEW";
+        int previewWidth = this.font.width(previewText);
+        guiGraphics.drawString(this.font, previewText, x + (width - previewWidth) / 2, y + 12, COLOR_TEXT);
+
+        guiGraphics.drawString(this.font, fitTextToWidth(asset.getName(), width - 24), x + 10, y + bannerH + 10, COLOR_TEXT);
+
+        int chipW = getChipWidth(asset.getType());
+        drawChip(guiGraphics, asset.getType(), x + width - chipW - 10, y + height - 24, chipW, 18, asset.getChipColor());
+    }
+
     private void drawEmptyState(GuiGraphics guiGraphics, int x, int y, int width, int height, String title, String subtitle) {
         int panelWidth = 320;
         int panelHeight = 90;
@@ -2074,83 +2494,227 @@ public class ArchivScreen extends Screen {
         int summaryW = contentW - (innerPadding * 2);
         drawInfoStrip(guiGraphics, getBrowseSummaryText(visibleAssets), summaryX, summaryY, summaryW, 22);
 
+        int viewportX = contentX + innerPadding;
+        int viewportY = toolbar.toolbarY + 78;
+        int viewportW = contentW - (innerPadding * 2) - 16;
+        int viewportH = (contentY + contentH - 16) - viewportY;
+
         if (browseViewMode.equals("List")) {
-            BrowseListLayout layout = buildBrowseListLayout(contentX, contentY, contentW, contentH);
+            BrowseListLayout measureLayout = buildBrowseListLayout(contentX, contentY, contentW, 0);
+
+            int contentHeight = getBrowseListContentHeight(visibleAssets.size(), measureLayout);
+            browseMaxScroll = Math.max(0, contentHeight - viewportH);
+            browseScrollOffset = clampInt(browseScrollOffset, 0, browseMaxScroll);
+
+            ScrollbarLayout scrollbar = buildBrowseScrollbarLayout(contentX, contentY, contentW, contentH);
+            BrowseListLayout layout = buildBrowseListLayout(contentX, contentY, contentW, browseScrollOffset);
+
+            guiGraphics.enableScissor(viewportX, viewportY, viewportX + viewportW, viewportY + viewportH);
 
             if (visibleAssets.isEmpty()) {
-                drawEmptyState(guiGraphics, layout.listX, layout.listY, layout.listW, contentH - 100);
-            } else {
-                int visibleRowCount = getBrowseListVisibleRowCount(contentY, contentH, layout, visibleAssets.size());
-
-                for (int i = 0; i < visibleRowCount; i++) {
-                    ArchivAsset asset = visibleAssets.get(i);
-                    int rowY = layout.listY + i * (layout.rowH + layout.rowGap);
-
-                    drawBrowseListRow(
-                            guiGraphics,
-                            layout.listX,
-                            rowY,
-                            layout.listW,
-                            layout.rowH,
-                            asset,
-                            isLibraryAssetSelected(asset)
-                    );
-                }
-            }
-        } else {
-            CardGridLayout layout = buildBrowseGridLayout(contentX, contentY, contentW, contentH);
-
-            if (visibleAssets.isEmpty()) {
-                drawEmptyState(guiGraphics, layout.cardsAreaX, layout.cardsAreaY, layout.cardsAreaW, layout.cardsAreaH);
+                drawEmptyState(guiGraphics, viewportX, viewportY, viewportW, viewportH);
             } else {
                 for (int i = 0; i < visibleAssets.size(); i++) {
                     ArchivAsset asset = visibleAssets.get(i);
+                    int rowY = layout.listY + i * (layout.rowH + layout.rowGap);
 
+                    drawBrowseListRow(guiGraphics, layout.listX, rowY, layout.listW, layout.rowH, asset, isLibraryAssetSelected(asset));
+                }
+            }
+
+            guiGraphics.disableScissor();
+            drawScrollbar(guiGraphics, scrollbar, browseScrollbarDragging);
+        } else {
+            CardGridLayout measureLayout = buildBrowseGridLayout(contentX, contentY, contentW, visibleAssets.size(), 0);
+
+            int contentHeight = measureLayout.cardsAreaH;
+            browseMaxScroll = Math.max(0, contentHeight - viewportH);
+            browseScrollOffset = clampInt(browseScrollOffset, 0, browseMaxScroll);
+
+            ScrollbarLayout scrollbar = buildBrowseScrollbarLayout(contentX, contentY, contentW, contentH);
+            CardGridLayout layout = buildBrowseGridLayout(contentX, contentY, contentW, visibleAssets.size(), browseScrollOffset);
+
+            guiGraphics.enableScissor(viewportX, viewportY, viewportX + viewportW, viewportY + viewportH);
+
+            if (visibleAssets.isEmpty()) {
+                drawEmptyState(guiGraphics, viewportX, viewportY, viewportW, viewportH);
+            } else {
+                for (int i = 0; i < visibleAssets.size(); i++) {
+                    ArchivAsset asset = visibleAssets.get(i);
                     int column = i % layout.columns;
                     int row = i / layout.columns;
-
                     int cardX = layout.cardsAreaX + column * (layout.cardW + layout.cardsGap);
                     int cardY = layout.cardsAreaY + row * (layout.cardH + layout.rowGap);
 
                     drawAssetCard(guiGraphics, cardX, cardY, layout.cardW, layout.cardH, asset, isLibraryAssetSelected(asset));
                 }
-                if (listMenuOpen) {
-                    closeListMenu();
-                }
             }
+
+            guiGraphics.disableScissor();
+            drawScrollbar(guiGraphics, scrollbar, browseScrollbarDragging);
         }
     }
 
     private void drawMyAssetsTab(GuiGraphics guiGraphics, int contentX, int contentY, int contentW, int contentH, List<ArchivAsset> visibleAssets) {
         int innerPadding = 18;
 
+        int viewportX = contentX + 1;
+        int viewportY = contentY + 1;
+        int viewportW = contentW - 2;
+        int viewportH = contentH - 2;
+
         int titleX = contentX + innerPadding;
-        int titleY = contentY + 16;
 
-        guiGraphics.drawString(this.font, "My Assets", titleX, titleY, COLOR_TEXT);
-        guiGraphics.drawString(this.font, "Your personal build library and saved collections.", titleX, titleY + 16, COLOR_TEXT_DIM);
+        // ===== posições BASE (sem scroll) =====
+        int titleBaseY = contentY + 16;
+        int statsBaseY = titleBaseY + 40;
 
-        int statsY = titleY + 40;
         int statGap = 12;
         int statW = (contentW - (innerPadding * 2) - (statGap * 3)) / 4;
         int statH = 68;
 
-        drawStatCard(guiGraphics, titleX, statsY, statW, statH, String.valueOf(getSavedFavoritesCount()), "Favorites", "Starred assets");
-        drawStatCard(guiGraphics, titleX + statW + statGap, statsY, statW, statH, String.valueOf(savedAssets.size()), "Imported", "Imported assets");
-        drawStatCard(guiGraphics, titleX + (statW + statGap) * 2, statsY, statW, statH, String.valueOf(getRecentAssetsCount()), "Recent", "Used recently");
-        drawStatCard(guiGraphics, titleX + (statW + statGap) * 3, statsY, statW, statH, "0", "Collections", "Saved collections");
-
-        int quickY = statsY + statH + 18;
-        guiGraphics.drawString(this.font, "Quick Actions", titleX, quickY, COLOR_TEXT);
-
-        int quickButtonY = quickY + 14;
+        int quickBaseY = statsBaseY + statH + 18;
+        int quickButtonBaseY = quickBaseY + 14;
         int quickButtonH = 30;
         int quickGap = 12;
         int quickW = (contentW - (innerPadding * 2) - (quickGap * 2)) / 3;
 
+        int sectionBaseY = quickButtonBaseY + quickButtonH + 20;
+
+        List<ArchivAsset> recentAssets = getRecentAssets(4);
+
+        boolean collectionsSection = "Collections".equals(selectedMyAssetsSection);
+        boolean allAssetsSection = "All Assets".equals(selectedMyAssetsSection);
+        boolean showImportedGrid = myAssetsShowsImportedGrid();
+
+        int importedTitleBaseY = sectionBaseY;
+
+        if (allAssetsSection) {
+            int collectionBaseY = sectionBaseY + 18;
+            int collectionH = 88;
+
+            importedTitleBaseY = collectionBaseY + collectionH + 20;
+
+            if (!recentAssets.isEmpty()) {
+                int recentTitleBaseY = importedTitleBaseY;
+                int recentCardBaseY = recentTitleBaseY + 18;
+                int recentH = 62;
+
+                importedTitleBaseY = recentCardBaseY + recentH + 20;
+            }
+        }
+
+        int contentBottomBaseY;
+
+        if (collectionsSection) {
+            int collectionBaseY = sectionBaseY + 34;
+            int collectionH = 94;
+            contentBottomBaseY = collectionBaseY + collectionH + 18;
+        } else if (!showImportedGrid) {
+            contentBottomBaseY = sectionBaseY + 120;
+        } else {
+            CardGridLayout measureLayout = buildMyAssetsImportedGridLayout(contentX, contentW, importedTitleBaseY, visibleAssets.size());
+            contentBottomBaseY = importedTitleBaseY + 18 + measureLayout.cardsAreaH + 18;
+        }
+
+        int viewportBottom = contentY + contentH - 12;
+        myAssetsMaxScroll = Math.max(0, contentBottomBaseY - viewportBottom);
+        myAssetsScrollOffset = clampInt(myAssetsScrollOffset, 0, myAssetsMaxScroll);
+
+        // ===== deslocamento de render =====
+        int scrollRenderY = -myAssetsScrollOffset;
+
+        int titleY = titleBaseY + scrollRenderY;
+        int statsY = statsBaseY + scrollRenderY;
+        int quickY = quickBaseY + scrollRenderY;
+        int quickButtonY = quickButtonBaseY + scrollRenderY;
+        int sectionY = sectionBaseY + scrollRenderY;
+        int importedTitleY = importedTitleBaseY + scrollRenderY;
+
+        guiGraphics.enableScissor(viewportX, viewportY, viewportX + viewportW, viewportY + viewportH);
+
+        guiGraphics.drawString(this.font, "My Assets", titleX, titleY, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Your personal build library and saved collections.", titleX, titleY + 16, COLOR_TEXT_DIM);
+
+        drawStatCard(guiGraphics, titleX, statsY, statW, statH, String.valueOf(getSavedFavoritesCount()), "Favorites", "Starred assets");
+        drawStatCard(guiGraphics, titleX + statW + statGap, statsY, statW, statH, String.valueOf(savedAssets.size()), "Imported", "Imported assets");
+        drawStatCard(guiGraphics, titleX + (statW + statGap) * 2, statsY, statW, statH, String.valueOf(getRecentAssetsCount()), "Recent", "Used recently");
+        drawStatCard(guiGraphics, titleX + (statW + statGap) * 3, statsY, statW, statH, String.valueOf(collectionEntries.length), "Collections", "Saved collections");
+
+        guiGraphics.drawString(this.font, "Quick Actions", titleX, quickY, COLOR_TEXT);
+
         drawButtonBox(guiGraphics, "Import Asset", titleX, quickButtonY, quickW, quickButtonH, true);
         drawButtonBox(guiGraphics, "Create Collection", titleX + quickW + quickGap, quickButtonY, quickW, quickButtonH, false);
         drawButtonBox(guiGraphics, "Open Local Folder", titleX + (quickW + quickGap) * 2, quickButtonY, quickW, quickButtonH, false);
+
+        if (collectionsSection) {
+            guiGraphics.drawString(this.font, "Collections", titleX, sectionY, COLOR_TEXT);
+            guiGraphics.drawString(this.font, "Saved themed asset groups and folders.", titleX, sectionY + 16, COLOR_TEXT_DIM);
+
+            int collectionY = sectionY + 34;
+            int collectionGap = 14;
+            int collectionW = (contentW - (innerPadding * 2) - (collectionGap * 2)) / 3;
+            int collectionH = 94;
+
+            for (int i = 0; i < collectionEntries.length; i++) {
+                CollectionEntry entry = collectionEntries[i];
+                int cardX = titleX + i * (collectionW + collectionGap);
+                drawCollectionCard(guiGraphics, cardX, collectionY, collectionW, collectionH, entry);
+            }
+
+            guiGraphics.disableScissor();
+            return;
+        }
+
+        if (!showImportedGrid) {
+            drawEmptyState(
+                    guiGraphics,
+                    contentX + innerPadding,
+                    sectionY,
+                    contentW - (innerPadding * 2),
+                    160,
+                    selectedMyAssetsSection,
+                    "This management section is not implemented yet."
+            );
+            guiGraphics.disableScissor();
+            return;
+        }
+
+        if (allAssetsSection) {
+            guiGraphics.drawString(this.font, "Collections", titleX, sectionY, COLOR_TEXT);
+
+            String viewAllCollections = "View all collections ->";
+            guiGraphics.drawString(this.font, viewAllCollections, contentX + contentW - innerPadding - this.font.width(viewAllCollections), sectionY, COLOR_BORDER_ACTIVE);
+
+            int collectionY = sectionY + 18;
+            int collectionGap = 14;
+            int collectionW = (contentW - (innerPadding * 2) - (collectionGap * 2)) / 3;
+            int collectionH = 88;
+
+            for (int i = 0; i < collectionEntries.length; i++) {
+                CollectionEntry entry = collectionEntries[i];
+                int cardX = titleX + i * (collectionW + collectionGap);
+                drawCollectionCard(guiGraphics, cardX, collectionY, collectionW, collectionH, entry);
+            }
+
+            if (!recentAssets.isEmpty()) {
+                int recentTitleY = collectionY + collectionH + 20;
+                guiGraphics.drawString(this.font, "Recently Used", titleX, recentTitleY, COLOR_TEXT);
+
+                String viewAllRecent = "View all recent ->";
+                guiGraphics.drawString(this.font, viewAllRecent, contentX + contentW - innerPadding - this.font.width(viewAllRecent), recentTitleY, COLOR_BORDER_ACTIVE);
+
+                int recentCardY = recentTitleY + 18;
+                int recentGap = 10;
+                int recentW = (contentW - (innerPadding * 2) - (recentGap * 3)) / 4;
+                int recentH = 62;
+
+                for (int i = 0; i < recentAssets.size(); i++) {
+                    int recentX = titleX + i * (recentW + recentGap);
+                    drawRecentMiniCard(guiGraphics, recentX, recentCardY, recentW, recentH, recentAssets.get(i));
+                }
+            }
+        }
 
         String importedSectionTitle = switch (selectedMyAssetsSection) {
             case "Favorites" -> "Favorite Assets";
@@ -2158,23 +2722,9 @@ public class ArchivScreen extends Screen {
             default -> "Imported Assets";
         };
 
-        int importedTitleY = quickButtonY + quickButtonH + 20;
         guiGraphics.drawString(this.font, importedSectionTitle, titleX, importedTitleY, COLOR_TEXT);
 
-        CardGridLayout layout = buildMyAssetsImportedGridLayout(contentX, contentY, contentW, contentH);
-
-        if (!myAssetsShowsImportedGrid()) {
-            drawEmptyState(
-                    guiGraphics,
-                    layout.cardsAreaX,
-                    layout.cardsAreaY,
-                    layout.cardsAreaW,
-                    layout.cardsAreaH,
-                    selectedMyAssetsSection,
-                    "This management section is not implemented yet."
-            );
-            return;
-        }
+        CardGridLayout layout = buildMyAssetsImportedGridLayout(contentX, contentW, importedTitleY, visibleAssets.size());
 
         if (visibleAssets.isEmpty()) {
             if ("Favorites".equals(selectedMyAssetsSection)) {
@@ -2183,9 +2733,19 @@ public class ArchivScreen extends Screen {
                         layout.cardsAreaX,
                         layout.cardsAreaY,
                         layout.cardsAreaW,
-                        layout.cardsAreaH,
+                        160,
                         "No favorite assets yet",
                         "Star a saved asset to see it here."
+                );
+            } else if ("Recent".equals(selectedMyAssetsSection)) {
+                drawEmptyState(
+                        guiGraphics,
+                        layout.cardsAreaX,
+                        layout.cardsAreaY,
+                        layout.cardsAreaW,
+                        160,
+                        "No recent assets yet",
+                        "Load an asset to build your recent history."
                 );
             } else {
                 drawEmptyState(
@@ -2193,7 +2753,7 @@ public class ArchivScreen extends Screen {
                         layout.cardsAreaX,
                         layout.cardsAreaY,
                         layout.cardsAreaW,
-                        layout.cardsAreaH,
+                        160,
                         "No saved assets yet",
                         "Import an asset and click Save to see it here."
                 );
@@ -2211,6 +2771,8 @@ public class ArchivScreen extends Screen {
                 drawAssetCard(guiGraphics, cardX, cardY, layout.cardW, layout.cardH, asset, isLibraryAssetSelected(asset));
             }
         }
+
+        guiGraphics.disableScissor();
     }
 
     private void drawImportTab(GuiGraphics guiGraphics, int rootX, int rootY, int rootW, int rootH,
