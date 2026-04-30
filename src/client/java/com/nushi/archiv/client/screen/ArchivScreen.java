@@ -832,10 +832,11 @@ public class ArchivScreen extends Screen {
         CardGridLayout layout = new CardGridLayout();
 
         int innerPadding = 18;
+        int scrollbarReserve = 16;
 
         layout.cardsAreaX = contentX + innerPadding;
         layout.cardsAreaY = importedTitleY + 18;
-        layout.cardsAreaW = contentW - (innerPadding * 2);
+        layout.cardsAreaW = contentW - (innerPadding * 2) - scrollbarReserve;
 
         layout.cardsGap = 14;
         layout.rowGap = 16;
@@ -2638,10 +2639,12 @@ public class ArchivScreen extends Screen {
 
     private void drawMyAssetsTab(GuiGraphics guiGraphics, int contentX, int contentY, int contentW, int contentH, List<ArchivAsset> visibleAssets) {
         int innerPadding = 18;
+        int scrollbarReserve = 16;
+        int usableContentW = contentW - scrollbarReserve;
 
         int viewportX = contentX + 1;
         int viewportY = contentY + 1;
-        int viewportW = contentW - 2;
+        int viewportW = contentW - 2 - scrollbarReserve;
         int viewportH = contentH - 2;
 
         int titleX = contentX + innerPadding;
@@ -2651,14 +2654,14 @@ public class ArchivScreen extends Screen {
         int statsBaseY = titleBaseY + 40;
 
         int statGap = 12;
-        int statW = (contentW - (innerPadding * 2) - (statGap * 3)) / 4;
+        int statW = (usableContentW - (innerPadding * 2) - (statGap * 3)) / 4;
         int statH = 68;
 
         int quickBaseY = statsBaseY + statH + 18;
         int quickButtonBaseY = quickBaseY + 14;
         int quickButtonH = 30;
         int quickGap = 12;
-        int quickW = (contentW - (innerPadding * 2) - (quickGap * 2)) / 3;
+        int quickW = (usableContentW - (innerPadding * 2) - (quickGap * 2)) / 3;
 
         int sectionBaseY = quickButtonBaseY + quickButtonH + 20;
 
@@ -2712,6 +2715,8 @@ public class ArchivScreen extends Screen {
         int sectionY = sectionBaseY + scrollRenderY;
         int importedTitleY = importedTitleBaseY + scrollRenderY;
 
+        ScrollbarLayout scrollbar = buildMyAssetsScrollbarLayout(contentX, contentY, contentW, contentH);
+
         guiGraphics.enableScissor(viewportX, viewportY, viewportX + viewportW, viewportY + viewportH);
 
         guiGraphics.drawString(this.font, "My Assets", titleX, titleY, COLOR_TEXT);
@@ -2734,7 +2739,7 @@ public class ArchivScreen extends Screen {
 
             int collectionY = sectionY + 34;
             int collectionGap = 14;
-            int collectionW = (contentW - (innerPadding * 2) - (collectionGap * 2)) / 3;
+            int collectionW = (usableContentW - (innerPadding * 2) - (collectionGap * 2)) / 3;
             int collectionH = 94;
 
             for (int i = 0; i < collectionEntries.length; i++) {
@@ -2744,6 +2749,7 @@ public class ArchivScreen extends Screen {
             }
 
             guiGraphics.disableScissor();
+            drawScrollbar(guiGraphics, scrollbar, myAssetsScrollbarDragging);
             return;
         }
 
@@ -2758,6 +2764,7 @@ public class ArchivScreen extends Screen {
                     "This management section is not implemented yet."
             );
             guiGraphics.disableScissor();
+            drawScrollbar(guiGraphics, scrollbar, myAssetsScrollbarDragging);
             return;
         }
 
@@ -2765,11 +2772,11 @@ public class ArchivScreen extends Screen {
             guiGraphics.drawString(this.font, "Collections", titleX, sectionY, COLOR_TEXT);
 
             String viewAllCollections = "View all collections ->";
-            guiGraphics.drawString(this.font, viewAllCollections, contentX + contentW - innerPadding - this.font.width(viewAllCollections), sectionY, COLOR_BORDER_ACTIVE);
+            guiGraphics.drawString(this.font, viewAllCollections, contentX + usableContentW - innerPadding - this.font.width(viewAllCollections), sectionY, COLOR_BORDER_ACTIVE);
 
             int collectionY = sectionY + 18;
             int collectionGap = 14;
-            int collectionW = (contentW - (innerPadding * 2) - (collectionGap * 2)) / 3;
+            int collectionW = (usableContentW - (innerPadding * 2) - (collectionGap * 2)) / 3;
             int collectionH = 88;
 
             for (int i = 0; i < collectionEntries.length; i++) {
@@ -2783,11 +2790,11 @@ public class ArchivScreen extends Screen {
                 guiGraphics.drawString(this.font, "Recently Used", titleX, recentTitleY, COLOR_TEXT);
 
                 String viewAllRecent = "View all recent ->";
-                guiGraphics.drawString(this.font, viewAllRecent, contentX + contentW - innerPadding - this.font.width(viewAllRecent), recentTitleY, COLOR_BORDER_ACTIVE);
+                guiGraphics.drawString(this.font, viewAllRecent, contentX + usableContentW - innerPadding - this.font.width(viewAllRecent), recentTitleY, COLOR_BORDER_ACTIVE);
 
                 int recentCardY = recentTitleY + 18;
                 int recentGap = 10;
-                int recentW = (contentW - (innerPadding * 2) - (recentGap * 3)) / 4;
+                int recentW = (usableContentW - (innerPadding * 2) - (recentGap * 3)) / 4;
                 int recentH = 62;
 
                 for (int i = 0; i < recentAssets.size(); i++) {
@@ -2854,6 +2861,7 @@ public class ArchivScreen extends Screen {
         }
 
         guiGraphics.disableScissor();
+        drawScrollbar(guiGraphics, scrollbar, myAssetsScrollbarDragging);
     }
 
     private void drawImportTab(GuiGraphics guiGraphics, int rootX, int rootY, int rootW, int rootH,
