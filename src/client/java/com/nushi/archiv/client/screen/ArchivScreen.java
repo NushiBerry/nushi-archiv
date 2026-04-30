@@ -1439,6 +1439,10 @@ public class ArchivScreen extends Screen {
         return browseSearchBox.getValue().trim().toLowerCase();
     }
 
+    private boolean isBrowseOverlayOpen() {
+        return assetDetailsOpen || deleteConfirmOpen;
+    }
+
     private String getBrowseSummaryText(List<ArchivAsset> visibleAssets) {
         String searchLabel = getBrowseSearchQuery().isBlank()
                 ? "None"
@@ -2149,11 +2153,14 @@ public class ArchivScreen extends Screen {
         boolean libraryTabActive = browseActive || myAssetsActive;
 
         if (browseSearchBox != null) {
-            browseSearchBox.visible = browseActive;
-            browseSearchBox.active = browseActive;
+            boolean browseSearchEnabled = browseActive && !isBrowseOverlayOpen();
 
-            if (!browseActive) {
+            browseSearchBox.visible = browseSearchEnabled;
+            browseSearchBox.active = browseSearchEnabled;
+
+            if (!browseSearchEnabled) {
                 browseSearchBox.setFocused(false);
+                this.setFocused(null);
             }
         }
 
@@ -2204,9 +2211,6 @@ public class ArchivScreen extends Screen {
             drawTabPlaceholder(guiGraphics, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH, selectedTopTab);
         }
 
-        drawAssetDetailsPanel(guiGraphics, chrome.rootX, chrome.rootY, chrome.rootW, chrome.bodyY);
-        drawDeleteConfirmModal(guiGraphics);
-
         drawPanel(guiGraphics, chrome.rootX, chrome.rootY + chrome.rootH - chrome.footerH, chrome.rootW, chrome.footerH, COLOR_PANEL, COLOR_BORDER);
 
         int footerY = chrome.rootY + chrome.rootH - chrome.footerH + 8;
@@ -2227,6 +2231,9 @@ public class ArchivScreen extends Screen {
         }
 
         super.render(guiGraphics, mouseX, mouseY, delta);
+
+        drawAssetDetailsPanel(guiGraphics, chrome.rootX, chrome.rootY, chrome.rootW, chrome.bodyY);
+        drawDeleteConfirmModal(guiGraphics);
     }
 
     private void drawAssetDetailsPanel(GuiGraphics guiGraphics, int rootX, int rootY, int rootW, int bodyY) {
