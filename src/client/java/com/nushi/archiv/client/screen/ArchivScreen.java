@@ -150,11 +150,13 @@ public class ArchivScreen extends Screen {
     private boolean myAssetsScrollbarDragging = false;
     private int myAssetsScrollbarDragOffset = 0;
 
-    private final CollectionEntry[] collectionEntries = new CollectionEntry[] {
-            new CollectionEntry("Medieval Village Kit", 43, 0xFF6C89B8, 0xFF6D4BC8),
-            new CollectionEntry("Nature Props", 28, 0xFF4E7C57, 0xFF3D9B63),
-            new CollectionEntry("Cyberpunk Signs", 21, 0xFF3A4F84, 0xFFDA8A2D)
-    };
+    private final List<CollectionEntry> collectionEntries = new ArrayList<>(List.of(
+            new CollectionEntry("Medieval Village Kit", "medieval", "Village-themed medieval build set.", 0xFF6C89B8, 0xFF6D4BC8),
+            new CollectionEntry("Nature Props", "nature", "Natural props and environmental assets.", 0xFF4E7C57, 0xFF3D9B63),
+            new CollectionEntry("Cyberpunk Signs", "cyberpunk", "Signs, props and neon pieces.", 0xFF3A4F84, 0xFFDA8A2D)
+    ));
+
+    private String selectedCollectionName = null;
 
     private static class BrowseToolbarLayout {
         int toolbarY;
@@ -246,16 +248,67 @@ public class ArchivScreen extends Screen {
     }
 
     private static class CollectionEntry {
-        final String name;
-        final int assetCount;
+        private String name;
+        private String tag;
+        private String description;
+
         final int previewColor;
         final int accentColor;
 
-        CollectionEntry(String name, int assetCount, int previewColor, int accentColor) {
+        private final List<String> assetNames = new ArrayList<>();
+
+        CollectionEntry(String name, String tag, String description, int previewColor, int accentColor) {
             this.name = name;
-            this.assetCount = assetCount;
+            this.tag = tag;
+            this.description = description;
             this.previewColor = previewColor;
             this.accentColor = accentColor;
+        }
+
+        String getName() {
+            return name;
+        }
+
+        void setName(String name) {
+            this.name = name;
+        }
+
+        String getTag() {
+            return tag;
+        }
+
+        void setTag(String tag) {
+            this.tag = tag;
+        }
+
+        String getDescription() {
+            return description;
+        }
+
+        void setDescription(String description) {
+            this.description = description;
+        }
+
+        int getAssetCount() {
+            return assetNames.size();
+        }
+
+        List<String> getAssetNames() {
+            return assetNames;
+        }
+
+        boolean containsAsset(String assetName) {
+            return assetNames.contains(assetName);
+        }
+
+        void addAsset(String assetName) {
+            if (!assetNames.contains(assetName)) {
+                assetNames.add(assetName);
+            }
+        }
+
+        void removeAsset(String assetName) {
+            assetNames.remove(assetName);
         }
     }
 
@@ -1303,6 +1356,88 @@ public class ArchivScreen extends Screen {
         return recentLoadedAssetNames.size();
     }
 
+    private int getCollectionCount() {
+        return collectionEntries.size();
+    }
+
+    private String getNextCollectionName() {
+        int index = collectionEntries.size() + 1;
+        return "New Collection #" + index;
+    }
+
+    private int getCollectionPreviewColorByIndex(int index) {
+        int[] colors = {
+                0xFF6C89B8,
+                0xFF4E7C57,
+                0xFF3A4F84,
+                0xFF6A5A9A,
+                0xFF5C7A8F
+        };
+
+        return colors[index % colors.length];
+    }
+
+    private int getCollectionAccentColorByIndex(int index) {
+        int[] colors = {
+                0xFF6D4BC8,
+                0xFF3D9B63,
+                0xFFDA8A2D,
+                0xFF2D9CDB,
+                0xFF8A5CFF
+        };
+
+        return colors[index % colors.length];
+    }
+
+    private void createCollection() {
+        int index = collectionEntries.size();
+
+        String name = getNextCollectionName();
+        int previewColor = getCollectionPreviewColorByIndex(index);
+        int accentColor = getCollectionAccentColorByIndex(index);
+
+        collectionEntries.add(new CollectionEntry(
+                name,
+                "",
+                "",
+                previewColor,
+                accentColor
+        ));
+
+        selectedCollectionName = name;
+        selectedMyAssetsSection = "Collections";
+        libraryActionMessage = "Created collection: " + name;
+        resetMyAssetsScroll();
+    }
+
+    private CollectionEntry getSelectedCollectionEntry() {
+        if (selectedCollectionName == null) {
+            return null;
+        }
+
+        for (CollectionEntry entry : collectionEntries) {
+            if (entry.getName().equals(selectedCollectionName)) {
+                return entry;
+            }
+        }
+
+        return null;
+    }
+
+    private CollectionEntry getCollectionByName(String collectionName) {
+        if (collectionName == null) {
+            return null;
+        }
+
+        for (CollectionEntry entry : collectionEntries) {
+            if (entry.getName().equals(collectionName)) {
+                return entry;
+            }
+        }
+
+        return null;
+    }
+
     private boolean myAssetsShowsImportedGrid() {
         return "All Assets".equals(selectedMyAssetsSection)
                 || "Favorites".equals(selectedMyAssetsSection)
@@ -1915,9 +2050,7 @@ public class ArchivScreen extends Screen {
             }
 
             if (isInside(mouseX, myAssetsMouseY, titleX + quickW + quickGap, quickButtonBaseY, quickW, quickButtonH)) {
-                selectedMyAssetsSection = "Collections";
-                libraryActionMessage = "Create Collection not implemented yet";
-                resetMyAssetsScroll();
+                createCollection();
                 return true;
             }
 
@@ -1946,6 +2079,35 @@ public class ArchivScreen extends Screen {
             int sectionBaseY = quickButtonBaseY + quickButtonH + 20;
             List<ArchivAsset> recentAssets = getRecentAssets(4);
             int importedTitleBaseY = sectionBaseY;
+
+            if ("All Assets".equals(selectedMyAssetsSection) || "Collections".equals(selectedMyAssetsSection)) {
+                int collectionSectionBaseY = quickButtonBaseY + quickButtonH + 20;
+                int collectionTitleBaseY = "Collections".equals(selectedMyAssetsSection)
+                        ? collectionSectionBaseY
+                        : collectionSectionBaseY;
+
+                int collectionY = collectionTitleBaseY + 18;
+                if ("Collections".equals(selectedMyAssetsSection)) {
+                    collectionY = collectionSectionBaseY + 34;
+                }
+
+                int collectionGap = 14;
+                int collectionW = (chrome.contentW - (18 * 2) - (collectionGap * 2)) / 3;
+                int collectionH = "Collections".equals(selectedMyAssetsSection) ? 94 : 88;
+
+                for (int i = 0; i < collectionEntries.size(); i++) {
+                    CollectionEntry entry = collectionEntries.get(i);
+                    int cardX = (chrome.contentX + 18) + i * (collectionW + collectionGap);
+
+                    if (isInside(mouseX, myAssetsMouseY, cardX, collectionY, collectionW, collectionH)) {
+                        selectedCollectionName = entry.getName();
+                        selectedMyAssetsSection = "Collections";
+                        libraryActionMessage = "Opened collection: " + entry.getName();
+                        resetMyAssetsScroll();
+                        return true;
+                    }
+                }
+            }
 
             if ("All Assets".equals(selectedMyAssetsSection)) {
                 int collectionBaseY = sectionBaseY + 18;
@@ -2461,8 +2623,13 @@ public class ArchivScreen extends Screen {
         guiGraphics.fill(x + 1, y + 1, x + width - 1, y + bannerH, entry.previewColor);
 
         guiGraphics.drawString(this.font, "COLLECTION", x + 12, y + 16, 0xFFFFFFFF);
-        guiGraphics.drawString(this.font, entry.name, x + 12, y + bannerH + 12, COLOR_TEXT);
-        guiGraphics.drawString(this.font, entry.assetCount + " assets", x + 12, y + bannerH + 26, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, entry.getName(), x + 12, y + bannerH + 12, COLOR_TEXT);
+
+        String tagText = entry.getTag() == null || entry.getTag().isBlank()
+                ? entry.getAssetCount() + " assets"
+                : "#" + entry.getTag() + "  •  " + entry.getAssetCount() + " assets";
+
+        guiGraphics.drawString(this.font, fitTextToWidth(tagText, width - 24), x + 12, y + bannerH + 26, COLOR_TEXT_DIM);
 
         int chipW = getChipWidth("Collection");
         drawChip(guiGraphics, "Collection", x + width - chipW - 12, y + height - 24, chipW, 18, entry.accentColor);
@@ -2725,7 +2892,7 @@ public class ArchivScreen extends Screen {
         drawStatCard(guiGraphics, titleX, statsY, statW, statH, String.valueOf(getSavedFavoritesCount()), "Favorites", "Starred assets");
         drawStatCard(guiGraphics, titleX + statW + statGap, statsY, statW, statH, String.valueOf(savedAssets.size()), "Imported", "Imported assets");
         drawStatCard(guiGraphics, titleX + (statW + statGap) * 2, statsY, statW, statH, String.valueOf(getRecentAssetsCount()), "Recent", "Used recently");
-        drawStatCard(guiGraphics, titleX + (statW + statGap) * 3, statsY, statW, statH, String.valueOf(collectionEntries.length), "Collections", "Saved collections");
+        drawStatCard(guiGraphics, titleX + (statW + statGap) * 3, statsY, statW, statH, String.valueOf(getCollectionCount()), "Collections", "Saved collections");
 
         guiGraphics.drawString(this.font, "Quick Actions", titleX, quickY, COLOR_TEXT);
 
@@ -2737,13 +2904,23 @@ public class ArchivScreen extends Screen {
             guiGraphics.drawString(this.font, "Collections", titleX, sectionY, COLOR_TEXT);
             guiGraphics.drawString(this.font, "Saved themed asset groups and folders.", titleX, sectionY + 16, COLOR_TEXT_DIM);
 
+            if (selectedCollectionName != null) {
+                guiGraphics.drawString(
+                        this.font,
+                        "Selected: " + selectedCollectionName,
+                        titleX + 220,
+                        sectionY,
+                        COLOR_BORDER_ACTIVE
+                );
+            }
+
             int collectionY = sectionY + 34;
             int collectionGap = 14;
             int collectionW = (usableContentW - (innerPadding * 2) - (collectionGap * 2)) / 3;
             int collectionH = 94;
 
-            for (int i = 0; i < collectionEntries.length; i++) {
-                CollectionEntry entry = collectionEntries[i];
+            for (int i = 0; i < collectionEntries.size(); i++) {
+                CollectionEntry entry = collectionEntries.get(i);
                 int cardX = titleX + i * (collectionW + collectionGap);
                 drawCollectionCard(guiGraphics, cardX, collectionY, collectionW, collectionH, entry);
             }
@@ -2779,8 +2956,8 @@ public class ArchivScreen extends Screen {
             int collectionW = (usableContentW - (innerPadding * 2) - (collectionGap * 2)) / 3;
             int collectionH = 88;
 
-            for (int i = 0; i < collectionEntries.length; i++) {
-                CollectionEntry entry = collectionEntries[i];
+            for (int i = 0; i < collectionEntries.size(); i++) {
+                CollectionEntry entry = collectionEntries.get(i);
                 int cardX = titleX + i * (collectionW + collectionGap);
                 drawCollectionCard(guiGraphics, cardX, collectionY, collectionW, collectionH, entry);
             }
