@@ -11,6 +11,9 @@ import net.minecraft.network.chat.Component;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.mojang.blaze3d.platform.InputConstants;
+import org.lwjgl.glfw.GLFW;
+
 public class ArchivScreen extends Screen {
 
     private static final int COLOR_BACKGROUND = 0xFF08111D;
@@ -149,6 +152,9 @@ public class ArchivScreen extends Screen {
     private int myAssetsMaxScroll = 0;
     private boolean myAssetsScrollbarDragging = false;
     private int myAssetsScrollbarDragOffset = 0;
+
+    private int myAssetsCollectionsScrollX = 0;
+    private int myAssetsCollectionsMaxScrollX = 0;
 
     private final List<CollectionEntry> collectionEntries = new ArrayList<>();
     private String selectedCollectionName = null;
@@ -719,6 +725,15 @@ public class ArchivScreen extends Screen {
         return Math.max(min, Math.min(max, value));
     }
 
+    private boolean isShiftHeld() {
+        if (this.minecraft == null) {
+            return false;
+        }
+
+        return InputConstants.isKeyDown(this.minecraft.getWindow(), GLFW.GLFW_KEY_LEFT_SHIFT)
+                || InputConstants.isKeyDown(this.minecraft.getWindow(), GLFW.GLFW_KEY_RIGHT_SHIFT);
+    }
+
     private List<ArchivAsset> getVisibleAssets() {
         List<ArchivAsset> filteredAssets = new ArrayList<>();
 
@@ -763,6 +778,10 @@ public class ArchivScreen extends Screen {
                 }
 
                 return recentAssets;
+            }
+
+            if ("Collections".equals(selectedMyAssetsSection)) {
+                return getSelectedCollectionAssets();
             }
 
             for (ArchivAsset asset : savedAssets) {
@@ -1644,12 +1663,33 @@ public class ArchivScreen extends Screen {
         return null;
     }
 
-    private boolean myAssetsShowsImportedGrid() {
-        return "All Assets".equals(selectedMyAssetsSection)
-                || "Favorites".equals(selectedMyAssetsSection)
-                || "Imported".equals(selectedMyAssetsSection)
-                || "Recent".equals(selectedMyAssetsSection);
+    private List<ArchivAsset> getSelectedCollectionAssets() {
+        List<ArchivAsset> result = new ArrayList<>();
+
+        CollectionEntry selected = getSelectedCollectionEntry();
+        if (selected == null) {
+            return result;
+        }
+
+        for (String assetName : selected.getAssetNames()) {
+            for (ArchivAsset asset : savedAssets) {
+                if (asset.getName().equals(assetName)) {
+                    result.add(asset);
+                    break;
+                }
+            }
+        }
+
+        return result;
     }
+
+        private boolean myAssetsShowsImportedGrid() {
+            return "All Assets".equals(selectedMyAssetsSection)
+                    || "Favorites".equals(selectedMyAssetsSection)
+                    || "Imported".equals(selectedMyAssetsSection)
+                    || "Recent".equals(selectedMyAssetsSection)
+                    || "Collections".equals(selectedMyAssetsSection);
+        }
 
     private ArchivAsset copyAssetWithFavorite(ArchivAsset asset, boolean favorite) {
         return new ArchivAsset(
@@ -2351,10 +2391,16 @@ public class ArchivScreen extends Screen {
                     int cardX = (chrome.contentX + 18) + i * (collectionW + collectionGap);
 
                     if (isInside(mouseX, myAssetsMouseY, cardX, collectionY, collectionW, collectionH)) {
+                        boolean wasCollectionsSection = "Collections".equals(selectedMyAssetsSection);
+
                         selectedCollectionName = entry.getName();
                         selectedMyAssetsSection = "Collections";
                         libraryActionMessage = "Opened collection: " + entry.getName();
-                        resetMyAssetsScroll();
+
+                        if (!wasCollectionsSection) {
+                            resetMyAssetsScroll();
+                        }
+
                         return true;
                     }
                 }
@@ -2463,6 +2509,35 @@ public class ArchivScreen extends Screen {
         if ("My Assets".equals(selectedTopTab)) {
             if (!isInside(mouseX, mouseY, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH)) {
                 return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+            }
+
+            if (isShiftHeld() && ("All Assets".equals(selectedMyAssetsSection) || "Collections".equals(selectedMyAssetsSection))) {
+                int innerPadding = 18;
+                int titleBaseY = chrome.contentY + 16;
+                int statsBaseY = titleBaseY + 40;
+                int statH = 68;
+                int quickBaseY = statsBaseY + statH + 18;
+                int quickButtonBaseY = quickBaseY + 14;
+                int quickButtonH = 30;
+                int sectionBaseY = quickButtonBaseY + quickButtonH + 20;
+
+                int collectionY = "Collections".equals(selectedMyAssetsSection)
+                        ? sectionBaseY + 34 - myAssetsScrollOffset
+                        : sectionBaseY + 18 - myAssetsScrollOffset;
+
+                int collectionH = "Collections".equals(selectedMyAssetsSection) ? 94 : 88;
+                int collectionViewportX = chrome.contentX + innerPadding;
+                int collectionViewportW = (chrome.contentW - 16) - (innerPadding * 2);
+
+                if (isInside(mouseX, mouseY, collectionViewportX, collectionY, collectionViewportW, collectionH)) {
+                    int horizontalStep = 22;
+                    myAssetsCollectionsScrollX = clampInt(
+                            myAssetsCollectionsScrollX - ((int) verticalAmount * horizontalStep),
+                            0,
+                            myAssetsCollectionsMaxScrollX
+                    );
+                    return true;
+                }
             }
 
             if (myAssetsMaxScroll <= 0) {
@@ -2931,24 +3006,31 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(this.font, subtitle, x + 16, y + 46, COLOR_TEXT_DIM);
     }
 
-    private void drawCollectionCard(GuiGraphics guiGraphics, int x, int y, int width, int height, CollectionEntry entry) {
-        drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
+        private void drawCollectionCard(GuiGraphics guiGraphics, int x, int y, int width, int height, CollectionEntry entry, boolean selected) {
+            int borderColor = selected ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
+            int backgroundColor = selected ? COLOR_PANEL_ALT : COLOR_PANEL;
 
-        int bannerH = 46;
-        guiGraphics.fill(x + 1, y + 1, x + width - 1, y + bannerH, entry.previewColor);
+            drawPanel(guiGraphics, x, y, width, height, backgroundColor, borderColor);
 
-        guiGraphics.drawString(this.font, "COLLECTION", x + 12, y + 16, 0xFFFFFFFF);
-        guiGraphics.drawString(this.font, entry.getName(), x + 12, y + bannerH + 12, COLOR_TEXT);
+            if (selected) {
+                guiGraphics.fill(x + 1, y + 1, x + width - 1, y + 3, COLOR_BORDER_ACTIVE);
+            }
 
-        String metaText = entry.getTag() == null || entry.getTag().isBlank()
-                ? entry.getAssetCount() + " assets"
-                : "#" + entry.getTag() + "  •  " + entry.getAssetCount() + " assets";
+            int bannerH = 46;
+            guiGraphics.fill(x + 1, y + 1, x + width - 1, y + bannerH, entry.previewColor);
 
-        guiGraphics.drawString(this.font, fitTextToWidth(metaText, width - 24), x + 12, y + bannerH + 26, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, "COLLECTION", x + 12, y + 16, 0xFFFFFFFF);
+            guiGraphics.drawString(this.font, entry.getName(), x + 12, y + bannerH + 12, COLOR_TEXT);
 
-        int chipW = getChipWidth("Collection");
-        drawChip(guiGraphics, "Collection", x + width - chipW - 12, y + height - 24, chipW, 18, entry.accentColor);
-    }
+            String metaText = entry.getTag() == null || entry.getTag().isBlank()
+                    ? entry.getAssetCount() + " assets"
+                    : "#" + entry.getTag() + "  •  " + entry.getAssetCount() + " assets";
+
+            guiGraphics.drawString(this.font, fitTextToWidth(metaText, width - 24), x + 12, y + bannerH + 26, COLOR_TEXT_DIM);
+
+            int chipW = getChipWidth("Collection");
+            drawChip(guiGraphics, "Collection", x + width - chipW - 12, y + height - 24, chipW, 18, entry.accentColor);
+        }
 
     private void drawRecentMiniCard(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset) {
         drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
@@ -3153,35 +3235,40 @@ public class ArchivScreen extends Screen {
         boolean allAssetsSection = "All Assets".equals(selectedMyAssetsSection);
         boolean showImportedGrid = myAssetsShowsImportedGrid();
 
-        int importedTitleBaseY = sectionBaseY;
+            int importedTitleBaseY = sectionBaseY;
 
-        if (allAssetsSection) {
-            int collectionBaseY = sectionBaseY + 18;
-            int collectionH = 88;
+            if (allAssetsSection) {
+                int collectionBaseY = sectionBaseY + 18;
+                int collectionH = 88;
 
-            importedTitleBaseY = collectionBaseY + collectionH + 20;
+                importedTitleBaseY = collectionBaseY + collectionH + 20;
 
-            if (!recentAssets.isEmpty()) {
-                int recentTitleBaseY = importedTitleBaseY;
-                int recentCardBaseY = recentTitleBaseY + 18;
-                int recentH = 62;
+                if (!recentAssets.isEmpty()) {
+                    int recentTitleBaseY = importedTitleBaseY;
+                    int recentCardBaseY = recentTitleBaseY + 18;
+                    int recentH = 62;
 
-                importedTitleBaseY = recentCardBaseY + recentH + 20;
+                    importedTitleBaseY = recentCardBaseY + recentH + 20;
+                }
             }
-        }
 
-        int contentBottomBaseY;
+            if (collectionsSection) {
+                int collectionBaseY = sectionBaseY + 34;
+                int collectionH = 94;
+                int collectionInfoGap = 16;
+                int collectionInfoH = 54;
 
-        if (collectionsSection) {
-            int collectionBaseY = sectionBaseY + 34;
-            int collectionH = 94;
-            contentBottomBaseY = collectionBaseY + collectionH + 18;
-        } else if (!showImportedGrid) {
-            contentBottomBaseY = sectionBaseY + 120;
-        } else {
-            CardGridLayout measureLayout = buildMyAssetsImportedGridLayout(contentX, contentW, importedTitleBaseY, visibleAssets.size());
-            contentBottomBaseY = importedTitleBaseY + 18 + measureLayout.cardsAreaH + 18;
-        }
+                importedTitleBaseY = collectionBaseY + collectionH + collectionInfoGap + collectionInfoH + 20;
+            }
+
+            int contentBottomBaseY;
+
+            if (!showImportedGrid) {
+                contentBottomBaseY = sectionBaseY + 120;
+            } else {
+                CardGridLayout measureLayout = buildMyAssetsImportedGridLayout(contentX, contentW, importedTitleBaseY, visibleAssets.size());
+                contentBottomBaseY = importedTitleBaseY + 18 + measureLayout.cardsAreaH + 18;
+            }
 
         int viewportBottom = contentY + contentH - 12;
         myAssetsMaxScroll = Math.max(0, contentBottomBaseY - viewportBottom);
@@ -3215,35 +3302,76 @@ public class ArchivScreen extends Screen {
         drawButtonBox(guiGraphics, "Create Collection", titleX + quickW + quickGap, quickButtonY, quickW, quickButtonH, false);
         drawButtonBox(guiGraphics, "Open Local Folder", titleX + (quickW + quickGap) * 2, quickButtonY, quickW, quickButtonH, false);
 
-        if (collectionsSection) {
-            guiGraphics.drawString(this.font, "Collections", titleX, sectionY, COLOR_TEXT);
-            guiGraphics.drawString(this.font, "Saved themed asset groups and folders.", titleX, sectionY + 16, COLOR_TEXT_DIM);
+            if (collectionsSection) {
+                guiGraphics.drawString(this.font, "Collections", titleX, sectionY, COLOR_TEXT);
+                guiGraphics.drawString(this.font, "Saved themed asset groups and folders.", titleX, sectionY + 16, COLOR_TEXT_DIM);
 
-            if (selectedCollectionName != null) {
-                guiGraphics.drawString(
-                        this.font,
-                        "Selected: " + selectedCollectionName,
-                        titleX + 220,
-                        sectionY,
-                        COLOR_BORDER_ACTIVE
+                int collectionY = sectionY + 34;
+                int collectionGap = 14;
+                int collectionW = (usableContentW - (innerPadding * 2) - (collectionGap * 2)) / 3;
+                int collectionH = 94;
+
+                int collectionViewportX = titleX;
+                int collectionViewportY = collectionY;
+                int collectionViewportW = usableContentW - (innerPadding * 2);
+                int collectionViewportH = collectionH;
+
+                int collectionContentW = collectionEntries.isEmpty()
+                        ? collectionViewportW
+                        : (collectionEntries.size() * collectionW) + ((collectionEntries.size() - 1) * collectionGap);
+
+                myAssetsCollectionsMaxScrollX = Math.max(0, collectionContentW - collectionViewportW);
+                myAssetsCollectionsScrollX = clampInt(myAssetsCollectionsScrollX, 0, myAssetsCollectionsMaxScrollX);
+
+                guiGraphics.enableScissor(
+                        collectionViewportX,
+                        collectionViewportY,
+                        collectionViewportX + collectionViewportW,
+                        collectionViewportY + collectionViewportH
                 );
+
+                for (int i = 0; i < collectionEntries.size(); i++) {
+                    CollectionEntry entry = collectionEntries.get(i);
+                    int cardX = titleX + i * (collectionW + collectionGap) - myAssetsCollectionsScrollX;
+
+                    drawCollectionCard(
+                            guiGraphics,
+                            cardX,
+                            collectionY,
+                            collectionW,
+                            collectionH,
+                            entry,
+                            selectedCollectionName != null && selectedCollectionName.equals(entry.getName())
+                    );
+                }
+
+                guiGraphics.disableScissor();
+
+                int infoY = collectionY + collectionH + 16;
+                int infoH = 54;
+
+                drawPanel(guiGraphics, titleX, infoY, usableContentW - (innerPadding * 2), infoH, COLOR_PANEL, COLOR_BORDER);
+
+                CollectionEntry selectedEntry = getSelectedCollectionEntry();
+                if (selectedEntry == null) {
+                    guiGraphics.drawString(this.font, "No collection selected", titleX + 12, infoY + 12, COLOR_TEXT);
+                    guiGraphics.drawString(this.font, "Choose a collection card above to view its assets.", titleX + 12, infoY + 28, COLOR_TEXT_DIM);
+                } else {
+                    guiGraphics.drawString(this.font, selectedEntry.getName(), titleX + 12, infoY + 12, COLOR_TEXT);
+
+                    String metaLine = selectedEntry.getTag() == null || selectedEntry.getTag().isBlank()
+                            ? selectedEntry.getAssetCount() + " assets"
+                            : "#" + selectedEntry.getTag() + "  •  " + selectedEntry.getAssetCount() + " assets";
+
+                    guiGraphics.drawString(this.font, metaLine, titleX + 12, infoY + 28, COLOR_TEXT_DIM);
+
+                    String description = selectedEntry.getDescription() == null || selectedEntry.getDescription().isBlank()
+                            ? "No description yet."
+                            : fitTextToWidth(selectedEntry.getDescription(), usableContentW - (innerPadding * 2) - 24);
+
+                    guiGraphics.drawString(this.font, description, titleX + 180, infoY + 28, COLOR_TEXT_DIM);
+                }
             }
-
-            int collectionY = sectionY + 34;
-            int collectionGap = 14;
-            int collectionW = (usableContentW - (innerPadding * 2) - (collectionGap * 2)) / 3;
-            int collectionH = 94;
-
-            for (int i = 0; i < collectionEntries.size(); i++) {
-                CollectionEntry entry = collectionEntries.get(i);
-                int cardX = titleX + i * (collectionW + collectionGap);
-                drawCollectionCard(guiGraphics, cardX, collectionY, collectionW, collectionH, entry);
-            }
-
-            guiGraphics.disableScissor();
-            drawScrollbar(guiGraphics, scrollbar, myAssetsScrollbarDragging);
-            return;
-        }
 
         if (!showImportedGrid) {
             drawEmptyState(
@@ -3271,11 +3399,41 @@ public class ArchivScreen extends Screen {
             int collectionW = (usableContentW - (innerPadding * 2) - (collectionGap * 2)) / 3;
             int collectionH = 88;
 
+            int collectionViewportX = titleX;
+            int collectionViewportY = collectionY;
+            int collectionViewportW = usableContentW - (innerPadding * 2);
+            int collectionViewportH = collectionH;
+
+            int collectionContentW = collectionEntries.isEmpty()
+                    ? collectionViewportW
+                    : (collectionEntries.size() * collectionW) + ((collectionEntries.size() - 1) * collectionGap);
+
+            myAssetsCollectionsMaxScrollX = Math.max(0, collectionContentW - collectionViewportW);
+            myAssetsCollectionsScrollX = clampInt(myAssetsCollectionsScrollX, 0, myAssetsCollectionsMaxScrollX);
+
+            guiGraphics.enableScissor(
+                    collectionViewportX,
+                    collectionViewportY,
+                    collectionViewportX + collectionViewportW,
+                    collectionViewportY + collectionViewportH
+            );
+
             for (int i = 0; i < collectionEntries.size(); i++) {
                 CollectionEntry entry = collectionEntries.get(i);
-                int cardX = titleX + i * (collectionW + collectionGap);
-                drawCollectionCard(guiGraphics, cardX, collectionY, collectionW, collectionH, entry);
+                int cardX = titleX + i * (collectionW + collectionGap) - myAssetsCollectionsScrollX;
+
+                drawCollectionCard(
+                        guiGraphics,
+                        cardX,
+                        collectionY,
+                        collectionW,
+                        collectionH,
+                        entry,
+                        selectedCollectionName != null && selectedCollectionName.equals(entry.getName())
+                );
             }
+
+            guiGraphics.disableScissor();
 
             if (!recentAssets.isEmpty()) {
                 int recentTitleY = collectionY + collectionH + 20;
@@ -3296,61 +3454,64 @@ public class ArchivScreen extends Screen {
             }
         }
 
-        String importedSectionTitle = switch (selectedMyAssetsSection) {
-            case "Favorites" -> "Favorite Assets";
-            case "Recent" -> "Recent Assets";
-            default -> "Imported Assets";
-        };
+            String importedSectionTitle = switch (selectedMyAssetsSection) {
+                case "Favorites" -> "Favorite Assets";
+                case "Recent" -> "Recent Assets";
+                case "Collections" -> selectedCollectionName != null
+                        ? "Assets in " + selectedCollectionName
+                        : "Collection Assets";
+                default -> "Imported Assets";
+            };
 
         guiGraphics.drawString(this.font, importedSectionTitle, titleX, importedTitleY, COLOR_TEXT);
 
         CardGridLayout layout = buildMyAssetsImportedGridLayout(contentX, contentW, importedTitleY, visibleAssets.size());
 
-        if (visibleAssets.isEmpty()) {
-            if ("Favorites".equals(selectedMyAssetsSection)) {
-                drawEmptyState(
-                        guiGraphics,
-                        layout.cardsAreaX,
-                        layout.cardsAreaY,
-                        layout.cardsAreaW,
-                        160,
-                        "No favorite assets yet",
-                        "Star a saved asset to see it here."
-                );
-            } else if ("Recent".equals(selectedMyAssetsSection)) {
-                drawEmptyState(
-                        guiGraphics,
-                        layout.cardsAreaX,
-                        layout.cardsAreaY,
-                        layout.cardsAreaW,
-                        160,
-                        "No recent assets yet",
-                        "Load an asset to build your recent history."
-                );
-            } else {
-                drawEmptyState(
-                        guiGraphics,
-                        layout.cardsAreaX,
-                        layout.cardsAreaY,
-                        layout.cardsAreaW,
-                        160,
-                        "No saved assets yet",
-                        "Import an asset and click Save to see it here."
-                );
+            if (visibleAssets.isEmpty()) {
+                if ("Favorites".equals(selectedMyAssetsSection)) {
+                    drawEmptyState(
+                            guiGraphics,
+                            layout.cardsAreaX,
+                            layout.cardsAreaY,
+                            layout.cardsAreaW,
+                            160,
+                            "No favorite assets yet",
+                            "Star a saved asset to see it here."
+                    );
+                } else if ("Recent".equals(selectedMyAssetsSection)) {
+                    drawEmptyState(
+                            guiGraphics,
+                            layout.cardsAreaX,
+                            layout.cardsAreaY,
+                            layout.cardsAreaW,
+                            160,
+                            "No recent assets yet",
+                            "Load an asset to build your recent history."
+                    );
+                } else if ("Collections".equals(selectedMyAssetsSection)) {
+                    drawEmptyState(
+                            guiGraphics,
+                            layout.cardsAreaX,
+                            layout.cardsAreaY,
+                            layout.cardsAreaW,
+                            160,
+                            selectedCollectionName == null ? "No collection selected" : "This collection is empty",
+                            selectedCollectionName == null
+                                    ? "Choose a collection card above."
+                                    : "Use Add to Collection to organize assets here."
+                    );
+                } else {
+                    drawEmptyState(
+                            guiGraphics,
+                            layout.cardsAreaX,
+                            layout.cardsAreaY,
+                            layout.cardsAreaW,
+                            160,
+                            "No saved assets yet",
+                            "Import an asset and click Save to see it here."
+                    );
+                }
             }
-        } else {
-            for (int i = 0; i < visibleAssets.size(); i++) {
-                ArchivAsset asset = visibleAssets.get(i);
-
-                int column = i % layout.columns;
-                int row = i / layout.columns;
-
-                int cardX = layout.cardsAreaX + column * (layout.cardW + layout.cardsGap);
-                int cardY = layout.cardsAreaY + row * (layout.cardH + layout.rowGap);
-
-                drawAssetCard(guiGraphics, cardX, cardY, layout.cardW, layout.cardH, asset, isLibraryAssetSelected(asset));
-            }
-        }
 
         guiGraphics.disableScissor();
         drawScrollbar(guiGraphics, scrollbar, myAssetsScrollbarDragging);
