@@ -150,13 +150,13 @@ public class ArchivScreen extends Screen {
     private boolean myAssetsScrollbarDragging = false;
     private int myAssetsScrollbarDragOffset = 0;
 
-    private final List<CollectionEntry> collectionEntries = new ArrayList<>(List.of(
-            new CollectionEntry("Medieval Village Kit", "medieval", "Village-themed medieval build set.", 0xFF6C89B8, 0xFF6D4BC8),
-            new CollectionEntry("Nature Props", "nature", "Natural props and environmental assets.", 0xFF4E7C57, 0xFF3D9B63),
-            new CollectionEntry("Cyberpunk Signs", "cyberpunk", "Signs, props and neon pieces.", 0xFF3A4F84, 0xFFDA8A2D)
-    ));
-
+    private final List<CollectionEntry> collectionEntries = new ArrayList<>();
     private String selectedCollectionName = null;
+
+    private boolean createCollectionModalOpen = false;
+    private EditBox collectionNameBox;
+    private EditBox collectionTagBox;
+    private EditBox collectionDescriptionBox;
 
     private static class BrowseToolbarLayout {
         int toolbarY;
@@ -484,6 +484,33 @@ public class ArchivScreen extends Screen {
         int thumbH;
     }
 
+    private static class CreateCollectionModalLayout {
+        int panelX;
+        int panelY;
+        int panelW;
+        int panelH;
+
+        int closeX;
+        int closeY;
+        int closeSize;
+
+        int fieldX;
+        int fieldW;
+        int fieldH;
+
+        int nameY;
+        int tagY;
+        int descriptionY;
+
+        int cancelX;
+        int cancelY;
+        int cancelW;
+        int createX;
+        int createY;
+        int createW;
+        int buttonH;
+    }
+
     public ArchivScreen(Component title, Screen parent) {
         super(title);
         this.parent = parent;
@@ -525,6 +552,53 @@ public class ArchivScreen extends Screen {
         });
 
         this.addRenderableWidget(browseSearchBox);
+        CreateCollectionModalLayout collectionModal = buildCreateCollectionModalLayout();
+
+        collectionNameBox = new EditBox(
+                this.font,
+                collectionModal.fieldX + 6,
+                collectionModal.nameY + 1,
+                collectionModal.fieldW - 12,
+                collectionModal.fieldH - 2,
+                Component.literal("Collection Name")
+        );
+        collectionNameBox.setBordered(false);
+        collectionNameBox.setMaxLength(40);
+        collectionNameBox.setTextColor(COLOR_TEXT);
+        collectionNameBox.setTextColorUneditable(COLOR_TEXT_DIM);
+        collectionNameBox.setHint(Component.literal("Name (required)"));
+
+        collectionTagBox = new EditBox(
+                this.font,
+                collectionModal.fieldX + 1,
+                collectionModal.tagY + 1,
+                collectionModal.fieldW - 2,
+                collectionModal.fieldH - 2,
+                Component.literal("Collection Tag")
+        );
+        collectionTagBox.setBordered(false);
+        collectionTagBox.setMaxLength(24);
+        collectionTagBox.setTextColor(COLOR_TEXT);
+        collectionTagBox.setTextColorUneditable(COLOR_TEXT_DIM);
+        collectionTagBox.setHint(Component.literal("Tag (optional)"));
+
+        collectionDescriptionBox = new EditBox(
+                this.font,
+                collectionModal.fieldX + 1,
+                collectionModal.descriptionY + 1,
+                collectionModal.fieldW - 2,
+                collectionModal.fieldH - 2,
+                Component.literal("Collection Description")
+        );
+        collectionDescriptionBox.setBordered(false);
+        collectionDescriptionBox.setMaxLength(80);
+        collectionDescriptionBox.setTextColor(COLOR_TEXT);
+        collectionDescriptionBox.setTextColorUneditable(COLOR_TEXT_DIM);
+        collectionDescriptionBox.setHint(Component.literal("Description (optional)"));
+
+        this.addRenderableWidget(collectionNameBox);
+        this.addRenderableWidget(collectionTagBox);
+        this.addRenderableWidget(collectionDescriptionBox);
     }
 
     @Override
@@ -1047,6 +1121,39 @@ public class ArchivScreen extends Screen {
         return layout;
     }
 
+    private CreateCollectionModalLayout buildCreateCollectionModalLayout() {
+        CreateCollectionModalLayout layout = new CreateCollectionModalLayout();
+
+        layout.panelW = 430;
+        layout.panelH = 250;
+        layout.panelX = (this.width - layout.panelW) / 2;
+        layout.panelY = (this.height - layout.panelH) / 2;
+
+        layout.closeSize = 20;
+        layout.closeX = layout.panelX + layout.panelW - layout.closeSize - 12;
+        layout.closeY = layout.panelY + 12;
+
+        layout.fieldX = layout.panelX + 16;
+        layout.fieldW = layout.panelW - 32;
+        layout.fieldH = 26;
+
+        layout.nameY = layout.panelY + 56;
+        layout.tagY = layout.nameY + 42;
+        layout.descriptionY = layout.tagY + 42;
+
+        layout.buttonH = 24;
+        layout.cancelW = 90;
+        layout.createW = 112;
+
+        layout.cancelY = layout.panelY + layout.panelH - 36;
+        layout.createY = layout.cancelY;
+
+        layout.createX = layout.panelX + layout.panelW - 16 - layout.createW;
+        layout.cancelX = layout.createX - 10 - layout.cancelW;
+
+        return layout;
+    }
+
     private int getMyAssetsImportedTitleY(int contentY) {
         int titleY = contentY + 16;
         int statsY = titleY + 40;
@@ -1410,6 +1517,105 @@ public class ArchivScreen extends Screen {
         resetMyAssetsScroll();
     }
 
+    private String trimToEmpty(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private boolean collectionNameExists(String name) {
+        for (CollectionEntry entry : collectionEntries) {
+            if (entry.getName().equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String getUniqueCollectionName(String baseName) {
+        if (!collectionNameExists(baseName)) {
+            return baseName;
+        }
+
+        int index = 2;
+        while (collectionNameExists(baseName + " #" + index)) {
+            index++;
+        }
+
+        return baseName + " #" + index;
+    }
+
+    private boolean isCreateCollectionFormValid() {
+        return collectionNameBox != null && !trimToEmpty(collectionNameBox.getValue()).isBlank();
+    }
+
+    private void openCreateCollectionModal() {
+        createCollectionModalOpen = true;
+
+        if (collectionNameBox != null) {
+            collectionNameBox.setValue("");
+            collectionNameBox.setFocused(true);
+            this.setFocused(collectionNameBox);
+        }
+
+        if (collectionTagBox != null) {
+            collectionTagBox.setValue("");
+            collectionTagBox.setFocused(false);
+        }
+
+        if (collectionDescriptionBox != null) {
+            collectionDescriptionBox.setValue("");
+            collectionDescriptionBox.setFocused(false);
+        }
+
+        closeListMenu();
+    }
+
+    private void closeCreateCollectionModal() {
+        createCollectionModalOpen = false;
+
+        if (collectionNameBox != null) {
+            collectionNameBox.setFocused(false);
+        }
+        if (collectionTagBox != null) {
+            collectionTagBox.setFocused(false);
+        }
+        if (collectionDescriptionBox != null) {
+            collectionDescriptionBox.setFocused(false);
+        }
+
+        this.setFocused(null);
+    }
+
+    private void createCollectionFromModal() {
+        String rawName = trimToEmpty(collectionNameBox.getValue());
+        String tag = trimToEmpty(collectionTagBox.getValue());
+        String description = trimToEmpty(collectionDescriptionBox.getValue());
+
+        if (rawName.isBlank()) {
+            libraryActionMessage = "Collection name is required";
+            return;
+        }
+
+        String finalName = getUniqueCollectionName(rawName);
+        int index = collectionEntries.size();
+
+        int previewColor = getCollectionPreviewColorByIndex(index);
+        int accentColor = getCollectionAccentColorByIndex(index);
+
+        collectionEntries.add(new CollectionEntry(
+                finalName,
+                tag,
+                description,
+                previewColor,
+                accentColor
+        ));
+
+        selectedCollectionName = finalName;
+        selectedMyAssetsSection = "Collections";
+        libraryActionMessage = "Created collection: " + finalName;
+        resetMyAssetsScroll();
+        closeCreateCollectionModal();
+    }
+
     private CollectionEntry getSelectedCollectionEntry() {
         if (selectedCollectionName == null) {
             return null;
@@ -1654,6 +1860,52 @@ public class ArchivScreen extends Screen {
                 return true;
             }
 
+            return true;
+        }
+
+        if (createCollectionModalOpen) {
+            CreateCollectionModalLayout modal = buildCreateCollectionModalLayout();
+
+            if (isInside(mouseX, mouseY, modal.closeX, modal.closeY, modal.closeSize, modal.closeSize)) {
+                closeCreateCollectionModal();
+                return true;
+            }
+
+            if (isInside(mouseX, mouseY, modal.cancelX, modal.cancelY, modal.cancelW, modal.buttonH)) {
+                closeCreateCollectionModal();
+                return true;
+            }
+
+            if (isInside(mouseX, mouseY, modal.createX, modal.createY, modal.createW, modal.buttonH)) {
+                createCollectionFromModal();
+                return true;
+            }
+
+            if (collectionNameBox != null && isInside(mouseX, mouseY, collectionNameBox.getX(), collectionNameBox.getY(), collectionNameBox.getWidth(), collectionNameBox.getHeight())) {
+                collectionNameBox.setFocused(true);
+                if (collectionTagBox != null) collectionTagBox.setFocused(false);
+                if (collectionDescriptionBox != null) collectionDescriptionBox.setFocused(false);
+                this.setFocused(collectionNameBox);
+                return super.mouseClicked(event, doubleClick);
+            }
+
+            if (collectionTagBox != null && isInside(mouseX, mouseY, collectionTagBox.getX(), collectionTagBox.getY(), collectionTagBox.getWidth(), collectionTagBox.getHeight())) {
+                collectionTagBox.setFocused(true);
+                if (collectionNameBox != null) collectionNameBox.setFocused(false);
+                if (collectionDescriptionBox != null) collectionDescriptionBox.setFocused(false);
+                this.setFocused(collectionTagBox);
+                return super.mouseClicked(event, doubleClick);
+            }
+
+            if (collectionDescriptionBox != null && isInside(mouseX, mouseY, collectionDescriptionBox.getX(), collectionDescriptionBox.getY(), collectionDescriptionBox.getWidth(), collectionDescriptionBox.getHeight())) {
+                collectionDescriptionBox.setFocused(true);
+                if (collectionNameBox != null) collectionNameBox.setFocused(false);
+                if (collectionTagBox != null) collectionTagBox.setFocused(false);
+                this.setFocused(collectionDescriptionBox);
+                return super.mouseClicked(event, doubleClick);
+            }
+
+            this.setFocused(null);
             return true;
         }
 
@@ -2050,10 +2302,9 @@ public class ArchivScreen extends Screen {
             }
 
             if (isInside(mouseX, myAssetsMouseY, titleX + quickW + quickGap, quickButtonBaseY, quickW, quickButtonH)) {
-                createCollection();
+                openCreateCollectionModal();
                 return true;
             }
-
             if (isInside(mouseX, myAssetsMouseY, titleX + (quickW + quickGap) * 2, quickButtonBaseY, quickW, quickButtonH)) {
                 selectedMyAssetsSection = "Local Packs";
                 libraryActionMessage = "Local Packs not implemented yet";
@@ -2323,7 +2574,39 @@ public class ArchivScreen extends Screen {
 
             if (!browseSearchEnabled) {
                 browseSearchBox.setFocused(false);
-                this.setFocused(null);
+
+                if (this.getFocused() == browseSearchBox) {
+                    this.setFocused(null);
+                }
+            }
+        }
+
+        boolean collectionModalActive = createCollectionModalOpen;
+
+        if (collectionNameBox != null) {
+            collectionNameBox.visible = collectionModalActive;
+            collectionNameBox.active = collectionModalActive;
+
+            if (!collectionModalActive) {
+                collectionNameBox.setFocused(false);
+            }
+        }
+
+        if (collectionTagBox != null) {
+            collectionTagBox.visible = collectionModalActive;
+            collectionTagBox.active = collectionModalActive;
+
+            if (!collectionModalActive) {
+                collectionTagBox.setFocused(false);
+            }
+        }
+
+        if (collectionDescriptionBox != null) {
+            collectionDescriptionBox.visible = collectionModalActive;
+            collectionDescriptionBox.active = collectionModalActive;
+
+            if (!collectionModalActive) {
+                collectionDescriptionBox.setFocused(false);
             }
         }
 
@@ -2393,10 +2676,42 @@ public class ArchivScreen extends Screen {
             guiGraphics.drawString(this.font, selectedTopTab, chrome.rootX + chrome.rootW - 80, footerY, COLOR_TEXT_DIM);
         }
 
+        if (createCollectionModalOpen) {
+            drawCreateCollectionModal(guiGraphics);
+        }
+
         super.render(guiGraphics, mouseX, mouseY, delta);
 
         drawAssetDetailsPanel(guiGraphics, chrome.rootX, chrome.rootY, chrome.rootW, chrome.bodyY);
         drawDeleteConfirmModal(guiGraphics);
+    }
+
+    private void drawCreateCollectionModal(GuiGraphics guiGraphics) {
+        if (!createCollectionModalOpen) {
+            return;
+        }
+
+        CreateCollectionModalLayout modal = buildCreateCollectionModalLayout();
+
+        guiGraphics.fill(0, 0, this.width, this.height, 0x88000000);
+        drawPanel(guiGraphics, modal.panelX, modal.panelY, modal.panelW, modal.panelH, COLOR_PANEL_ALT, COLOR_BORDER_ACTIVE);
+
+        guiGraphics.drawString(this.font, "Create Collection", modal.panelX + 16, modal.panelY + 16, COLOR_TEXT);
+
+        drawPanel(guiGraphics, modal.closeX, modal.closeY, modal.closeSize, modal.closeSize, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "X", modal.closeX + 6, modal.closeY + 6, COLOR_TEXT);
+
+        guiGraphics.drawString(this.font, "Name", modal.fieldX, modal.nameY - 12, COLOR_TEXT_DIM);
+        drawPanel(guiGraphics, modal.fieldX, modal.nameY, modal.fieldW, modal.fieldH, COLOR_PANEL, COLOR_BORDER);
+
+        guiGraphics.drawString(this.font, "Tag", modal.fieldX, modal.tagY - 12, COLOR_TEXT_DIM);
+        drawPanel(guiGraphics, modal.fieldX, modal.tagY, modal.fieldW, modal.fieldH, COLOR_PANEL, COLOR_BORDER);
+
+        guiGraphics.drawString(this.font, "Description", modal.fieldX, modal.descriptionY - 12, COLOR_TEXT_DIM);
+        drawPanel(guiGraphics, modal.fieldX, modal.descriptionY, modal.fieldW, modal.fieldH, COLOR_PANEL, COLOR_BORDER);
+
+        drawButtonBox(guiGraphics, "Cancel", modal.cancelX, modal.cancelY, modal.cancelW, modal.buttonH, false);
+        drawButtonBoxState(guiGraphics, "Create", modal.createX, modal.createY, modal.createW, modal.buttonH, true, isCreateCollectionFormValid());
     }
 
     private void drawAssetDetailsPanel(GuiGraphics guiGraphics, int rootX, int rootY, int rootW, int bodyY) {
@@ -2625,11 +2940,11 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(this.font, "COLLECTION", x + 12, y + 16, 0xFFFFFFFF);
         guiGraphics.drawString(this.font, entry.getName(), x + 12, y + bannerH + 12, COLOR_TEXT);
 
-        String tagText = entry.getTag() == null || entry.getTag().isBlank()
+        String metaText = entry.getTag() == null || entry.getTag().isBlank()
                 ? entry.getAssetCount() + " assets"
                 : "#" + entry.getTag() + "  •  " + entry.getAssetCount() + " assets";
 
-        guiGraphics.drawString(this.font, fitTextToWidth(tagText, width - 24), x + 12, y + bannerH + 26, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, fitTextToWidth(metaText, width - 24), x + 12, y + bannerH + 26, COLOR_TEXT_DIM);
 
         int chipW = getChipWidth("Collection");
         drawChip(guiGraphics, "Collection", x + width - chipW - 12, y + height - 24, chipW, 18, entry.accentColor);
