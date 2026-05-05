@@ -79,6 +79,9 @@ public class ArchivScreen extends Screen {
     private boolean listMenuOpen = false;
     private String listMenuAssetName = null;
 
+    private boolean collectionPickerOpen = false;
+    private String pendingCollectionAssetName = null;
+
     private boolean mockStructureFileSelected = false;
     private final String mockStructureFileName = "stone_tower.schem";
     private final String mockStructureFileFormat = ".schem";
@@ -960,8 +963,8 @@ public class ArchivScreen extends Screen {
         layout.menuDotsX = x + width - 18;
         layout.menuDotsY = y + (height / 2) - 6;
 
-        layout.menuW = 112;
-        layout.menuH = 22;
+        layout.menuW = 156;
+        layout.menuH = 44;
         layout.menuX = x + width - layout.menuW - 28;
         layout.menuY = y + 8;
 
@@ -1098,8 +1101,8 @@ public class ArchivScreen extends Screen {
         layout.menuDotsX = x + 8;
         layout.menuDotsY = y + 8;
 
-        layout.menuW = 112;
-        layout.menuH = 22;
+        layout.menuW = 156;
+        layout.menuH = 44;
         layout.menuX = x + 8;
         layout.menuY = y + 24;
 
@@ -1310,18 +1313,70 @@ public class ArchivScreen extends Screen {
 
         listMenuOpen = true;
         listMenuAssetName = asset.getName();
+        collectionPickerOpen = false;
         selectedLibraryAssetName = asset.getName();
     }
 
     private void closeListMenu() {
         listMenuOpen = false;
         listMenuAssetName = null;
+        collectionPickerOpen = false;
     }
 
     private boolean isListMenuOpenFor(ArchivAsset asset) {
         return listMenuOpen
                 && listMenuAssetName != null
                 && listMenuAssetName.equals(asset.getName());
+    }
+
+    private boolean isCollectionPickerOpenFor(ArchivAsset asset) {
+        return isListMenuOpenFor(asset) && collectionPickerOpen;
+    }
+
+    private void openCollectionPicker(ArchivAsset asset) {
+        if (!isSavedAsset(asset)) {
+            return;
+        }
+
+        listMenuOpen = true;
+        listMenuAssetName = asset.getName();
+        collectionPickerOpen = true;
+        selectedLibraryAssetName = asset.getName();
+    }
+
+    private ArchivAsset getSavedAssetByName(String assetName) {
+        if (assetName == null) {
+            return null;
+        }
+
+        for (ArchivAsset asset : savedAssets) {
+            if (asset.getName().equals(assetName)) {
+                return asset;
+            }
+        }
+
+        return null;
+    }
+
+    private void addAssetToCollection(ArchivAsset asset, CollectionEntry targetCollection) {
+        closeListMenu();
+
+        if (targetCollection == null) {
+            libraryActionMessage = "Collection not found";
+            return;
+        }
+
+        boolean alreadyAdded = targetCollection.containsAsset(asset.getName());
+        targetCollection.addAsset(asset.getName());
+        selectedCollectionName = targetCollection.getName();
+
+        libraryActionMessage = alreadyAdded
+                ? asset.getName() + " is already in " + targetCollection.getName()
+                : "Added " + asset.getName() + " to " + targetCollection.getName();
+    }
+
+    private int getAssetCollectionPickerItemCount() {
+        return collectionEntries.size() + 1; // collections + create new
     }
 
     private void deleteAsset(ArchivAsset asset) {
@@ -1602,6 +1657,7 @@ public class ArchivScreen extends Screen {
         }
 
         this.setFocused(null);
+        pendingCollectionAssetName = null;
     }
 
     private void createCollectionFromModal() {
@@ -1620,18 +1676,29 @@ public class ArchivScreen extends Screen {
         int previewColor = getCollectionPreviewColorByIndex(index);
         int accentColor = getCollectionAccentColorByIndex(index);
 
-        collectionEntries.add(new CollectionEntry(
+        CollectionEntry newEntry = new CollectionEntry(
                 finalName,
                 tag,
                 description,
                 previewColor,
                 accentColor
-        ));
+        );
 
+        collectionEntries.add(newEntry);
         selectedCollectionName = finalName;
         selectedMyAssetsSection = "Collections";
-        libraryActionMessage = "Created collection: " + finalName;
+
+        ArchivAsset pendingAsset = getSavedAssetByName(pendingCollectionAssetName);
+
+        if (pendingAsset != null) {
+            newEntry.addAsset(pendingAsset.getName());
+            libraryActionMessage = "Created " + finalName + " and added " + pendingAsset.getName();
+        } else {
+            libraryActionMessage = "Created collection: " + finalName;
+        }
+
         resetMyAssetsScroll();
+        pendingCollectionAssetName = null;
         closeCreateCollectionModal();
     }
 
@@ -1681,6 +1748,122 @@ public class ArchivScreen extends Screen {
         }
 
         return result;
+    }
+
+    private CollectionEntry getDefaultTargetCollection() {
+        CollectionEntry selected = getSelectedCollectionEntry();
+
+        if (selected != null) {
+            return selected;
+        }
+
+        if (!collectionEntries.isEmpty()) {
+            return collectionEntries.get(0);
+        }
+
+        return null;
+    }
+
+    private void addAssetToDefaultCollection(ArchivAsset asset) {
+        closeListMenu();
+
+        CollectionEntry targetCollection = getDefaultTargetCollection();
+
+        if (targetCollection == null) {
+            libraryActionMessage = "Create a collection before adding assets";
+            openCreateCollectionModal();
+            return;
+        }
+
+        boolean alreadyAdded = targetCollection.containsAsset(asset.getName());
+
+        targetCollection.addAsset(asset.getName());
+        selectedCollectionName = targetCollection.getName();
+
+        libraryActionMessage = alreadyAdded
+                ? asset.getName() + " is already in " + targetCollection.getName()
+                : "Added " + asset.getName() + " to " + targetCollection.getName();
+    }
+
+    private int getAssetCollectionRollupW() {
+        return 176;
+    }
+
+    private int getAssetCollectionRollupX(int menuX, int menuW, int rollupW) {
+        int preferredX = menuX + menuW + 4;
+        int rightLimit = this.width - 24;
+
+        if (preferredX + rollupW <= rightLimit) {
+            return preferredX;
+        }
+
+        return menuX - rollupW - 4;
+    }
+
+    private int getAssetCollectionRollupY(int menuY) {
+        return menuY + 22;
+    }
+
+    private boolean isHoveringAddToCollectionRow(double mouseX, double mouseY, int menuX, int menuY, int menuW) {
+        int itemH = 22;
+        return isInside(mouseX, mouseY, menuX, menuY + itemH, menuW, itemH);
+    }
+
+    private boolean isInsideCollectionRollup(double mouseX, double mouseY, int menuX, int menuY, int menuW) {
+        int itemH = 22;
+        int rollupW = getAssetCollectionRollupW();
+        int rollupX = getAssetCollectionRollupX(menuX, menuW, rollupW);
+        int rollupY = getAssetCollectionRollupY(menuY);
+        int rollupH = getAssetCollectionPickerItemCount() * itemH;
+
+        return isInside(mouseX, mouseY, rollupX, rollupY, rollupW, rollupH);
+    }
+
+    private boolean shouldShowCollectionRollup(double mouseX, double mouseY, int menuX, int menuY, int menuW) {
+        return isHoveringAddToCollectionRow(mouseX, mouseY, menuX, menuY, menuW)
+                || isInsideCollectionRollup(mouseX, mouseY, menuX, menuY, menuW);
+    }
+
+    private boolean handleAssetContextMenuClick(double mouseX, double mouseY, ArchivAsset asset, int menuX, int menuY, int menuW) {
+        if (!isSavedAsset(asset) || !isListMenuOpenFor(asset)) {
+            return false;
+        }
+
+        int itemH = 22;
+
+        if (isInside(mouseX, mouseY, menuX, menuY, menuW, itemH)) {
+            openDeleteConfirm(asset);
+            return true;
+        }
+
+        if (isInside(mouseX, mouseY, menuX, menuY + itemH, menuW, itemH)) {
+            return true;
+        }
+
+        if (shouldShowCollectionRollup(mouseX, mouseY, menuX, menuY, menuW)) {
+            int rollupW = getAssetCollectionRollupW();
+            int rollupX = getAssetCollectionRollupX(menuX, menuW, rollupW);
+            int rollupY = getAssetCollectionRollupY(menuY);
+
+            for (int i = 0; i < collectionEntries.size(); i++) {
+                int rowY = rollupY + (i * itemH);
+
+                if (isInside(mouseX, mouseY, rollupX, rowY, rollupW, itemH)) {
+                    addAssetToCollection(asset, collectionEntries.get(i));
+                    return true;
+                }
+            }
+
+            int createY = rollupY + (collectionEntries.size() * itemH);
+
+            if (isInside(mouseX, mouseY, rollupX, createY, rollupW, itemH)) {
+                pendingCollectionAssetName = asset.getName();
+                openCreateCollectionModal();
+                return true;
+            }
+        }
+
+        return false;
     }
 
         private boolean myAssetsShowsImportedGrid() {
@@ -2179,9 +2362,7 @@ public class ArchivScreen extends Screen {
                     BrowseListRowLayout rowLayout = buildBrowseListRowLayout(layout.listX, rowY, layout.listW, layout.rowH);
                     boolean savedAsset = isSavedAsset(asset);
 
-                    if (savedAsset && isListMenuOpenFor(asset)
-                            && isInside(mouseX, browseMouseY, rowLayout.menuX, rowLayout.menuY, rowLayout.menuW, rowLayout.menuH)) {
-                        openDeleteConfirm(asset);
+                    if (handleAssetContextMenuClick(mouseX, browseMouseY, asset, rowLayout.menuX, rowLayout.menuY, rowLayout.menuW)) {
                         return true;
                     }
 
@@ -2201,8 +2382,8 @@ public class ArchivScreen extends Screen {
                         return true;
                     }
 
-                    boolean selected = isLibraryAssetSelected(asset);
-                    if (selected) {
+                    boolean hovered = isInside(mouseX, browseMouseY, layout.listX, rowY, layout.listW, layout.rowH);
+                    if (hovered) {
                         if (isInside(mouseX, browseMouseY, rowLayout.loadX, rowLayout.loadY, rowLayout.loadW, rowLayout.loadH)) {
                             loadAsset(asset);
                             return true;
@@ -2216,7 +2397,6 @@ public class ArchivScreen extends Screen {
 
                     if (isInside(mouseX, browseMouseY, layout.listX, rowY, layout.listW, layout.rowH)) {
                         closeListMenu();
-                        selectLibraryAsset(asset);
                         return true;
                     }
                 }
@@ -2238,9 +2418,7 @@ public class ArchivScreen extends Screen {
                     AssetCardLayout cardLayout = buildAssetCardLayout(cardX, cardY, layout.cardW, layout.cardH);
                     boolean savedAsset = isSavedAsset(asset);
 
-                    if (savedAsset && isListMenuOpenFor(asset)
-                            && isInside(mouseX, browseMouseY, cardLayout.menuX, cardLayout.menuY, cardLayout.menuW, cardLayout.menuH)) {
-                        openDeleteConfirm(asset);
+                    if (handleAssetContextMenuClick(mouseX, browseMouseY, asset, cardLayout.menuX, cardLayout.menuY, cardLayout.menuW)) {
                         return true;
                     }
 
@@ -2260,8 +2438,8 @@ public class ArchivScreen extends Screen {
                         return true;
                     }
 
-                    boolean selected = isLibraryAssetSelected(asset);
-                    if (selected) {
+                    boolean hovered = isInside(mouseX, browseMouseY, cardX, cardY, layout.cardW, layout.cardH);
+                    if (hovered) {
                         if (isInside(mouseX, browseMouseY, cardLayout.overlayX, cardLayout.loadY, cardLayout.overlayW, cardLayout.loadH)) {
                             loadAsset(asset);
                             return true;
@@ -2275,7 +2453,6 @@ public class ArchivScreen extends Screen {
 
                     if (isInside(mouseX, browseMouseY, cardX, cardY, layout.cardW, layout.cardH)) {
                         closeListMenu();
-                        selectLibraryAsset(asset);
                         return true;
                     }
                 }
@@ -2469,9 +2646,7 @@ public class ArchivScreen extends Screen {
 
                 boolean savedAsset = isSavedAsset(asset);
 
-                if (savedAsset && isListMenuOpenFor(asset)
-                        && isInside(mouseX, mouseY, cardLayout.menuX, cardLayout.menuY, cardLayout.menuW, cardLayout.menuH)) {
-                    openDeleteConfirm(asset);
+                if (handleAssetContextMenuClick(mouseX, mouseY, asset, cardLayout.menuX, cardLayout.menuY, cardLayout.menuW)) {
                     return true;
                 }
 
@@ -2491,9 +2666,8 @@ public class ArchivScreen extends Screen {
                     return true;
                 }
 
-                boolean selected = isLibraryAssetSelected(asset);
-
-                if (selected) {
+                boolean hovered = isInside(mouseX, mouseY, cardX, cardY, layout.cardW, layout.cardH);
+                if (hovered) {
                     if (isInside(mouseX, mouseY, cardLayout.overlayX, cardLayout.loadY, cardLayout.overlayW, cardLayout.loadH)) {
                         loadAsset(asset);
                         return true;
@@ -2507,7 +2681,6 @@ public class ArchivScreen extends Screen {
 
                 if (isInside(mouseX, mouseY, cardX, cardY, layout.cardW, layout.cardH)) {
                     closeListMenu();
-                    selectLibraryAsset(asset);
                     return true;
                 }
             }
@@ -2762,9 +2935,9 @@ public class ArchivScreen extends Screen {
         }
 
         if (browseActive) {
-            drawBrowseTab(guiGraphics, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH, visibleAssets);
+            drawBrowseTab(guiGraphics, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH, visibleAssets, mouseX, mouseY);
         } else if (myAssetsActive) {
-            drawMyAssetsTab(guiGraphics, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH, visibleAssets);
+            drawMyAssetsTab(guiGraphics, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH, visibleAssets, mouseX, mouseY);
         } else if ("Import".equals(selectedTopTab)) {
             drawImportTab(guiGraphics, chrome.rootX, chrome.rootY, chrome.rootW, chrome.rootH, chrome.bodyY, chrome.bodyH, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
         } else {
@@ -3045,31 +3218,94 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(this.font, subtitle, x + 16, y + 46, COLOR_TEXT_DIM);
     }
 
-        private void drawCollectionCard(GuiGraphics guiGraphics, int x, int y, int width, int height, CollectionEntry entry, boolean selected) {
-            int borderColor = selected ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
-            int backgroundColor = selected ? COLOR_PANEL_ALT : COLOR_PANEL;
+    private void drawAssetContextMenu(GuiGraphics guiGraphics, int x, int y, int width, ArchivAsset asset, int mouseX, int mouseY) {
+        int itemH = 22;
+        int height = itemH * 2;
 
-            drawPanel(guiGraphics, x, y, width, height, backgroundColor, borderColor);
+        boolean deleteHovered = isInside(mouseX, mouseY, x, y, width, itemH);
+        boolean addHovered = isHoveringAddToCollectionRow(mouseX, mouseY, x, y, width);
+        boolean showRollup = shouldShowCollectionRollup(mouseX, mouseY, x, y, width);
 
-            if (selected) {
-                guiGraphics.fill(x + 1, y + 1, x + width - 1, y + 3, COLOR_BORDER_ACTIVE);
+        drawPanel(guiGraphics, x, y, width, height, 0xFF142136, COLOR_BORDER_ACTIVE);
+
+        if (deleteHovered) {
+            guiGraphics.fill(x + 1, y + 1, x + width - 1, y + itemH, 0xFF25364F);
+        }
+
+        guiGraphics.drawString(this.font, "Delete Asset", x + 10, y + 7, 0xFFFFD7DE);
+
+        guiGraphics.fill(x + 1, y + itemH, x + width - 1, y + itemH + 1, COLOR_BORDER);
+
+        if (addHovered || showRollup) {
+            guiGraphics.fill(x + 1, y + itemH + 1, x + width - 1, y + (itemH * 2) - 1, 0xFF25364F);
+        }
+
+        guiGraphics.drawString(this.font, "Add to Collection  >", x + 10, y + itemH + 7, COLOR_TEXT);
+
+        if (!showRollup) {
+            return;
+        }
+
+        int rollupW = getAssetCollectionRollupW();
+        int rollupX = getAssetCollectionRollupX(x, width, rollupW);
+        int rollupY = getAssetCollectionRollupY(y);
+        int totalItems = getAssetCollectionPickerItemCount();
+        int rollupH = totalItems * itemH;
+
+        drawPanel(guiGraphics, rollupX, rollupY, rollupW, rollupH, 0xFF142136, COLOR_BORDER_ACTIVE);
+
+        int currentY = rollupY;
+
+        for (int i = 0; i < collectionEntries.size(); i++) {
+            CollectionEntry entry = collectionEntries.get(i);
+
+            boolean rowHovered = isInside(mouseX, mouseY, rollupX, currentY, rollupW, itemH);
+
+            if (rowHovered) {
+                guiGraphics.fill(rollupX + 1, currentY + 1, rollupX + rollupW - 1, currentY + itemH, 0xFF25364F);
             }
 
-            int bannerH = 46;
-            guiGraphics.fill(x + 1, y + 1, x + width - 1, y + bannerH, entry.previewColor);
+            String label = fitTextToWidth(entry.getName(), rollupW - 20);
+            guiGraphics.drawString(this.font, label, rollupX + 10, currentY + 7, COLOR_TEXT);
 
-            guiGraphics.drawString(this.font, "COLLECTION", x + 12, y + 16, 0xFFFFFFFF);
-            guiGraphics.drawString(this.font, entry.getName(), x + 12, y + bannerH + 12, COLOR_TEXT);
-
-            String metaText = entry.getTag() == null || entry.getTag().isBlank()
-                    ? entry.getAssetCount() + " assets"
-                    : "#" + entry.getTag() + "  •  " + entry.getAssetCount() + " assets";
-
-            guiGraphics.drawString(this.font, fitTextToWidth(metaText, width - 24), x + 12, y + bannerH + 26, COLOR_TEXT_DIM);
-
-            int chipW = getChipWidth("Collection");
-            drawChip(guiGraphics, "Collection", x + width - chipW - 12, y + height - 24, chipW, 18, entry.accentColor);
+            currentY += itemH;
+            guiGraphics.fill(rollupX + 1, currentY, rollupX + rollupW - 1, currentY + 1, COLOR_BORDER);
         }
+
+        boolean createHovered = isInside(mouseX, mouseY, rollupX, currentY, rollupW, itemH);
+
+        if (createHovered) {
+            guiGraphics.fill(rollupX + 1, currentY + 1, rollupX + rollupW - 1, currentY + itemH, 0xFF25364F);
+        }
+
+        guiGraphics.drawString(this.font, "Create New Collection", rollupX + 10, currentY + 7, COLOR_BORDER_ACTIVE);
+    }
+
+    private void drawCollectionCard(GuiGraphics guiGraphics, int x, int y, int width, int height, CollectionEntry entry, boolean selected) {
+        int borderColor = selected ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
+        int backgroundColor = selected ? COLOR_PANEL_ALT : COLOR_PANEL;
+
+        drawPanel(guiGraphics, x, y, width, height, backgroundColor, borderColor);
+
+        if (selected) {
+            guiGraphics.fill(x + 1, y + 1, x + width - 1, y + 3, COLOR_BORDER_ACTIVE);
+        }
+
+        int bannerH = 46;
+        guiGraphics.fill(x + 1, y + 1, x + width - 1, y + bannerH, entry.previewColor);
+
+        guiGraphics.drawString(this.font, "COLLECTION", x + 12, y + 16, 0xFFFFFFFF);
+        guiGraphics.drawString(this.font, entry.getName(), x + 12, y + bannerH + 12, COLOR_TEXT);
+
+        String metaText = entry.getTag() == null || entry.getTag().isBlank()
+                ? entry.getAssetCount() + " assets"
+                : "#" + entry.getTag() + "  •  " + entry.getAssetCount() + " assets";
+
+        guiGraphics.drawString(this.font, fitTextToWidth(metaText, width - 24), x + 12, y + bannerH + 26, COLOR_TEXT_DIM);
+
+        int chipW = getChipWidth("Collection");
+        drawChip(guiGraphics, "Collection", x + width - chipW - 12, y + height - 24, chipW, 18, entry.accentColor);
+    }
 
     private void drawRecentMiniCard(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset) {
         drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
@@ -3158,7 +3394,7 @@ public class ArchivScreen extends Screen {
         };
     }
 
-    private void drawBrowseTab(GuiGraphics guiGraphics, int contentX, int contentY, int contentW, int contentH, List<ArchivAsset> visibleAssets) {
+    private void drawBrowseTab(GuiGraphics guiGraphics, int contentX, int contentY, int contentW, int contentH, List<ArchivAsset> visibleAssets, int mouseX, int mouseY) {
         BrowseToolbarLayout toolbar = buildBrowseToolbarLayout(contentX, contentY, contentW);
         int innerPadding = 18;
 
@@ -3203,7 +3439,8 @@ public class ArchivScreen extends Screen {
                     ArchivAsset asset = visibleAssets.get(i);
                     int rowY = layout.listY + i * (layout.rowH + layout.rowGap);
 
-                    drawBrowseListRow(guiGraphics, layout.listX, rowY, layout.listW, layout.rowH, asset, isLibraryAssetSelected(asset));
+                    boolean hovered = isInside(mouseX, mouseY, layout.listX, rowY, layout.listW, layout.rowH);
+                    drawBrowseListRow(guiGraphics, layout.listX, rowY, layout.listW, layout.rowH, asset, hovered, mouseX, mouseY);
                 }
             }
 
@@ -3231,7 +3468,8 @@ public class ArchivScreen extends Screen {
                     int cardX = layout.cardsAreaX + column * (layout.cardW + layout.cardsGap);
                     int cardY = layout.cardsAreaY + row * (layout.cardH + layout.rowGap);
 
-                    drawAssetCard(guiGraphics, cardX, cardY, layout.cardW, layout.cardH, asset, isLibraryAssetSelected(asset));
+                    boolean hovered = isInside(mouseX, mouseY, cardX, cardY, layout.cardW, layout.cardH);
+                    drawAssetCard(guiGraphics, cardX, cardY, layout.cardW, layout.cardH, asset, hovered, mouseX, mouseY);
                 }
             }
 
@@ -3240,7 +3478,7 @@ public class ArchivScreen extends Screen {
         }
     }
 
-    private void drawMyAssetsTab(GuiGraphics guiGraphics, int contentX, int contentY, int contentW, int contentH, List<ArchivAsset> visibleAssets) {
+    private void drawMyAssetsTab(GuiGraphics guiGraphics, int contentX, int contentY, int contentW, int contentH, List<ArchivAsset> visibleAssets, int mouseX, int mouseY) {
         int innerPadding = 18;
         int scrollbarReserve = 16;
         int usableContentW = contentW - scrollbarReserve;
@@ -3566,7 +3804,8 @@ public class ArchivScreen extends Screen {
                 int cardX = layout.cardsAreaX + column * (layout.cardW + layout.cardsGap);
                 int cardY = layout.cardsAreaY + row * (layout.cardH + layout.rowGap);
 
-                drawAssetCard(guiGraphics, cardX, cardY, layout.cardW, layout.cardH, asset, isLibraryAssetSelected(asset));
+                boolean hovered = isInside(mouseX, mouseY, cardX, cardY, layout.cardW, layout.cardH);
+                drawAssetCard(guiGraphics, cardX, cardY, layout.cardW, layout.cardH, asset, hovered, mouseX, mouseY);
             }
         }
 
@@ -3846,10 +4085,10 @@ public class ArchivScreen extends Screen {
         }
     }
 
-    private void drawAssetCard(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset, boolean selected) {
+    private void drawAssetCard(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset, boolean hovered, int mouseX, int mouseY) {
         boolean loaded = isAssetLoaded(asset);
 
-        int border = selected
+        int border = hovered
                 ? COLOR_BORDER_ACTIVE
                 : (loaded ? COLOR_SUCCESS : COLOR_BORDER);
 
@@ -3868,7 +4107,7 @@ public class ArchivScreen extends Screen {
 
         guiGraphics.drawString(this.font, asset.isFavorite() ? "★" : "☆", layout.favoriteX + 4, layout.favoriteY + 6, 0xFFFFD45A);
 
-        if (selected) {
+        if (hovered) {
             guiGraphics.fill(layout.previewX, layout.previewY, layout.previewX + layout.previewW, layout.previewY + layout.previewH, 0x55000000);
 
             drawPanel(guiGraphics, layout.overlayX, layout.loadY, layout.overlayW, layout.loadH, 0xFF2F9BE6, 0xFF73C8FF);
@@ -3917,16 +4156,15 @@ public class ArchivScreen extends Screen {
             drawVerticalDots(guiGraphics, layout.menuDotsX, layout.menuDotsY, COLOR_TEXT_DIM);
 
             if (isListMenuOpenFor(asset)) {
-                drawPanel(guiGraphics, layout.menuX, layout.menuY, layout.menuW, layout.menuH, 0xFF2A1820, 0xFFB54B63);
-                guiGraphics.drawString(this.font, "Delete Asset", layout.menuX + 10, layout.menuY + 7, 0xFFFFD7DE);
+                drawAssetContextMenu(guiGraphics, layout.menuX, layout.menuY, layout.menuW, asset, mouseX, mouseY);
             }
         }
     }
 
-    private void drawBrowseListRow(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset, boolean selected) {
+    private void drawBrowseListRow(GuiGraphics guiGraphics, int x, int y, int width, int height, ArchivAsset asset, boolean hovered, int mouseX, int mouseY) {
         boolean loaded = isAssetLoaded(asset);
 
-        int borderColor = selected
+        int borderColor = hovered
                 ? COLOR_BORDER_ACTIVE
                 : (loaded ? COLOR_SUCCESS : COLOR_BORDER);
 
@@ -4011,7 +4249,7 @@ public class ArchivScreen extends Screen {
         );
 
         // botões à direita, centralizados
-        if (selected) {
+        if (hovered) {
             drawPanel(guiGraphics, layout.loadX, layout.loadY, layout.loadW, layout.loadH, 0xFF3AA0E6, COLOR_BORDER_ACTIVE);
             drawPanel(guiGraphics, layout.detailsX, layout.detailsY, layout.detailsW, layout.detailsH, 0xFF1A2638, COLOR_BORDER);
 
@@ -4037,8 +4275,7 @@ public class ArchivScreen extends Screen {
             drawVerticalDots(guiGraphics, layout.menuDotsX, layout.menuDotsY, COLOR_TEXT_DIM);
 
             if (isListMenuOpenFor(asset)) {
-                drawPanel(guiGraphics, layout.menuX, layout.menuY, layout.menuW, layout.menuH, 0xFF2A1820, 0xFFB54B63);
-                guiGraphics.drawString(this.font, "Delete Asset", layout.menuX + 10, layout.menuY + 7, 0xFFFFD7DE);
+                drawAssetContextMenu(guiGraphics, layout.menuX, layout.menuY, layout.menuW, asset, mouseX, mouseY);
             }
         }
     }
