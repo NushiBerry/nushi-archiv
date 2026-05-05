@@ -32,8 +32,7 @@ public class ArchivScreen extends Screen {
     private final List<ArchivAsset> mockAssets;
     private final List<ArchivAsset> savedAssets = new ArrayList<>();
 
-    private final String[] categories = {
-            "All",
+    private static final List<String> DEFAULT_MACRO_CATEGORIES = List.of(
             "Medieval",
             "Fantasy",
             "Cyberpunk",
@@ -42,7 +41,29 @@ public class ArchivScreen extends Screen {
             "Nature",
             "Modern",
             "Industrial"
-    };
+    );
+
+    private static final List<String> DEFAULT_ASSET_TYPES = List.of(
+            "Structure",
+            "Decoration",
+            "Tree",
+            "Prop",
+            "Terrain",
+            "Interior",
+            "Vehicle",
+            "Redstone"
+    );
+
+    private static final List<String> DEFAULT_MINECRAFT_VERSIONS = List.of(
+            "1.20.1",
+            "1.20.4",
+            "1.21",
+            "1.21.1"
+    );
+
+    private final List<String> macroCategories = new ArrayList<>(DEFAULT_MACRO_CATEGORIES);
+    private final List<String> assetTypes = new ArrayList<>(DEFAULT_ASSET_TYPES);
+    private final List<String> minecraftVersions = new ArrayList<>(DEFAULT_MINECRAFT_VERSIONS);
 
     private final String[] myAssetsSections = {
             "All Assets",
@@ -57,10 +78,40 @@ public class ArchivScreen extends Screen {
     private String selectedCategory = "All";
     private String selectedTopTab = "Browse";
     private String selectedMyAssetsSection = "All Assets";
+
+    private final String[] settingsSections = {
+            "General",
+            "Metadata",
+            "Interface",
+            "Integrations",
+            "Storage",
+            "Controls",
+            "About"
+    };
+    private final String[] metadataGroups = {
+            "Macro Categories",
+            "Types",
+            "Minecraft Versions",
+            "Variant Presets",
+            "Tags / Keywords",
+            "Materials"
+    };
+
+    private String selectedSettingsSection = "Metadata";
+    private String selectedMetadataGroup = "Macro Categories";
+    private int selectedMacroCategoryIndex = 0;
+    private int selectedAssetTypeIndex = 0;
+    private int selectedMinecraftVersionIndex = 0;
+
     private String browseSortMode = "Newest";
     private boolean browseFavoritesOnly = false;
     private String browseViewMode = "Grid";
     private int selectedImportStep = 1;
+
+    private String importSelectedMacroCategory = "Medieval";
+    private String importSelectedType = "Structure";
+    private String importSelectedVersion = "1.20.1";
+    private int importSelectedVariantCount = 2;
 
     private String selectedLibraryAssetName = null;
     private String libraryActionMessage = "No asset selected";
@@ -159,6 +210,16 @@ public class ArchivScreen extends Screen {
     private int myAssetsCollectionsScrollX = 0;
     private int myAssetsCollectionsMaxScrollX = 0;
 
+    private int metadataGroupsScrollOffset = 0;
+    private int metadataGroupsMaxScroll = 0;
+    private boolean metadataGroupsScrollbarDragging = false;
+    private int metadataGroupsScrollbarDragOffset = 0;
+
+    private int metadataOptionsScrollOffset = 0;
+    private int metadataOptionsMaxScroll = 0;
+    private boolean metadataOptionsScrollbarDragging = false;
+    private int metadataOptionsScrollbarDragOffset = 0;
+
     private final List<CollectionEntry> collectionEntries = new ArrayList<>();
     private String selectedCollectionName = null;
 
@@ -166,6 +227,20 @@ public class ArchivScreen extends Screen {
     private EditBox collectionNameBox;
     private EditBox collectionTagBox;
     private EditBox collectionDescriptionBox;
+
+    private boolean editAssetModalOpen = false;
+    private String editAssetOriginalName = null;
+    private String editAssetSelectedCategory = "Medieval";
+    private String editAssetSelectedType = "Structure";
+    private String editAssetSelectedVersion = "1.20.1";
+    private int editAssetVariantCount = 1;
+    private String editAssetDropdownOpen = null;
+
+    private EditBox editAssetNameBox;
+    private EditBox editAssetCategoryBox;
+    private EditBox editAssetTypeBox;
+    private EditBox editAssetVersionBox;
+    private EditBox editAssetVariantsBox;
 
     private static class BrowseToolbarLayout {
         int toolbarY;
@@ -220,6 +295,77 @@ public class ArchivScreen extends Screen {
         int saveX;
         int cancelX;
         int resetX;
+    }
+
+    private static class ImportDetailsFormLayout {
+        int fieldW1;
+        int fieldW2;
+        int fieldW3;
+        int wideFieldW;
+        int fieldH;
+
+        int nameX;
+        int nameY;
+        int categoryX;
+        int categoryY;
+        int authorX;
+        int authorY;
+
+        int typeX;
+        int typeY;
+        int versionX;
+        int versionY;
+        int variantsX;
+        int variantsY;
+
+        int tagsX;
+        int tagsY;
+        int fileX;
+        int fileY;
+    }
+
+    private static class SettingsLayout {
+        int innerX;
+        int innerY;
+        int innerW;
+        int innerH;
+
+        int groupX;
+        int groupY;
+        int groupW;
+        int groupItemH;
+        int groupGap;
+
+        int listX;
+        int listY;
+        int listW;
+        int listItemH;
+        int listGap;
+
+        int editorX;
+        int editorY;
+        int editorW;
+        int editorH;
+
+        int addX;
+        int addY;
+        int addW;
+        int duplicateX;
+        int duplicateY;
+        int duplicateW;
+        int removeX;
+        int removeY;
+        int removeW;
+        int resetX;
+        int resetY;
+        int resetW;
+        int cancelX;
+        int cancelY;
+        int cancelW;
+        int saveX;
+        int saveY;
+        int saveW;
+        int buttonH;
     }
 
     private static class ImportPreset {
@@ -520,10 +666,126 @@ public class ArchivScreen extends Screen {
         int buttonH;
     }
 
+    private static class EditAssetModalLayout {
+        int panelX;
+        int panelY;
+        int panelW;
+        int panelH;
+
+        int closeX;
+        int closeY;
+        int closeSize;
+
+        int headerIconX;
+        int headerIconY;
+        int headerIconSize;
+
+        int leftX;
+        int leftY;
+        int leftW;
+        int rightX;
+        int rightY;
+        int rightW;
+
+        int basicX;
+        int basicY;
+        int basicW;
+        int basicH;
+
+        int variantsBoxX;
+        int variantsBoxY;
+        int variantsBoxW;
+        int variantsBoxH;
+
+        int filesX;
+        int filesY;
+        int filesW;
+        int filesH;
+
+        int previewPanelX;
+        int previewPanelY;
+        int previewPanelW;
+        int previewPanelH;
+
+        int previewX;
+        int previewY;
+        int previewW;
+        int previewH;
+
+        int fieldH;
+        int fieldGap;
+
+        int nameX;
+        int nameY;
+        int nameW;
+        int categoryX;
+        int categoryY;
+        int categoryW;
+        int typeX;
+        int typeY;
+        int typeW;
+        int versionX;
+        int versionY;
+        int versionW;
+        int authorX;
+        int authorY;
+        int authorW;
+        int tagsX;
+        int tagsY;
+        int tagsW;
+
+        int variantRowX;
+        int variantRowY;
+        int variantRowW;
+        int variantRowH;
+        int variantRowGap;
+        int addVariantX;
+        int addVariantY;
+        int addVariantW;
+        int removeVariantX;
+        int removeVariantY;
+        int removeVariantW;
+
+        int structureFileX;
+        int structureFileY;
+        int structureFileW;
+        int previewFileX;
+        int previewFileY;
+        int previewFileW;
+        int fileFieldH;
+
+        int favoriteToggleX;
+        int favoriteToggleY;
+        int visibleToggleX;
+        int visibleToggleY;
+
+        int deleteX;
+        int deleteY;
+        int deleteW;
+
+        int cancelX;
+        int cancelY;
+        int cancelW;
+        int saveX;
+        int saveY;
+        int saveW;
+        int buttonH;
+
+        // Legacy aliases kept so old initialization code can still reference them safely.
+        int fieldX;
+        int fieldW;
+        int nameLegacyY;
+        int categoryLegacyY;
+        int typeLegacyY;
+        int versionLegacyY;
+        int variantsLegacyY;
+    }
+
     public ArchivScreen(Component title, Screen parent) {
         super(title);
         this.parent = parent;
         this.mockAssets = new ArrayList<>();
+        normalizeMetadataSelections();
     }
 
     @Override
@@ -608,6 +870,85 @@ public class ArchivScreen extends Screen {
         this.addRenderableWidget(collectionNameBox);
         this.addRenderableWidget(collectionTagBox);
         this.addRenderableWidget(collectionDescriptionBox);
+
+        EditAssetModalLayout editModal = buildEditAssetModalLayout();
+
+        editAssetNameBox = new EditBox(
+                this.font,
+                editModal.fieldX + 6,
+                editModal.nameY + 1,
+                editModal.fieldW - 12,
+                editModal.fieldH - 2,
+                Component.literal("Asset Name")
+        );
+        editAssetNameBox.setBordered(false);
+        editAssetNameBox.setMaxLength(48);
+        editAssetNameBox.setTextColor(COLOR_TEXT);
+        editAssetNameBox.setTextColorUneditable(COLOR_TEXT_DIM);
+        editAssetNameBox.setHint(Component.literal("Asset name"));
+
+        editAssetCategoryBox = new EditBox(
+                this.font,
+                editModal.fieldX + 6,
+                editModal.categoryY + 1,
+                editModal.fieldW - 12,
+                editModal.fieldH - 2,
+                Component.literal("Asset Category")
+        );
+        editAssetCategoryBox.setBordered(false);
+        editAssetCategoryBox.setMaxLength(32);
+        editAssetCategoryBox.setTextColor(COLOR_TEXT);
+        editAssetCategoryBox.setTextColorUneditable(COLOR_TEXT_DIM);
+        editAssetCategoryBox.setHint(Component.literal("Category"));
+
+        editAssetTypeBox = new EditBox(
+                this.font,
+                editModal.fieldX + 6,
+                editModal.typeY + 1,
+                editModal.fieldW - 12,
+                editModal.fieldH - 2,
+                Component.literal("Asset Type")
+        );
+        editAssetTypeBox.setBordered(false);
+        editAssetTypeBox.setMaxLength(32);
+        editAssetTypeBox.setTextColor(COLOR_TEXT);
+        editAssetTypeBox.setTextColorUneditable(COLOR_TEXT_DIM);
+        editAssetTypeBox.setHint(Component.literal("Type"));
+
+        editAssetVersionBox = new EditBox(
+                this.font,
+                editModal.fieldX + 6,
+                editModal.versionY + 1,
+                editModal.fieldW - 12,
+                editModal.fieldH - 2,
+                Component.literal("Minecraft Version")
+        );
+        editAssetVersionBox.setBordered(false);
+        editAssetVersionBox.setMaxLength(24);
+        editAssetVersionBox.setTextColor(COLOR_TEXT);
+        editAssetVersionBox.setTextColorUneditable(COLOR_TEXT_DIM);
+        editAssetVersionBox.setHint(Component.literal("Minecraft version"));
+
+        editAssetVariantsBox = new EditBox(
+                this.font,
+                editModal.fieldX + 6,
+                editModal.variantRowY + 1,
+                editModal.fieldW - 12,
+                editModal.fieldH - 2,
+                Component.literal("Variant Count")
+        );
+        editAssetVariantsBox.setBordered(false);
+        editAssetVariantsBox.setMaxLength(3);
+        editAssetVariantsBox.setTextColor(COLOR_TEXT);
+        editAssetVariantsBox.setTextColorUneditable(COLOR_TEXT_DIM);
+        editAssetVariantsBox.setHint(Component.literal("Variants"));
+
+        this.addRenderableWidget(editAssetNameBox);
+        this.addRenderableWidget(editAssetCategoryBox);
+        this.addRenderableWidget(editAssetTypeBox);
+        this.addRenderableWidget(editAssetVersionBox);
+        this.addRenderableWidget(editAssetVariantsBox);
+
     }
 
     @Override
@@ -869,6 +1210,258 @@ public class ArchivScreen extends Screen {
         return layout;
     }
 
+    private ImportDetailsFormLayout buildImportDetailsFormLayout(ImportLayout layout) {
+        ImportDetailsFormLayout form = new ImportDetailsFormLayout();
+
+        boolean compact = true;
+        boolean detailsStepActive = selectedImportStep == 3;
+
+        int innerX = layout.innerX;
+        int leftAreaW = layout.leftAreaW;
+        int detailsY = layout.detailsY;
+        int detailsH = layout.detailsH;
+
+        int formX = innerX + 12;
+        int fieldGap = 12;
+        int verticalGap = compact ? 10 : 12;
+
+        form.fieldH = compact ? 22 : 28;
+        form.fieldW1 = (leftAreaW - 48) / 3;
+        form.fieldW2 = form.fieldW1;
+        form.fieldW3 = form.fieldW1;
+        form.wideFieldW = (leftAreaW - 36) / 2;
+
+        int topPadding = detailsStepActive ? (compact ? 44 : 50) : (compact ? 34 : 38);
+        int bottomPadding = compact ? 10 : 14;
+
+        int totalFieldsHeight = (form.fieldH * 3) + (verticalGap * 2);
+        int availableFormHeight = detailsH - topPadding - bottomPadding;
+        int extraSpace = Math.max(0, availableFormHeight - totalFieldsHeight);
+
+        int formY1 = detailsY + topPadding + (extraSpace / 2);
+        int formY2 = formY1 + form.fieldH + verticalGap;
+        int formY3 = formY2 + form.fieldH + verticalGap;
+
+        form.nameX = formX;
+        form.nameY = formY1;
+        form.categoryX = formX + form.fieldW1 + fieldGap;
+        form.categoryY = formY1;
+        form.authorX = formX + form.fieldW1 + fieldGap + form.fieldW2 + fieldGap;
+        form.authorY = formY1;
+
+        form.typeX = formX;
+        form.typeY = formY2;
+        form.versionX = formX + form.fieldW1 + fieldGap;
+        form.versionY = formY2;
+        form.variantsX = formX + form.fieldW1 + fieldGap + form.fieldW2 + fieldGap;
+        form.variantsY = formY2;
+
+        form.tagsX = formX;
+        form.tagsY = formY3;
+        form.fileX = formX + form.wideFieldW + fieldGap;
+        form.fileY = formY3;
+
+        return form;
+    }
+
+    private SettingsLayout buildSettingsLayout(int contentX, int contentY, int contentW, int contentH) {
+        SettingsLayout layout = new SettingsLayout();
+
+        int pad = 12;
+        int gap = 12;
+
+        layout.innerX = contentX + pad;
+        layout.innerY = contentY + pad;
+        layout.innerW = contentW - (pad * 2);
+        layout.innerH = contentH - (pad * 2);
+
+        int titleBlockH = 42;
+        int actionBarH = 26;
+        int actionGap = 8;
+
+        int panelTop = layout.innerY + titleBlockH;
+        int panelBottom = layout.innerY + layout.innerH - actionBarH - actionGap;
+        int panelH = Math.max(180, panelBottom - panelTop);
+
+        layout.groupX = layout.innerX;
+        layout.groupY = panelTop;
+        layout.groupW = clampInt((layout.innerW * 27) / 100, 170, 235);
+        layout.groupItemH = 34;
+        layout.groupGap = 6;
+
+        layout.editorW = clampInt((layout.innerW * 36) / 100, 280, 370);
+
+        int minimumListW = 190;
+        int requiredWidth = layout.groupW + layout.editorW + (gap * 2) + minimumListW;
+        if (requiredWidth > layout.innerW) {
+            int excess = requiredWidth - layout.innerW;
+            int editorShrink = Math.min(excess, Math.max(0, layout.editorW - 250));
+            layout.editorW -= editorShrink;
+            excess -= editorShrink;
+
+            int groupShrink = Math.min(excess, Math.max(0, layout.groupW - 160));
+            layout.groupW -= groupShrink;
+        }
+
+        layout.editorX = layout.innerX + layout.innerW - layout.editorW;
+        layout.editorY = panelTop;
+        layout.editorH = panelH;
+
+        layout.listX = layout.groupX + layout.groupW + gap;
+        layout.listY = panelTop;
+        layout.listW = layout.editorX - layout.listX - gap;
+        layout.listItemH = 32;
+        layout.listGap = 6;
+
+        layout.buttonH = 24;
+
+        int editorButtonGap = 6;
+        int editorButtonInnerW = layout.editorW - 24;
+        int editorButtonW = Math.max(72, (editorButtonInnerW - (editorButtonGap * 2)) / 3);
+
+        layout.addW = editorButtonW;
+        layout.duplicateW = editorButtonW;
+        layout.removeW = editorButtonInnerW - layout.addW - layout.duplicateW - (editorButtonGap * 2);
+
+        layout.addX = layout.editorX + 12;
+        layout.addY = layout.editorY + layout.editorH - layout.buttonH - 10;
+        layout.duplicateX = layout.addX + layout.addW + editorButtonGap;
+        layout.duplicateY = layout.addY;
+        layout.removeX = layout.duplicateX + layout.duplicateW + editorButtonGap;
+        layout.removeY = layout.addY;
+
+        layout.saveW = 150;
+        layout.cancelW = 118;
+        layout.resetW = 140;
+
+        layout.saveX = layout.innerX + layout.innerW - layout.saveW;
+        layout.saveY = layout.innerY + layout.innerH - layout.buttonH - 2;
+        layout.cancelX = layout.saveX - 10 - layout.cancelW;
+        layout.cancelY = layout.saveY;
+        layout.resetX = layout.cancelX - 10 - layout.resetW;
+        layout.resetY = layout.saveY;
+
+        return layout;
+    }
+
+    private int getSettingsPanelBottom(SettingsLayout layout) {
+        return layout.editorY + layout.editorH;
+    }
+
+    private int getSettingsPanelButtonY(SettingsLayout layout) {
+        return getSettingsPanelBottom(layout) - 34;
+    }
+
+    private int getMetadataGroupsViewportX(SettingsLayout layout) {
+        return layout.groupX + 10;
+    }
+
+    private int getMetadataGroupsViewportY(SettingsLayout layout) {
+        return layout.groupY + 32;
+    }
+
+    private int getMetadataGroupsViewportW(SettingsLayout layout) {
+        return layout.groupW - 20;
+    }
+
+    private int getMetadataGroupsViewportH(SettingsLayout layout) {
+        return Math.max(24, getSettingsPanelButtonY(layout) - 8 - getMetadataGroupsViewportY(layout));
+    }
+
+    private int getMetadataGroupsContentHeight(SettingsLayout layout) {
+        if (metadataGroups.length <= 0) {
+            return 0;
+        }
+
+        return metadataGroups.length * layout.groupItemH + (metadataGroups.length - 1) * layout.groupGap;
+    }
+
+    private int getMetadataOptionsViewportX(SettingsLayout layout) {
+        return layout.listX + 10;
+    }
+
+    private int getMetadataOptionsViewportY(SettingsLayout layout) {
+        return layout.listY + 66;
+    }
+
+    private int getMetadataOptionsViewportW(SettingsLayout layout) {
+        return layout.listW - 20;
+    }
+
+    private int getMetadataOptionsViewportH(SettingsLayout layout) {
+        return Math.max(24, getSettingsPanelButtonY(layout) - 8 - getMetadataOptionsViewportY(layout));
+    }
+
+    private int getMetadataOptionsContentHeight(SettingsLayout layout, int optionCount) {
+        if (optionCount <= 0) {
+            return 96;
+        }
+
+        return optionCount * layout.listItemH + (optionCount - 1) * layout.listGap;
+    }
+
+    private void updateMetadataScrollLimits(SettingsLayout layout) {
+        metadataGroupsMaxScroll = Math.max(0, getMetadataGroupsContentHeight(layout) - getMetadataGroupsViewportH(layout));
+        metadataGroupsScrollOffset = clampInt(metadataGroupsScrollOffset, 0, metadataGroupsMaxScroll);
+
+        List<String> options = getSelectedMetadataOptions();
+        metadataOptionsMaxScroll = Math.max(0, getMetadataOptionsContentHeight(layout, options.size()) - getMetadataOptionsViewportH(layout));
+        metadataOptionsScrollOffset = clampInt(metadataOptionsScrollOffset, 0, metadataOptionsMaxScroll);
+    }
+
+    private ScrollbarLayout buildMetadataGroupsScrollbarLayout(SettingsLayout layout) {
+        ScrollbarLayout scrollbar = new ScrollbarLayout();
+
+        int viewportY = getMetadataGroupsViewportY(layout);
+        int viewportH = getMetadataGroupsViewportH(layout);
+        int contentH = getMetadataGroupsContentHeight(layout);
+
+        scrollbar.trackW = 6;
+        scrollbar.trackX = layout.groupX + layout.groupW - 13;
+        scrollbar.trackY = viewportY;
+        scrollbar.trackH = viewportH;
+        scrollbar.thumbW = 6;
+        scrollbar.thumbX = scrollbar.trackX;
+
+        if (metadataGroupsMaxScroll <= 0 || contentH <= 0) {
+            scrollbar.thumbH = scrollbar.trackH;
+            scrollbar.thumbY = scrollbar.trackY;
+            return scrollbar;
+        }
+
+        scrollbar.thumbH = Math.max(18, (scrollbar.trackH * viewportH) / Math.max(contentH, 1));
+        int movableTrack = Math.max(1, scrollbar.trackH - scrollbar.thumbH);
+        scrollbar.thumbY = scrollbar.trackY + (metadataGroupsScrollOffset * movableTrack) / Math.max(metadataGroupsMaxScroll, 1);
+        return scrollbar;
+    }
+
+    private ScrollbarLayout buildMetadataOptionsScrollbarLayout(SettingsLayout layout) {
+        ScrollbarLayout scrollbar = new ScrollbarLayout();
+
+        List<String> options = getSelectedMetadataOptions();
+        int viewportY = getMetadataOptionsViewportY(layout);
+        int viewportH = getMetadataOptionsViewportH(layout);
+        int contentH = getMetadataOptionsContentHeight(layout, options.size());
+
+        scrollbar.trackW = 6;
+        scrollbar.trackX = layout.listX + layout.listW - 13;
+        scrollbar.trackY = viewportY;
+        scrollbar.trackH = viewportH;
+        scrollbar.thumbW = 6;
+        scrollbar.thumbX = scrollbar.trackX;
+
+        if (metadataOptionsMaxScroll <= 0 || contentH <= 0) {
+            scrollbar.thumbH = scrollbar.trackH;
+            scrollbar.thumbY = scrollbar.trackY;
+            return scrollbar;
+        }
+
+        scrollbar.thumbH = Math.max(18, (scrollbar.trackH * viewportH) / Math.max(contentH, 1));
+        int movableTrack = Math.max(1, scrollbar.trackH - scrollbar.thumbH);
+        scrollbar.thumbY = scrollbar.trackY + (metadataOptionsScrollOffset * movableTrack) / Math.max(metadataOptionsMaxScroll, 1);
+        return scrollbar;
+    }
+
     private CardGridLayout buildBrowseGridLayout(int contentX, int contentY, int contentW, int assetCount, int scrollOffset) {
         CardGridLayout layout = new CardGridLayout();
 
@@ -964,7 +1557,7 @@ public class ArchivScreen extends Screen {
         layout.menuDotsY = y + (height / 2) - 6;
 
         layout.menuW = 156;
-        layout.menuH = 44;
+        layout.menuH = 66;
         layout.menuX = x + width - layout.menuW - 28;
         layout.menuY = y + 8;
 
@@ -1102,7 +1695,7 @@ public class ArchivScreen extends Screen {
         layout.menuDotsY = y + 8;
 
         layout.menuW = 156;
-        layout.menuH = 44;
+        layout.menuH = 66;
         layout.menuX = x + 8;
         layout.menuY = y + 24;
 
@@ -1172,6 +1765,172 @@ public class ArchivScreen extends Screen {
 
         layout.createX = layout.panelX + layout.panelW - 16 - layout.createW;
         layout.cancelX = layout.createX - 10 - layout.cancelW;
+
+        return layout;
+    }
+
+    private EditAssetModalLayout buildEditAssetModalLayout() {
+        EditAssetModalLayout layout = new EditAssetModalLayout();
+
+        // Dense editor layout tuned for Minecraft GUI Scale 2.
+        // It keeps the reference structure, but gives Basic, Variants and Files
+        // enough breathing room instead of stacking every block vertically.
+        layout.panelW = clampInt(this.width - 14, 700, 860);
+        layout.panelH = clampInt(this.height - 8, 430, 560);
+        layout.panelX = (this.width - layout.panelW) / 2;
+        layout.panelY = (this.height - layout.panelH) / 2;
+
+        layout.closeSize = 22;
+        layout.closeX = layout.panelX + layout.panelW - layout.closeSize - 12;
+        layout.closeY = layout.panelY + 10;
+
+        layout.headerIconSize = 32;
+        layout.headerIconX = layout.panelX + 16;
+        layout.headerIconY = layout.panelY + 12;
+
+        layout.buttonH = 24;
+        layout.cancelW = 92;
+        layout.saveW = 118;
+        layout.deleteW = 112;
+
+        layout.saveX = layout.panelX + layout.panelW - 14 - layout.saveW;
+        layout.cancelX = layout.saveX - 10 - layout.cancelW;
+        layout.cancelY = layout.panelY + layout.panelH - 32;
+        layout.saveY = layout.cancelY;
+        layout.deleteX = layout.panelX + 14;
+        layout.deleteY = layout.cancelY;
+
+        int contentTop = layout.panelY + 60;
+        int contentBottom = layout.cancelY - 14;
+        int contentH = Math.max(318, contentBottom - contentTop);
+        int gap = 8;
+
+        layout.rightW = clampInt((layout.panelW * 28) / 100, 210, 242);
+        layout.leftX = layout.panelX + 14;
+        layout.leftY = contentTop;
+        layout.leftW = layout.panelW - 28 - layout.rightW - gap;
+        layout.rightX = layout.leftX + layout.leftW + gap;
+        layout.rightY = contentTop;
+
+        layout.basicX = layout.leftX;
+        layout.basicY = contentTop;
+        layout.basicW = layout.leftW;
+
+        int availablePanelsH = contentH - gap;
+        layout.basicH = clampInt((availablePanelsH * 55) / 100, 194, 228);
+        int bottomH = availablePanelsH - layout.basicH;
+
+        int minimumBottomH = 144;
+        if (bottomH < minimumBottomH) {
+            int deficit = minimumBottomH - bottomH;
+            layout.basicH = Math.max(178, layout.basicH - deficit);
+            bottomH = availablePanelsH - layout.basicH;
+        }
+
+        bottomH = Math.max(minimumBottomH, bottomH);
+
+        int bottomY = layout.basicY + layout.basicH + gap;
+        int bottomGap = 8;
+        int variantsPreferredW = (layout.leftW * 57) / 100;
+
+        layout.variantsBoxX = layout.leftX;
+        layout.variantsBoxY = bottomY;
+        layout.variantsBoxW = clampInt(variantsPreferredW, 260, layout.leftW - 218);
+        layout.variantsBoxH = bottomH;
+
+        layout.filesX = layout.variantsBoxX + layout.variantsBoxW + bottomGap;
+        layout.filesY = bottomY;
+        layout.filesW = layout.leftX + layout.leftW - layout.filesX;
+        layout.filesH = bottomH;
+
+        layout.previewPanelX = layout.rightX;
+        layout.previewPanelY = contentTop;
+        layout.previewPanelW = layout.rightW;
+        layout.previewPanelH = contentBottom - contentTop;
+
+        layout.previewX = layout.previewPanelX + 10;
+        layout.previewY = layout.previewPanelY + 32;
+        layout.previewW = layout.previewPanelW - 20;
+        layout.previewH = clampInt((layout.previewPanelH * 36) / 100, 108, 146);
+
+        layout.fieldH = 23;
+        layout.fieldGap = 40;
+
+        int innerX = layout.basicX + 12;
+        int innerW = layout.basicW - 24;
+        int colGap = 10;
+        int colW = (innerW - colGap) / 2;
+
+        int row1Y = layout.basicY + 54;
+        int rowGap = clampInt((layout.basicH - 88 - layout.fieldH) / 3, 36, 42);
+        int row2Y = row1Y + rowGap;
+        int row3Y = row2Y + rowGap;
+        int row4Y = row3Y + rowGap;
+
+        int maxRow4Y = layout.basicY + layout.basicH - layout.fieldH - 12;
+        if (row4Y > maxRow4Y) {
+            row4Y = maxRow4Y;
+        }
+
+        layout.nameX = innerX;
+        layout.nameY = row1Y;
+        layout.nameW = colW;
+        layout.categoryX = innerX + colW + colGap;
+        layout.categoryY = row1Y;
+        layout.categoryW = colW;
+        layout.typeX = innerX;
+        layout.typeY = row2Y;
+        layout.typeW = colW;
+        layout.versionX = innerX + colW + colGap;
+        layout.versionY = row2Y;
+        layout.versionW = colW;
+        layout.authorX = innerX;
+        layout.authorY = row3Y;
+        layout.authorW = innerW;
+        layout.tagsX = innerX;
+        layout.tagsY = row4Y;
+        layout.tagsW = innerW;
+
+        layout.variantRowX = layout.variantsBoxX + 12;
+        layout.variantRowY = layout.variantsBoxY + 48;
+        layout.variantRowW = layout.variantsBoxW - 24;
+        layout.variantRowH = 23;
+        layout.variantRowGap = 7;
+        layout.addVariantW = 108;
+        layout.removeVariantW = 116;
+        layout.removeVariantX = layout.variantsBoxX + layout.variantsBoxW - 12 - layout.removeVariantW;
+        layout.addVariantX = layout.removeVariantX - 8 - layout.addVariantW;
+        if (layout.addVariantX < layout.variantRowX) {
+            layout.addVariantX = layout.variantRowX;
+            layout.removeVariantX = layout.addVariantX + layout.addVariantW + 8;
+        }
+        layout.addVariantY = layout.variantsBoxY + layout.variantsBoxH - layout.buttonH - 10;
+        layout.removeVariantY = layout.addVariantY;
+
+        layout.fileFieldH = 22;
+        int fileInnerX = layout.filesX + 12;
+        int fileInnerW = layout.filesW - 24;
+        layout.structureFileX = fileInnerX;
+        layout.structureFileY = layout.filesY + 52;
+        layout.structureFileW = fileInnerW;
+        layout.previewFileX = fileInnerX;
+        layout.previewFileY = layout.structureFileY + 40;
+        layout.previewFileW = fileInnerW;
+
+        int toggleY = layout.filesY + layout.filesH - 28;
+        layout.favoriteToggleX = fileInnerX + 78;
+        layout.favoriteToggleY = toggleY;
+        layout.visibleToggleX = layout.filesX + layout.filesW - 44;
+        layout.visibleToggleY = toggleY;
+
+        // Legacy aliases used by existing EditBox setup and older click calculations.
+        layout.fieldX = layout.nameX;
+        layout.fieldW = layout.nameW;
+        layout.nameLegacyY = layout.nameY;
+        layout.categoryLegacyY = layout.categoryY;
+        layout.typeLegacyY = layout.typeY;
+        layout.versionLegacyY = layout.versionY;
+        layout.variantsLegacyY = layout.variantRowY;
 
         return layout;
     }
@@ -1314,7 +2073,6 @@ public class ArchivScreen extends Screen {
         listMenuOpen = true;
         listMenuAssetName = asset.getName();
         collectionPickerOpen = false;
-        selectedLibraryAssetName = asset.getName();
     }
 
     private void closeListMenu() {
@@ -1341,7 +2099,6 @@ public class ArchivScreen extends Screen {
         listMenuOpen = true;
         listMenuAssetName = asset.getName();
         collectionPickerOpen = true;
-        selectedLibraryAssetName = asset.getName();
     }
 
     private ArchivAsset getSavedAssetByName(String assetName) {
@@ -1356,6 +2113,193 @@ public class ArchivScreen extends Screen {
         }
 
         return null;
+    }
+
+    private void openEditAssetModal(ArchivAsset asset) {
+        if (!isSavedAsset(asset)) {
+            return;
+        }
+
+        closeListMenu();
+
+        editAssetModalOpen = true;
+        editAssetOriginalName = asset.getName();
+        editAssetDropdownOpen = null;
+
+        if (editAssetNameBox != null) {
+            editAssetNameBox.setValue(asset.getName());
+            editAssetNameBox.setFocused(true);
+            this.setFocused(editAssetNameBox);
+        }
+
+        editAssetSelectedCategory = getSafeOption(macroCategories, asset.getMacroCategory());
+        editAssetSelectedType = getSafeOption(assetTypes, asset.getType());
+        editAssetSelectedVersion = getSafeOption(minecraftVersions, asset.getVersion());
+        editAssetVariantCount = clampInt(asset.getVariantCount(), 1, 99);
+
+        if (editAssetCategoryBox != null) {
+            editAssetCategoryBox.setValue(editAssetSelectedCategory);
+            editAssetCategoryBox.setFocused(false);
+        }
+
+        if (editAssetTypeBox != null) {
+            editAssetTypeBox.setValue(editAssetSelectedType);
+            editAssetTypeBox.setFocused(false);
+        }
+
+        if (editAssetVersionBox != null) {
+            editAssetVersionBox.setValue(editAssetSelectedVersion);
+            editAssetVersionBox.setFocused(false);
+        }
+
+        if (editAssetVariantsBox != null) {
+            editAssetVariantsBox.setValue(String.valueOf(editAssetVariantCount));
+            editAssetVariantsBox.setFocused(false);
+        }
+
+        libraryActionMessage = "Editing: " + asset.getName();
+    }
+
+    private void closeEditAssetModal() {
+        editAssetModalOpen = false;
+        editAssetOriginalName = null;
+        editAssetDropdownOpen = null;
+
+        if (editAssetNameBox != null) editAssetNameBox.setFocused(false);
+        if (editAssetCategoryBox != null) editAssetCategoryBox.setFocused(false);
+        if (editAssetTypeBox != null) editAssetTypeBox.setFocused(false);
+        if (editAssetVersionBox != null) editAssetVersionBox.setFocused(false);
+        if (editAssetVariantsBox != null) editAssetVariantsBox.setFocused(false);
+
+        this.setFocused(null);
+    }
+
+    private boolean assetNameExistsExcept(String name, String ignoredName) {
+        for (ArchivAsset asset : savedAssets) {
+            if (asset.getName().equalsIgnoreCase(name) && !asset.getName().equals(ignoredName)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private int parseVariantCount(String value, int fallback) {
+        try {
+            return clampInt(Integer.parseInt(trimToEmpty(value)), 1, 99);
+        } catch (NumberFormatException exception) {
+            return fallback;
+        }
+    }
+
+    private int getChipColorForEditedAsset(String type, int fallback) {
+        String normalized = trimToEmpty(type).toLowerCase();
+
+        return switch (normalized) {
+            case "structure" -> 0xFF2D9CDB;
+            case "decoration" -> 0xFF8A5CFF;
+            case "tree", "nature" -> 0xFF2DBE73;
+            case "prop" -> 0xFFDA8A2D;
+            default -> fallback;
+        };
+    }
+
+    private ArchivAsset buildEditedAsset(ArchivAsset oldAsset, String newName) {
+        String category = getSafeOption(macroCategories, editAssetSelectedCategory);
+        String type = getSafeOption(assetTypes, editAssetSelectedType);
+        String version = getSafeOption(minecraftVersions, editAssetSelectedVersion);
+
+        int variantCount = clampInt(editAssetVariantCount, 1, 99);
+        int chipColor = getChipColorForEditedAsset(type, oldAsset.getChipColor());
+
+        return new ArchivAsset(
+                newName,
+                category,
+                type,
+                version,
+                oldAsset.getPreviewColor(),
+                chipColor,
+                variantCount,
+                oldAsset.isFavorite(),
+                oldAsset.isHighlighted()
+        );
+    }
+
+    private void replaceAssetNameReferences(String oldName, String newName) {
+        for (CollectionEntry entry : collectionEntries) {
+            List<String> assetNames = entry.getAssetNames();
+
+            for (int i = 0; i < assetNames.size(); i++) {
+                if (assetNames.get(i).equals(oldName)) {
+                    assetNames.set(i, newName);
+                }
+            }
+        }
+
+        for (int i = 0; i < recentLoadedAssetNames.size(); i++) {
+            if (recentLoadedAssetNames.get(i).equals(oldName)) {
+                recentLoadedAssetNames.set(i, newName);
+            }
+        }
+
+        if (oldName.equals(loadedAssetName)) {
+            loadedAssetName = newName;
+        }
+
+        if (oldName.equals(detailsAssetName)) {
+            detailsAssetName = newName;
+        }
+
+        if (oldName.equals(deleteConfirmAssetName)) {
+            deleteConfirmAssetName = newName;
+        }
+
+        if (oldName.equals(selectedLibraryAssetName)) {
+            selectedLibraryAssetName = newName;
+        }
+
+        if (oldName.equals(listMenuAssetName)) {
+            listMenuAssetName = newName;
+        }
+    }
+
+    private void saveEditedAsset() {
+        ArchivAsset oldAsset = getSavedAssetByName(editAssetOriginalName);
+
+        if (oldAsset == null) {
+            libraryActionMessage = "Asset not found";
+            closeEditAssetModal();
+            return;
+        }
+
+        String newName = trimToEmpty(editAssetNameBox.getValue());
+
+        if (newName.isBlank()) {
+            libraryActionMessage = "Asset name is required";
+            return;
+        }
+
+        if (assetNameExistsExcept(newName, oldAsset.getName())) {
+            libraryActionMessage = "Asset name already exists";
+            return;
+        }
+
+        ArchivAsset editedAsset = buildEditedAsset(oldAsset, newName);
+
+        for (int i = 0; i < savedAssets.size(); i++) {
+            if (savedAssets.get(i).getName().equals(oldAsset.getName())) {
+                savedAssets.set(i, editedAsset);
+                break;
+            }
+        }
+
+        replaceAssetNameReferences(oldAsset.getName(), newName);
+
+        selectedLibraryAssetName = newName;
+        libraryActionMessage = "Edited: " + newName;
+
+        closeEditAssetModal();
+        syncLibrarySelectionWithVisibleAssets();
     }
 
     private void addAssetToCollection(ArchivAsset asset, CollectionEntry targetCollection) {
@@ -1468,6 +2412,7 @@ public class ArchivScreen extends Screen {
         mockDetailsFilled = false;
         mockAssetSaved = false;
         selectedImportStep = 1;
+        normalizeMetadataSelections();
     }
 
     private void beginFreshImportSession() {
@@ -1500,21 +2445,26 @@ public class ArchivScreen extends Screen {
                 : baseName + " #" + (sameNameCount + 1);
     }
 
-    private int getImportVariantCount() {
-        String[] parts = getCurrentImportPreset().variants.split(",");
+    private int getImportPresetVariantCount(ImportPreset preset) {
+        String[] parts = preset.variants.split(",");
         return Math.max(1, parts.length);
+    }
+
+    private int getImportVariantCount() {
+        return getCurrentImportVariantCount();
     }
 
     private ArchivAsset buildSavedAssetFromImport() {
         ImportPreset preset = getCurrentImportPreset();
+        String type = getCurrentImportType();
 
         return new ArchivAsset(
                 getNextSavedAssetName(),
-                preset.macroCategory,
-                preset.type,
-                preset.version,
+                getCurrentImportCategory(),
+                type,
+                getCurrentImportVersion(),
                 mockPreviewImageSelected ? MOCK_PREVIEW_IMAGE_COLOR : MOCK_NO_PREVIEW_IMAGE_COLOR,
-                preset.chipColor,
+                getChipColorForEditedAsset(type, preset.chipColor),
                 getImportVariantCount(),
                 false,
                 false
@@ -1595,6 +2545,350 @@ public class ArchivScreen extends Screen {
         return value == null ? "" : value.trim();
     }
 
+    private int getBrowseCategoryCount() {
+        return macroCategories.size() + 1;
+    }
+
+    private String getBrowseCategoryAt(int index) {
+        if (index <= 0) {
+            return "All";
+        }
+
+        int macroIndex = index - 1;
+        if (macroIndex >= 0 && macroIndex < macroCategories.size()) {
+            return macroCategories.get(macroIndex);
+        }
+
+        return "All";
+    }
+
+    private int getSelectedIndex(List<String> options, String value) {
+        for (int i = 0; i < options.size(); i++) {
+            if (options.get(i).equals(value)) {
+                return i;
+            }
+        }
+
+        return 0;
+    }
+
+    private String getSafeOption(List<String> options, String currentValue) {
+        if (options.isEmpty()) {
+            return "Uncategorized";
+        }
+
+        for (String option : options) {
+            if (option.equals(currentValue)) {
+                return option;
+            }
+        }
+
+        return options.get(0);
+    }
+
+    private String cycleOption(List<String> options, String currentValue) {
+        if (options.isEmpty()) {
+            return currentValue;
+        }
+
+        int currentIndex = getSelectedIndex(options, currentValue);
+        int nextIndex = (currentIndex + 1) % options.size();
+        return options.get(nextIndex);
+    }
+
+    private void normalizeMetadataSelections() {
+        if (macroCategories.isEmpty()) {
+            macroCategories.add("Uncategorized");
+        }
+        if (assetTypes.isEmpty()) {
+            assetTypes.add("Structure");
+        }
+        if (minecraftVersions.isEmpty()) {
+            minecraftVersions.add("1.20.1");
+        }
+
+        if (!"All".equals(selectedCategory) && !macroCategories.contains(selectedCategory)) {
+            selectedCategory = "All";
+        }
+
+        importSelectedMacroCategory = getSafeOption(macroCategories, importSelectedMacroCategory);
+        importSelectedType = getSafeOption(assetTypes, importSelectedType);
+        importSelectedVersion = getSafeOption(minecraftVersions, importSelectedVersion);
+
+        editAssetSelectedCategory = getSafeOption(macroCategories, editAssetSelectedCategory);
+        editAssetSelectedType = getSafeOption(assetTypes, editAssetSelectedType);
+        editAssetSelectedVersion = getSafeOption(minecraftVersions, editAssetSelectedVersion);
+
+        selectedMacroCategoryIndex = clampInt(selectedMacroCategoryIndex, 0, macroCategories.size() - 1);
+        selectedAssetTypeIndex = clampInt(selectedAssetTypeIndex, 0, assetTypes.size() - 1);
+        selectedMinecraftVersionIndex = clampInt(selectedMinecraftVersionIndex, 0, minecraftVersions.size() - 1);
+    }
+
+    private boolean isMetadataGroupEditable(String group) {
+        return "Macro Categories".equals(group)
+                || "Types".equals(group)
+                || "Minecraft Versions".equals(group);
+    }
+
+    private boolean isSelectedMetadataGroupEditable() {
+        return isMetadataGroupEditable(selectedMetadataGroup);
+    }
+
+    private int getMetadataGroupCount(String group) {
+        return switch (group) {
+            case "Types" -> assetTypes.size();
+            case "Minecraft Versions" -> minecraftVersions.size();
+            case "Variant Presets" -> 15;
+            case "Tags / Keywords" -> 128;
+            case "Materials" -> 43;
+            default -> macroCategories.size();
+        };
+    }
+
+    private String getMetadataGroupSubtitle(String group) {
+        return switch (group) {
+            case "Types" -> "Asset content types";
+            case "Minecraft Versions" -> "Supported MC versions";
+            case "Variant Presets" -> "Predefined variants";
+            case "Tags / Keywords" -> "Searchable labels";
+            case "Materials" -> "Common materials";
+            default -> "High-level content themes";
+        };
+    }
+
+    private String getMetadataGroupIcon(String group) {
+        return switch (group) {
+            case "Types" -> "<>";
+            case "Minecraft Versions" -> "[]";
+            case "Variant Presets" -> "◇";
+            case "Tags / Keywords" -> "#";
+            case "Materials" -> "□";
+            default -> "▣";
+        };
+    }
+
+    private int getMetadataAccentColor(String value, int index) {
+        String normalized = trimToEmpty(value).toLowerCase();
+
+        return switch (normalized) {
+            case "medieval", "structure" -> 0xFF3B82F6;
+            case "fantasy", "decoration" -> 0xFF8A5CFF;
+            case "cyberpunk", "prop" -> 0xFFE05DFF;
+            case "sci-fi", "sci fi", "vehicle" -> 0xFF2DAEFF;
+            case "organic", "tree", "nature" -> 0xFF36C275;
+            case "modern", "interior" -> 0xFF61748B;
+            case "industrial", "redstone", "terrain" -> 0xFFFF8A2D;
+            default -> switch (index % 6) {
+                case 0 -> 0xFF3B82F6;
+                case 1 -> 0xFF8A5CFF;
+                case 2 -> 0xFF2DAEFF;
+                case 3 -> 0xFF36C275;
+                case 4 -> 0xFFFF8A2D;
+                default -> 0xFF61748B;
+            };
+        };
+    }
+
+    private String getMetadataOptionIcon(String value, int index) {
+        String normalized = trimToEmpty(value).toLowerCase();
+
+        return switch (normalized) {
+            case "medieval" -> "♜";
+            case "fantasy" -> "⚔";
+            case "cyberpunk" -> "▥";
+            case "sci-fi", "sci fi" -> "✦";
+            case "organic" -> "☘";
+            case "nature", "tree" -> "▲";
+            case "modern" -> "▤";
+            case "industrial", "redstone" -> "⚙";
+            case "structure" -> "▣";
+            case "decoration" -> "✧";
+            case "prop" -> "◆";
+            case "terrain" -> "▰";
+            case "interior" -> "⌂";
+            case "vehicle" -> "▻";
+            default -> isSelectedMetadataGroupEditable() ? "•" : "○";
+        };
+    }
+
+    private List<String> getSelectedMetadataOptions() {
+        return switch (selectedMetadataGroup) {
+            case "Types" -> assetTypes;
+            case "Minecraft Versions" -> minecraftVersions;
+            case "Macro Categories" -> macroCategories;
+            default -> new ArrayList<>();
+        };
+    }
+
+    private int getSelectedMetadataIndex() {
+        return switch (selectedMetadataGroup) {
+            case "Types" -> selectedAssetTypeIndex;
+            case "Minecraft Versions" -> selectedMinecraftVersionIndex;
+            case "Macro Categories" -> selectedMacroCategoryIndex;
+            default -> 0;
+        };
+    }
+
+    private void setSelectedMetadataIndex(int index) {
+        List<String> options = getSelectedMetadataOptions();
+        int safeIndex = options.isEmpty() ? 0 : clampInt(index, 0, options.size() - 1);
+
+        switch (selectedMetadataGroup) {
+            case "Types" -> selectedAssetTypeIndex = safeIndex;
+            case "Minecraft Versions" -> selectedMinecraftVersionIndex = safeIndex;
+            case "Macro Categories" -> selectedMacroCategoryIndex = safeIndex;
+            default -> {
+            }
+        }
+    }
+
+    private String getSelectedMetadataSingularLabel() {
+        return switch (selectedMetadataGroup) {
+            case "Types" -> "type";
+            case "Minecraft Versions" -> "version";
+            case "Variant Presets" -> "variant preset";
+            case "Tags / Keywords" -> "tag";
+            case "Materials" -> "material";
+            default -> "category";
+        };
+    }
+
+    private String getNextMetadataOptionName() {
+        List<String> options = getSelectedMetadataOptions();
+        String baseName = switch (selectedMetadataGroup) {
+            case "Types" -> "New Type";
+            case "Minecraft Versions" -> "1.20.";
+            default -> "New Category";
+        };
+
+        int index = options.size() + 1;
+        String candidate = "Minecraft Versions".equals(selectedMetadataGroup)
+                ? baseName + index
+                : baseName + " #" + index;
+
+        while (options.contains(candidate)) {
+            index++;
+            candidate = "Minecraft Versions".equals(selectedMetadataGroup)
+                    ? baseName + index
+                    : baseName + " #" + index;
+        }
+
+        return candidate;
+    }
+
+    private String getUniqueMetadataOptionName(String baseName) {
+        List<String> options = getSelectedMetadataOptions();
+        String candidate = baseName;
+        int index = 2;
+
+        while (options.contains(candidate)) {
+            candidate = baseName + " #" + index;
+            index++;
+        }
+
+        return candidate;
+    }
+
+    private void addMetadataOption() {
+        if (!isSelectedMetadataGroupEditable()) {
+            libraryActionMessage = selectedMetadataGroup + " editor is planned for a later pass";
+            return;
+        }
+
+        List<String> options = getSelectedMetadataOptions();
+        String newOption = getNextMetadataOptionName();
+        options.add(newOption);
+        setSelectedMetadataIndex(options.size() - 1);
+        normalizeMetadataSelections();
+        libraryActionMessage = "Added " + getSelectedMetadataSingularLabel() + ": " + newOption;
+    }
+
+    private void duplicateSelectedMetadataOption() {
+        if (!isSelectedMetadataGroupEditable()) {
+            libraryActionMessage = selectedMetadataGroup + " duplication is planned";
+            return;
+        }
+
+        List<String> options = getSelectedMetadataOptions();
+
+        if (options.isEmpty()) {
+            addMetadataOption();
+            return;
+        }
+
+        int index = getSelectedMetadataIndex();
+        String source = options.get(index);
+        String duplicated = getUniqueMetadataOptionName(source + " Copy");
+
+        options.add(index + 1, duplicated);
+        setSelectedMetadataIndex(index + 1);
+        normalizeMetadataSelections();
+        libraryActionMessage = "Duplicated " + getSelectedMetadataSingularLabel() + ": " + duplicated;
+    }
+
+    private void removeSelectedMetadataOption() {
+        if (!isSelectedMetadataGroupEditable()) {
+            libraryActionMessage = selectedMetadataGroup + " removal is planned";
+            return;
+        }
+
+        List<String> options = getSelectedMetadataOptions();
+
+        if (options.size() <= 1) {
+            libraryActionMessage = "At least one " + getSelectedMetadataSingularLabel() + " is required";
+            return;
+        }
+
+        int index = getSelectedMetadataIndex();
+        String removed = options.remove(index);
+        setSelectedMetadataIndex(Math.max(0, index - 1));
+        normalizeMetadataSelections();
+
+        libraryActionMessage = "Removed " + getSelectedMetadataSingularLabel() + ": " + removed;
+    }
+
+    private void resetMetadataDefaults() {
+        macroCategories.clear();
+        macroCategories.addAll(DEFAULT_MACRO_CATEGORIES);
+
+        assetTypes.clear();
+        assetTypes.addAll(DEFAULT_ASSET_TYPES);
+
+        minecraftVersions.clear();
+        minecraftVersions.addAll(DEFAULT_MINECRAFT_VERSIONS);
+
+        selectedMacroCategoryIndex = 0;
+        selectedAssetTypeIndex = 0;
+        selectedMinecraftVersionIndex = 0;
+
+        normalizeMetadataSelections();
+        libraryActionMessage = "Metadata settings reset to defaults";
+    }
+
+    private void applyImportPresetMetadata() {
+        ImportPreset preset = getCurrentImportPreset();
+        importSelectedMacroCategory = getSafeOption(macroCategories, preset.macroCategory);
+        importSelectedType = getSafeOption(assetTypes, preset.type);
+        importSelectedVersion = getSafeOption(minecraftVersions, preset.version);
+        importSelectedVariantCount = getImportPresetVariantCount(preset);
+    }
+
+    private String getCurrentImportCategory() {
+        return getSafeOption(macroCategories, importSelectedMacroCategory);
+    }
+
+    private String getCurrentImportType() {
+        return getSafeOption(assetTypes, importSelectedType);
+    }
+
+    private String getCurrentImportVersion() {
+        return getSafeOption(minecraftVersions, importSelectedVersion);
+    }
+
+    private int getCurrentImportVariantCount() {
+        return clampInt(importSelectedVariantCount, 1, 99);
+    }
+
     private boolean collectionNameExists(String name) {
         for (CollectionEntry entry : collectionEntries) {
             if (entry.getName().equalsIgnoreCase(name)) {
@@ -1619,6 +2913,10 @@ public class ArchivScreen extends Screen {
 
     private boolean isCreateCollectionFormValid() {
         return collectionNameBox != null && !trimToEmpty(collectionNameBox.getValue()).isBlank();
+    }
+
+    private boolean isEditAssetFormValid() {
+        return editAssetNameBox != null && !trimToEmpty(editAssetNameBox.getValue()).isBlank();
     }
 
     private void openCreateCollectionModal() {
@@ -1832,7 +3130,7 @@ public class ArchivScreen extends Screen {
         int itemH = 22;
 
         if (isInside(mouseX, mouseY, menuX, menuY, menuW, itemH)) {
-            openDeleteConfirm(asset);
+            openEditAssetModal(asset);
             return true;
         }
 
@@ -1863,16 +3161,132 @@ public class ArchivScreen extends Screen {
             }
         }
 
+        if (isInside(mouseX, mouseY, menuX, menuY + (itemH * 2), menuW, itemH)) {
+            openDeleteConfirm(asset);
+            return true;
+        }
+
         return false;
     }
 
-        private boolean myAssetsShowsImportedGrid() {
-            return "All Assets".equals(selectedMyAssetsSection)
-                    || "Favorites".equals(selectedMyAssetsSection)
-                    || "Imported".equals(selectedMyAssetsSection)
-                    || "Recent".equals(selectedMyAssetsSection)
-                    || "Collections".equals(selectedMyAssetsSection);
+    private List<String> getEditAssetDropdownOptions(String dropdownName) {
+        if ("category".equals(dropdownName)) {
+            return macroCategories;
         }
+
+        if ("type".equals(dropdownName)) {
+            return assetTypes;
+        }
+
+        if ("version".equals(dropdownName)) {
+            return minecraftVersions;
+        }
+
+        return new ArrayList<>();
+    }
+
+    private int getEditAssetDropdownX(EditAssetModalLayout modal, String dropdownName) {
+        if ("type".equals(dropdownName)) {
+            return modal.typeX;
+        }
+
+        if ("version".equals(dropdownName)) {
+            return modal.versionX;
+        }
+
+        return modal.categoryX;
+    }
+
+    private int getEditAssetDropdownY(EditAssetModalLayout modal, String dropdownName) {
+        if ("type".equals(dropdownName)) {
+            return modal.typeY + modal.fieldH + 2;
+        }
+
+        if ("version".equals(dropdownName)) {
+            return modal.versionY + modal.fieldH + 2;
+        }
+
+        return modal.categoryY + modal.fieldH + 2;
+    }
+
+    private int getEditAssetDropdownW(EditAssetModalLayout modal, String dropdownName) {
+        if ("type".equals(dropdownName)) {
+            return modal.typeW;
+        }
+
+        if ("version".equals(dropdownName)) {
+            return modal.versionW;
+        }
+
+        return modal.categoryW;
+    }
+
+    private void setEditAssetDropdownValue(String dropdownName, String value) {
+        if ("category".equals(dropdownName)) {
+            editAssetSelectedCategory = getSafeOption(macroCategories, value);
+            libraryActionMessage = "Category: " + editAssetSelectedCategory;
+            return;
+        }
+
+        if ("type".equals(dropdownName)) {
+            editAssetSelectedType = getSafeOption(assetTypes, value);
+            libraryActionMessage = "Type: " + editAssetSelectedType;
+            return;
+        }
+
+        if ("version".equals(dropdownName)) {
+            editAssetSelectedVersion = getSafeOption(minecraftVersions, value);
+            libraryActionMessage = "Version: " + editAssetSelectedVersion;
+        }
+    }
+
+    private void toggleEditAssetDropdown(String dropdownName) {
+        if (dropdownName == null) {
+            editAssetDropdownOpen = null;
+            return;
+        }
+
+        editAssetDropdownOpen = dropdownName.equals(editAssetDropdownOpen) ? null : dropdownName;
+
+        if (editAssetNameBox != null) {
+            editAssetNameBox.setFocused(false);
+        }
+
+        this.setFocused(null);
+    }
+
+    private boolean handleEditAssetDropdownClick(double mouseX, double mouseY, EditAssetModalLayout modal) {
+        if (editAssetDropdownOpen == null) {
+            return false;
+        }
+
+        List<String> options = getEditAssetDropdownOptions(editAssetDropdownOpen);
+        int rowH = 24;
+        int x = getEditAssetDropdownX(modal, editAssetDropdownOpen);
+        int y = getEditAssetDropdownY(modal, editAssetDropdownOpen);
+        int w = getEditAssetDropdownW(modal, editAssetDropdownOpen);
+        int h = Math.max(rowH, options.size() * rowH);
+
+        if (!isInside(mouseX, mouseY, x, y, w, h)) {
+            return false;
+        }
+
+        if (!options.isEmpty()) {
+            int index = clampInt((int) ((mouseY - y) / rowH), 0, options.size() - 1);
+            setEditAssetDropdownValue(editAssetDropdownOpen, options.get(index));
+        }
+
+        editAssetDropdownOpen = null;
+        return true;
+    }
+
+    private boolean myAssetsShowsImportedGrid() {
+        return "All Assets".equals(selectedMyAssetsSection)
+                || "Favorites".equals(selectedMyAssetsSection)
+                || "Imported".equals(selectedMyAssetsSection)
+                || "Recent".equals(selectedMyAssetsSection)
+                || "Collections".equals(selectedMyAssetsSection);
+    }
 
     private ArchivAsset copyAssetWithFavorite(ArchivAsset asset, boolean favorite) {
         return new ArchivAsset(
@@ -1990,6 +3404,10 @@ public class ArchivScreen extends Screen {
         }
 
         return result + ellipsis;
+    }
+
+    private void drawClippedString(GuiGraphics guiGraphics, String text, int x, int y, int maxWidth, int color) {
+        guiGraphics.drawString(this.font, fitTextToWidth(text, maxWidth), x, y, color);
     }
 
     private String getBrowseFavoritesLabel() {
@@ -2132,6 +3550,88 @@ public class ArchivScreen extends Screen {
             return true;
         }
 
+        if (editAssetModalOpen) {
+            EditAssetModalLayout modal = buildEditAssetModalLayout();
+            ArchivAsset asset = getSavedAssetByName(editAssetOriginalName);
+
+            if (isInside(mouseX, mouseY, modal.closeX, modal.closeY, modal.closeSize, modal.closeSize)) {
+                closeEditAssetModal();
+                return true;
+            }
+
+            if (isInside(mouseX, mouseY, modal.cancelX, modal.cancelY, modal.cancelW, modal.buttonH)) {
+                closeEditAssetModal();
+                return true;
+            }
+
+            if (isInside(mouseX, mouseY, modal.saveX, modal.saveY, modal.saveW, modal.buttonH)) {
+                saveEditedAsset();
+                return true;
+            }
+
+            if (asset != null && isInside(mouseX, mouseY, modal.deleteX, modal.deleteY, modal.deleteW, modal.buttonH)) {
+                closeEditAssetModal();
+                openDeleteConfirm(asset);
+                return true;
+            }
+
+            if (handleEditAssetDropdownClick(mouseX, mouseY, modal)) {
+                return true;
+            }
+
+            if (editAssetNameBox != null && isInside(mouseX, mouseY, editAssetNameBox.getX(), editAssetNameBox.getY(), editAssetNameBox.getWidth(), editAssetNameBox.getHeight())) {
+                editAssetDropdownOpen = null;
+                editAssetNameBox.setFocused(true);
+                this.setFocused(editAssetNameBox);
+                return super.mouseClicked(event, doubleClick);
+            }
+
+            if (isInside(mouseX, mouseY, modal.categoryX, modal.categoryY, modal.categoryW, modal.fieldH)) {
+                toggleEditAssetDropdown("category");
+                return true;
+            }
+
+            if (isInside(mouseX, mouseY, modal.typeX, modal.typeY, modal.typeW, modal.fieldH)) {
+                toggleEditAssetDropdown("type");
+                return true;
+            }
+
+            if (isInside(mouseX, mouseY, modal.versionX, modal.versionY, modal.versionW, modal.fieldH)) {
+                toggleEditAssetDropdown("version");
+                return true;
+            }
+
+            if (isInside(mouseX, mouseY, modal.addVariantX, modal.addVariantY, modal.addVariantW, modal.buttonH)) {
+                editAssetDropdownOpen = null;
+                editAssetVariantCount = clampInt(editAssetVariantCount + 1, 1, 99);
+                libraryActionMessage = "Variants: " + editAssetVariantCount;
+                return true;
+            }
+
+            if (isInside(mouseX, mouseY, modal.removeVariantX, modal.removeVariantY, modal.removeVariantW, modal.buttonH)) {
+                editAssetDropdownOpen = null;
+                editAssetVariantCount = clampInt(editAssetVariantCount - 1, 1, 99);
+                libraryActionMessage = "Variants: " + editAssetVariantCount;
+                return true;
+            }
+
+            if (isInside(mouseX, mouseY, modal.panelX, modal.panelY, modal.panelW, modal.panelH)) {
+                if (editAssetDropdownOpen != null) {
+                    editAssetDropdownOpen = null;
+                    return true;
+                }
+
+                if (editAssetNameBox != null) {
+                    editAssetNameBox.setFocused(false);
+                }
+                this.setFocused(null);
+                return true;
+            }
+
+            closeEditAssetModal();
+            return true;
+        }
+
         if (browseSearchBox != null && !isInside(mouseX, mouseY, browseSearchBox.getX(), browseSearchBox.getY(), browseSearchBox.getWidth(), browseSearchBox.getHeight())) {
             browseSearchBox.setFocused(false);
             this.setFocused(null);
@@ -2165,6 +3665,99 @@ public class ArchivScreen extends Screen {
 
         if (insideSettingsTab) {
             selectedTopTab = "Settings";
+            return true;
+        }
+
+        if ("Settings".equals(selectedTopTab)) {
+            for (int i = 0; i < settingsSections.length; i++) {
+                int currentY = chrome.sidebarItemY + (i * chrome.sidebarItemGap);
+
+                if (isInside(mouseX, mouseY, chrome.sidebarItemX, currentY, chrome.sidebarItemW, chrome.sidebarItemH)) {
+                    selectedSettingsSection = settingsSections[i];
+                    metadataGroupsScrollbarDragging = false;
+                    metadataOptionsScrollbarDragging = false;
+                    closeListMenu();
+                    return true;
+                }
+            }
+
+            SettingsLayout settingsLayout = buildSettingsLayout(chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
+
+            if ("Metadata".equals(selectedSettingsSection)) {
+                updateMetadataScrollLimits(settingsLayout);
+
+                metadataGroupsScrollbarDragging = false;
+                metadataOptionsScrollbarDragging = false;
+
+                int groupListX = getMetadataGroupsViewportX(settingsLayout);
+                int groupListY = getMetadataGroupsViewportY(settingsLayout);
+                int groupListW = getMetadataGroupsViewportW(settingsLayout);
+                int groupListH = getMetadataGroupsViewportH(settingsLayout);
+
+                if (isInside(mouseX, mouseY, groupListX, groupListY, groupListW, groupListH)) {
+                    for (int i = 0; i < metadataGroups.length; i++) {
+                        int groupY = groupListY + i * (settingsLayout.groupItemH + settingsLayout.groupGap) - metadataGroupsScrollOffset;
+
+                        if (isInside(mouseX, mouseY, groupListX, groupY, groupListW, settingsLayout.groupItemH)) {
+                            selectedMetadataGroup = metadataGroups[i];
+                            metadataOptionsScrollOffset = 0;
+                            libraryActionMessage = "Metadata group: " + selectedMetadataGroup;
+                            return true;
+                        }
+                    }
+                }
+
+                List<String> options = getSelectedMetadataOptions();
+                int optionListX = getMetadataOptionsViewportX(settingsLayout);
+                int optionListY = getMetadataOptionsViewportY(settingsLayout);
+                int optionListW = getMetadataOptionsViewportW(settingsLayout);
+                int optionListH = getMetadataOptionsViewportH(settingsLayout);
+
+                if (isInside(mouseX, mouseY, optionListX, optionListY, optionListW, optionListH)) {
+                    for (int i = 0; i < options.size(); i++) {
+                        int rowY = optionListY + i * (settingsLayout.listItemH + settingsLayout.listGap) - metadataOptionsScrollOffset;
+
+                        if (isInside(mouseX, mouseY, optionListX, rowY, optionListW, settingsLayout.listItemH)) {
+                            setSelectedMetadataIndex(i);
+                            libraryActionMessage = "Selected " + getSelectedMetadataSingularLabel() + ": " + options.get(i);
+                            return true;
+                        }
+                    }
+                }
+
+                if (isInside(mouseX, mouseY, settingsLayout.addX, settingsLayout.addY, settingsLayout.addW, settingsLayout.buttonH)) {
+                    addMetadataOption();
+                    return true;
+                }
+
+                if (isInside(mouseX, mouseY, settingsLayout.duplicateX, settingsLayout.duplicateY, settingsLayout.duplicateW, settingsLayout.buttonH)) {
+                    duplicateSelectedMetadataOption();
+                    return true;
+                }
+
+                if (isInside(mouseX, mouseY, settingsLayout.removeX, settingsLayout.removeY, settingsLayout.removeW, settingsLayout.buttonH)) {
+                    removeSelectedMetadataOption();
+                    return true;
+                }
+
+                if (isInside(mouseX, mouseY, settingsLayout.resetX, settingsLayout.resetY, settingsLayout.resetW, settingsLayout.buttonH)) {
+                    resetMetadataDefaults();
+                    metadataGroupsScrollOffset = 0;
+                    metadataOptionsScrollOffset = 0;
+                    return true;
+                }
+
+                if (isInside(mouseX, mouseY, settingsLayout.cancelX, settingsLayout.cancelY, settingsLayout.cancelW, settingsLayout.buttonH)) {
+                    libraryActionMessage = "Settings changes kept in current session";
+                    return true;
+                }
+
+                if (isInside(mouseX, mouseY, settingsLayout.saveX, settingsLayout.saveY, settingsLayout.saveW, settingsLayout.buttonH)) {
+                    libraryActionMessage = "Settings ready - persistence will be added with JSON later";
+                    return true;
+                }
+            }
+
             return true;
         }
 
@@ -2229,11 +3822,53 @@ public class ArchivScreen extends Screen {
             }
 
             if (selectedImportStep == 3) {
+                ImportDetailsFormLayout detailsForm = buildImportDetailsFormLayout(layout);
+
+                if (isInside(mouseX, mouseY, detailsForm.categoryX, detailsForm.categoryY, detailsForm.fieldW2, detailsForm.fieldH)) {
+                    mockDetailsFilled = true;
+                    mockAssetSaved = false;
+                    importSelectedMacroCategory = cycleOption(macroCategories, importSelectedMacroCategory);
+                    libraryActionMessage = "Import category: " + importSelectedMacroCategory;
+                    return true;
+                }
+
+                if (isInside(mouseX, mouseY, detailsForm.typeX, detailsForm.typeY, detailsForm.fieldW1, detailsForm.fieldH)) {
+                    mockDetailsFilled = true;
+                    mockAssetSaved = false;
+                    importSelectedType = cycleOption(assetTypes, importSelectedType);
+                    libraryActionMessage = "Import type: " + importSelectedType;
+                    return true;
+                }
+
+                if (isInside(mouseX, mouseY, detailsForm.versionX, detailsForm.versionY, detailsForm.fieldW2, detailsForm.fieldH)) {
+                    mockDetailsFilled = true;
+                    mockAssetSaved = false;
+                    importSelectedVersion = cycleOption(minecraftVersions, importSelectedVersion);
+                    libraryActionMessage = "Import version: " + importSelectedVersion;
+                    return true;
+                }
+
+                if (isInside(mouseX, mouseY, detailsForm.variantsX, detailsForm.variantsY, detailsForm.fieldW3, detailsForm.fieldH)) {
+                    mockDetailsFilled = true;
+                    mockAssetSaved = false;
+
+                    int halfW = detailsForm.fieldW3 / 2;
+                    if (mouseX < detailsForm.variantsX + halfW) {
+                        importSelectedVariantCount = clampInt(importSelectedVariantCount - 1, 1, 99);
+                    } else {
+                        importSelectedVariantCount = clampInt(importSelectedVariantCount + 1, 1, 99);
+                    }
+
+                    libraryActionMessage = "Import variants: " + importSelectedVariantCount;
+                    return true;
+                }
+
                 if (isInside(mouseX, mouseY, layout.detailsActionX, layout.detailsActionY, layout.detailsActionW, layout.detailsActionH)) {
                     mockDetailsFilled = !mockDetailsFilled;
                     mockAssetSaved = false;
 
                     if (mockDetailsFilled) {
+                        applyImportPresetMetadata();
                         selectedImportStep = 4;
                     }
 
@@ -2274,11 +3909,11 @@ public class ArchivScreen extends Screen {
         }
 
         if ("Browse".equals(selectedTopTab)) {
-            for (int i = 0; i < categories.length; i++) {
+            for (int i = 0; i < getBrowseCategoryCount(); i++) {
                 int currentY = chrome.sidebarItemY + (i * chrome.sidebarItemGap);
 
                 if (isInside(mouseX, mouseY, chrome.sidebarItemX, currentY, chrome.sidebarItemW, chrome.sidebarItemH)) {
-                    selectedCategory = categories[i];
+                    selectedCategory = getBrowseCategoryAt(i);
                     resetBrowseScroll();
                     syncLibrarySelectionWithVisibleAssets();
                     return true;
@@ -2697,6 +4332,31 @@ public class ArchivScreen extends Screen {
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         ScreenChromeLayout chrome = buildChromeLayout();
 
+        if ("Settings".equals(selectedTopTab) && "Metadata".equals(selectedSettingsSection)) {
+            SettingsLayout settingsLayout = buildSettingsLayout(chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
+            updateMetadataScrollLimits(settingsLayout);
+
+            int scrollStep = 24;
+
+            if (isInside(mouseX, mouseY, getMetadataGroupsViewportX(settingsLayout), getMetadataGroupsViewportY(settingsLayout), getMetadataGroupsViewportW(settingsLayout), getMetadataGroupsViewportH(settingsLayout))) {
+                metadataGroupsScrollOffset = clampInt(
+                        metadataGroupsScrollOffset - ((int) verticalAmount * scrollStep),
+                        0,
+                        metadataGroupsMaxScroll
+                );
+                return true;
+            }
+
+            if (isInside(mouseX, mouseY, getMetadataOptionsViewportX(settingsLayout), getMetadataOptionsViewportY(settingsLayout), getMetadataOptionsViewportW(settingsLayout), getMetadataOptionsViewportH(settingsLayout))) {
+                metadataOptionsScrollOffset = clampInt(
+                        metadataOptionsScrollOffset - ((int) verticalAmount * scrollStep),
+                        0,
+                        metadataOptionsMaxScroll
+                );
+                return true;
+            }
+        }
+
         if ("Browse".equals(selectedTopTab)) {
             ViewportLayout viewport = buildBrowseViewportLayout(chrome);
 
@@ -2773,6 +4433,30 @@ public class ArchivScreen extends Screen {
     public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
         ScreenChromeLayout chrome = buildChromeLayout();
 
+        if (metadataGroupsScrollbarDragging && "Settings".equals(selectedTopTab) && "Metadata".equals(selectedSettingsSection)) {
+            SettingsLayout settingsLayout = buildSettingsLayout(chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
+            updateMetadataScrollLimits(settingsLayout);
+            ScrollbarLayout scrollbar = buildMetadataGroupsScrollbarLayout(settingsLayout);
+
+            int desiredThumbY = (int) event.y() - metadataGroupsScrollbarDragOffset;
+            int clampedThumbY = clampInt(desiredThumbY, scrollbar.trackY, scrollbar.trackY + scrollbar.trackH - scrollbar.thumbH);
+            int movableTrack = Math.max(1, scrollbar.trackH - scrollbar.thumbH);
+            metadataGroupsScrollOffset = ((clampedThumbY - scrollbar.trackY) * metadataGroupsMaxScroll) / movableTrack;
+            return true;
+        }
+
+        if (metadataOptionsScrollbarDragging && "Settings".equals(selectedTopTab) && "Metadata".equals(selectedSettingsSection)) {
+            SettingsLayout settingsLayout = buildSettingsLayout(chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
+            updateMetadataScrollLimits(settingsLayout);
+            ScrollbarLayout scrollbar = buildMetadataOptionsScrollbarLayout(settingsLayout);
+
+            int desiredThumbY = (int) event.y() - metadataOptionsScrollbarDragOffset;
+            int clampedThumbY = clampInt(desiredThumbY, scrollbar.trackY, scrollbar.trackY + scrollbar.trackH - scrollbar.thumbH);
+            int movableTrack = Math.max(1, scrollbar.trackH - scrollbar.thumbH);
+            metadataOptionsScrollOffset = ((clampedThumbY - scrollbar.trackY) * metadataOptionsMaxScroll) / movableTrack;
+            return true;
+        }
+
         if (browseScrollbarDragging && "Browse".equals(selectedTopTab)) {
             ScrollbarLayout scrollbar = buildBrowseScrollbarLayout(
                     chrome.contentX,
@@ -2829,6 +4513,16 @@ public class ArchivScreen extends Screen {
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
         if (event.button() == 0) {
+            if (metadataGroupsScrollbarDragging) {
+                metadataGroupsScrollbarDragging = false;
+                return true;
+            }
+
+            if (metadataOptionsScrollbarDragging) {
+                metadataOptionsScrollbarDragging = false;
+                return true;
+            }
+
             if (browseScrollbarDragging) {
                 browseScrollbarDragging = false;
                 return true;
@@ -2897,6 +4591,41 @@ public class ArchivScreen extends Screen {
             }
         }
 
+        boolean editAssetModalActive = editAssetModalOpen;
+
+        if (editAssetNameBox != null) {
+            editAssetNameBox.visible = editAssetModalActive;
+            editAssetNameBox.active = editAssetModalActive;
+
+            if (!editAssetModalActive) {
+                editAssetNameBox.setFocused(false);
+            }
+        }
+
+        if (editAssetCategoryBox != null) {
+            editAssetCategoryBox.visible = false;
+            editAssetCategoryBox.active = false;
+            editAssetCategoryBox.setFocused(false);
+        }
+
+        if (editAssetTypeBox != null) {
+            editAssetTypeBox.visible = false;
+            editAssetTypeBox.active = false;
+            editAssetTypeBox.setFocused(false);
+        }
+
+        if (editAssetVersionBox != null) {
+            editAssetVersionBox.visible = false;
+            editAssetVersionBox.active = false;
+            editAssetVersionBox.setFocused(false);
+        }
+
+        if (editAssetVariantsBox != null) {
+            editAssetVariantsBox.visible = false;
+            editAssetVariantsBox.active = false;
+            editAssetVariantsBox.setFocused(false);
+        }
+
         List<ArchivAsset> visibleAssets = getVisibleAssets();
 
         drawPanel(guiGraphics, chrome.rootX, chrome.rootY, chrome.rootW, chrome.rootH, COLOR_ROOT, COLOR_BORDER);
@@ -2915,9 +4644,10 @@ public class ArchivScreen extends Screen {
             guiGraphics.drawString(this.font, "CATEGORIES", chrome.rootX + 16, chrome.bodyY + 14, COLOR_TEXT_DIM);
 
             int categoryY = chrome.sidebarItemY;
-            for (int i = 0; i < categories.length; i++) {
-                boolean active = categories[i].equals(selectedCategory);
-                drawSidebarItem(guiGraphics, categories[i], chrome.sidebarItemX, categoryY, chrome.sidebarItemW, chrome.sidebarItemH, active);
+            for (int i = 0; i < getBrowseCategoryCount(); i++) {
+                String category = getBrowseCategoryAt(i);
+                boolean active = category.equals(selectedCategory);
+                drawSidebarItem(guiGraphics, category, chrome.sidebarItemX, categoryY, chrome.sidebarItemW, chrome.sidebarItemH, active);
                 categoryY += chrome.sidebarItemGap;
             }
         } else if (myAssetsActive) {
@@ -2927,6 +4657,15 @@ public class ArchivScreen extends Screen {
             for (int i = 0; i < myAssetsSections.length; i++) {
                 boolean active = myAssetsSections[i].equals(selectedMyAssetsSection);
                 drawSidebarItem(guiGraphics, myAssetsSections[i], chrome.sidebarItemX, sectionY, chrome.sidebarItemW, chrome.sidebarItemH, active);
+                sectionY += chrome.sidebarItemGap;
+            }
+        } else if ("Settings".equals(selectedTopTab)) {
+            guiGraphics.drawString(this.font, "SETTINGS", chrome.rootX + 16, chrome.bodyY + 14, COLOR_TEXT_DIM);
+
+            int sectionY = chrome.sidebarItemY;
+            for (String section : settingsSections) {
+                boolean active = section.equals(selectedSettingsSection);
+                drawSidebarItem(guiGraphics, section, chrome.sidebarItemX, sectionY, chrome.sidebarItemW, chrome.sidebarItemH, active);
                 sectionY += chrome.sidebarItemGap;
             }
         } else if (!"Import".equals(selectedTopTab)) {
@@ -2940,6 +4679,8 @@ public class ArchivScreen extends Screen {
             drawMyAssetsTab(guiGraphics, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH, visibleAssets, mouseX, mouseY);
         } else if ("Import".equals(selectedTopTab)) {
             drawImportTab(guiGraphics, chrome.rootX, chrome.rootY, chrome.rootW, chrome.rootH, chrome.bodyY, chrome.bodyH, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
+        } else if ("Settings".equals(selectedTopTab)) {
+            drawSettingsTab(guiGraphics, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
         } else {
             drawTabPlaceholder(guiGraphics, chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH, selectedTopTab);
         }
@@ -2965,6 +4706,10 @@ public class ArchivScreen extends Screen {
 
         if (createCollectionModalOpen) {
             drawCreateCollectionModal(guiGraphics);
+        }
+
+        if (editAssetModalOpen) {
+            drawEditAssetModal(guiGraphics);
         }
 
         super.render(guiGraphics, mouseX, mouseY, delta);
@@ -2999,6 +4744,290 @@ public class ArchivScreen extends Screen {
 
         drawButtonBox(guiGraphics, "Cancel", modal.cancelX, modal.cancelY, modal.cancelW, modal.buttonH, false);
         drawButtonBoxState(guiGraphics, "Create", modal.createX, modal.createY, modal.createW, modal.buttonH, true, isCreateCollectionFormValid());
+    }
+
+    private void drawEditSectionHeader(GuiGraphics guiGraphics, String number, String title, int x, int y, int width) {
+        drawPanel(guiGraphics, x, y, 16, 16, 0xFF10243A, COLOR_BORDER_ACTIVE);
+        guiGraphics.drawString(this.font, number, x + 5, y + 5, COLOR_BORDER_ACTIVE);
+        guiGraphics.drawString(this.font, title, x + 24, y + 5, COLOR_BORDER_ACTIVE);
+        guiGraphics.fill(x + 24 + this.font.width(title) + 8, y + 8, x + width - 10, y + 9, 0x44223854);
+    }
+
+    private void drawEditLabel(GuiGraphics guiGraphics, String label, int x, int y) {
+        guiGraphics.drawString(this.font, label, x, y, COLOR_TEXT_DIM);
+    }
+
+    private void drawEditStaticField(GuiGraphics guiGraphics, String value, int x, int y, int width, int height) {
+        drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
+        drawClippedString(guiGraphics, value, x + 10, y + (height - this.font.lineHeight) / 2, width - 20, COLOR_TEXT);
+    }
+
+    private void drawEditSelectorField(GuiGraphics guiGraphics, String value, String dropdownName, int x, int y, int width, int height) {
+        boolean open = dropdownName.equals(editAssetDropdownOpen);
+        int border = open ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
+        drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, border);
+
+        String icon = switch (dropdownName) {
+            case "type" -> getMetadataOptionIcon(value, getSelectedIndex(assetTypes, value));
+            case "version" -> "▣";
+            default -> getMetadataOptionIcon(value, getSelectedIndex(macroCategories, value));
+        };
+
+        guiGraphics.drawString(this.font, icon, x + 10, y + (height - this.font.lineHeight) / 2, open ? COLOR_BORDER_ACTIVE : COLOR_TEXT_DIM);
+        drawClippedString(guiGraphics, value, x + 26, y + (height - this.font.lineHeight) / 2, width - 48, COLOR_TEXT);
+        guiGraphics.drawString(this.font, open ? "⌃" : "⌄", x + width - 18, y + (height - this.font.lineHeight) / 2, open ? COLOR_BORDER_ACTIVE : COLOR_TEXT_DIM);
+    }
+
+    private void drawEditDropdownList(GuiGraphics guiGraphics, EditAssetModalLayout modal) {
+        if (editAssetDropdownOpen == null) {
+            return;
+        }
+
+        List<String> options = getEditAssetDropdownOptions(editAssetDropdownOpen);
+        if (options.isEmpty()) {
+            return;
+        }
+
+        String currentValue = switch (editAssetDropdownOpen) {
+            case "type" -> editAssetSelectedType;
+            case "version" -> editAssetSelectedVersion;
+            default -> editAssetSelectedCategory;
+        };
+
+        int rowH = 24;
+        int x = getEditAssetDropdownX(modal, editAssetDropdownOpen);
+        int y = getEditAssetDropdownY(modal, editAssetDropdownOpen);
+        int w = getEditAssetDropdownW(modal, editAssetDropdownOpen);
+        int h = options.size() * rowH;
+
+        drawPanel(guiGraphics, x, y, w, h, 0xFF0B1524, COLOR_BORDER_ACTIVE);
+
+        for (int i = 0; i < options.size(); i++) {
+            String option = options.get(i);
+            int rowY = y + i * rowH;
+            boolean selected = option.equals(currentValue);
+
+            if (selected) {
+                guiGraphics.fill(x + 1, rowY + 1, x + w - 1, rowY + rowH, 0xFF173659);
+            }
+
+            if (i > 0) {
+                guiGraphics.fill(x + 1, rowY, x + w - 1, rowY + 1, COLOR_BORDER);
+            }
+
+            String icon = "version".equals(editAssetDropdownOpen)
+                    ? "▣"
+                    : getMetadataOptionIcon(option, i);
+            int textY = rowY + (rowH - this.font.lineHeight) / 2;
+            guiGraphics.drawString(this.font, icon, x + 10, textY, selected ? COLOR_BORDER_ACTIVE : COLOR_TEXT_DIM);
+            drawClippedString(guiGraphics, option, x + 28, textY, w - 56, selected ? COLOR_TEXT : COLOR_TEXT_DIM);
+
+            if (selected) {
+                guiGraphics.drawString(this.font, "✓", x + w - 18, textY, COLOR_SUCCESS);
+            }
+        }
+    }
+
+    private void drawEditVariantRow(GuiGraphics guiGraphics, String name, String status, int x, int y, int width, int height, boolean active) {
+        int background = active ? 0xFF122A3F : COLOR_PANEL;
+        int border = active ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
+        drawPanel(guiGraphics, x, y, width, height, background, border);
+
+        int centerY = y + (height - this.font.lineHeight) / 2;
+        drawDragHandle(guiGraphics, x + 8, y + (height - 12) / 2, active ? COLOR_BORDER_ACTIVE : COLOR_TEXT_DIM);
+
+        int iconSize = 17;
+        int iconX = x + 28;
+        int iconY = y + (height - iconSize) / 2;
+        drawPanel(guiGraphics, iconX, iconY, iconSize, iconSize, 0xFF10243A, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "▣", iconX + 5, iconY + 5, COLOR_TEXT_DIM);
+
+        int checkW = 18;
+        int editW = 18;
+        int rightX = x + width - checkW - 4;
+        drawPanel(guiGraphics, rightX, y + 3, checkW, height - 6, 0xFF2F9BE6, 0xFF73C8FF);
+        guiGraphics.drawString(this.font, "✓", rightX + 5, centerY, 0xFFFFFFFF);
+
+        int editX = rightX - editW - 4;
+        drawPanel(guiGraphics, editX, y + 3, editW, height - 6, COLOR_PANEL_ALT, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "✎", editX + 5, centerY, COLOR_TEXT_DIM);
+
+        int statusW = active ? 54 : 0;
+        if (active) {
+            int statusX = editX - statusW - 8;
+            drawPanel(guiGraphics, statusX, y + 4, statusW, height - 8, 0xFF153B29, 0xFF226B45);
+            guiGraphics.drawString(this.font, status, statusX + 8, centerY, COLOR_SUCCESS);
+        }
+
+        int nameX = iconX + iconSize + 10;
+        int nameMaxW = active
+                ? Math.max(40, editX - statusW - 18 - nameX)
+                : Math.max(40, editX - 10 - nameX);
+        drawClippedString(guiGraphics, name, nameX, centerY, nameMaxW, COLOR_TEXT);
+    }
+
+    private void drawEditFileField(GuiGraphics guiGraphics, String label, String value, int x, int y, int width, int height) {
+        guiGraphics.drawString(this.font, label, x, y - 14, COLOR_TEXT_DIM);
+        drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
+
+        int centerY = y + (height - this.font.lineHeight) / 2;
+        guiGraphics.drawString(this.font, "□", x + 8, centerY, COLOR_TEXT_DIM);
+        drawClippedString(guiGraphics, value, x + 24, centerY, width - 56, COLOR_TEXT);
+
+        drawPanel(guiGraphics, x + width - 28, y, 28, height, COLOR_PANEL_ALT, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "...", x + width - 20, centerY, COLOR_TEXT_DIM);
+    }
+
+    private void drawEditPreviewPanel(GuiGraphics guiGraphics, EditAssetModalLayout modal, ArchivAsset asset) {
+        drawPanel(guiGraphics, modal.previewPanelX, modal.previewPanelY, modal.previewPanelW, modal.previewPanelH, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "◉ PREVIEW", modal.previewPanelX + 12, modal.previewPanelY + 12, COLOR_BORDER_ACTIVE);
+
+        int previewColor = asset == null ? MOCK_NO_PREVIEW_IMAGE_COLOR : asset.getPreviewColor();
+        drawPanel(guiGraphics, modal.previewX - 1, modal.previewY - 1, modal.previewW + 2, modal.previewH + 2, COLOR_ROOT, COLOR_BORDER);
+        guiGraphics.fill(modal.previewX, modal.previewY, modal.previewX + modal.previewW, modal.previewY + modal.previewH, previewColor);
+        String previewText = "PREVIEW";
+        guiGraphics.drawString(this.font, previewText, modal.previewX + (modal.previewW - this.font.width(previewText)) / 2, modal.previewY + modal.previewH / 2 - 4, COLOR_TEXT);
+
+        int metaY = modal.previewY + modal.previewH + 10;
+        String type = getSafeOption(assetTypes, editAssetSelectedType);
+        drawChip(guiGraphics, type, modal.previewPanelX + 12, metaY, getChipWidth(type), 18, getChipColorForEditedAsset(type, asset == null ? 0xFF2D9CDB : asset.getChipColor()));
+
+        int dotX = modal.previewPanelX + modal.previewPanelW - 90;
+        drawDot(guiGraphics, dotX, metaY + 5, 0xFF8DA1B8);
+        drawDot(guiGraphics, dotX + 14, metaY + 5, 0xFF5D6875);
+        drawDot(guiGraphics, dotX + 28, metaY + 5, 0xFF2E7B45);
+        drawDot(guiGraphics, dotX + 42, metaY + 5, 0xFF8A733D);
+        guiGraphics.drawString(this.font, "+" + Math.max(0, editAssetVariantCount - 1), dotX + 58, metaY + 4, COLOR_TEXT_DIM);
+
+        int lineY = metaY + 32;
+        guiGraphics.fill(modal.previewPanelX + 12, lineY - 8, modal.previewPanelX + modal.previewPanelW - 12, lineY - 7, COLOR_BORDER);
+
+        guiGraphics.drawString(this.font, "□  .schem", modal.previewPanelX + 16, lineY, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, "▣  " + editAssetSelectedVersion, modal.previewPanelX + 112, lineY, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, getMetadataOptionIcon(editAssetSelectedCategory, getSelectedIndex(macroCategories, editAssetSelectedCategory)) + "  " + editAssetSelectedCategory, modal.previewPanelX + 16, lineY + 22, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, "▤  " + editAssetVariantCount + " variants", modal.previewPanelX + 112, lineY + 22, COLOR_TEXT_DIM);
+
+        int infoBoxY = lineY + 50;
+        int availableInfoH = modal.previewPanelY + modal.previewPanelH - infoBoxY - 12;
+        int infoBoxH = Math.max(42, availableInfoH);
+        drawPanel(guiGraphics, modal.previewPanelX + 12, infoBoxY, modal.previewPanelW - 24, infoBoxH, COLOR_ROOT, COLOR_BORDER);
+
+        guiGraphics.drawString(this.font, "File Size", modal.previewPanelX + 22, infoBoxY + 12, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, mockStructureFileSize, modal.previewPanelX + modal.previewPanelW - 78, infoBoxY + 12, COLOR_TEXT);
+
+        if (infoBoxH >= 54) {
+            guiGraphics.fill(modal.previewPanelX + 16, infoBoxY + 28, modal.previewPanelX + modal.previewPanelW - 16, infoBoxY + 29, COLOR_BORDER);
+            guiGraphics.drawString(this.font, "Updated", modal.previewPanelX + 22, infoBoxY + 38, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, "Today", modal.previewPanelX + modal.previewPanelW - 58, infoBoxY + 38, COLOR_TEXT);
+        }
+
+        if (infoBoxH >= 76) {
+            guiGraphics.fill(modal.previewPanelX + 16, infoBoxY + 56, modal.previewPanelX + modal.previewPanelW - 16, infoBoxY + 57, COLOR_BORDER);
+            guiGraphics.drawString(this.font, "Status", modal.previewPanelX + 22, infoBoxY + 66, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, "• Ready", modal.previewPanelX + modal.previewPanelW - 62, infoBoxY + 66, COLOR_SUCCESS);
+        } else {
+            guiGraphics.drawString(this.font, "• Ready", modal.previewPanelX + modal.previewPanelW - 62, infoBoxY + infoBoxH - 16, COLOR_SUCCESS);
+        }
+    }
+
+    private void drawEditAssetModal(GuiGraphics guiGraphics) {
+        if (!editAssetModalOpen) {
+            return;
+        }
+
+        EditAssetModalLayout modal = buildEditAssetModalLayout();
+        ArchivAsset asset = getSavedAssetByName(editAssetOriginalName);
+
+        guiGraphics.fill(0, 0, this.width, this.height, 0xAA000000);
+        drawPanel(guiGraphics, modal.panelX, modal.panelY, modal.panelW, modal.panelH, 0xF00B1624, COLOR_BORDER_ACTIVE);
+
+        drawPanel(guiGraphics, modal.headerIconX, modal.headerIconY, modal.headerIconSize, modal.headerIconSize, COLOR_PANEL, COLOR_BORDER_ACTIVE);
+        guiGraphics.drawString(this.font, "▣", modal.headerIconX + 10, modal.headerIconY + 12, COLOR_BORDER_ACTIVE);
+
+        guiGraphics.drawString(this.font, "Edit Asset", modal.headerIconX + modal.headerIconSize + 14, modal.panelY + 18, COLOR_TEXT);
+        String subtitle = asset == null ? "Editing saved asset metadata." : "Editing: " + asset.getName();
+        guiGraphics.drawString(this.font, fitTextToWidth(subtitle, modal.panelW - 120), modal.headerIconX + modal.headerIconSize + 14, modal.panelY + 34, COLOR_TEXT_DIM);
+
+        drawPanel(guiGraphics, modal.closeX, modal.closeY, modal.closeSize, modal.closeSize, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "X", modal.closeX + 7, modal.closeY + 7, COLOR_TEXT);
+
+        drawPanel(guiGraphics, modal.basicX, modal.basicY, modal.basicW, modal.basicH, 0xDD0F1B2D, COLOR_BORDER);
+        drawEditSectionHeader(guiGraphics, "1", "BASIC INFORMATION", modal.basicX + 12, modal.basicY + 12, modal.basicW - 24);
+
+        drawEditLabel(guiGraphics, "Asset Name", modal.nameX, modal.nameY - 12);
+        drawPanel(guiGraphics, modal.nameX, modal.nameY, modal.nameW, modal.fieldH, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "□", modal.nameX + modal.nameW - 18, modal.nameY + 7, COLOR_TEXT_DIM);
+
+        drawEditLabel(guiGraphics, "Macro Category", modal.categoryX, modal.categoryY - 12);
+        drawEditSelectorField(guiGraphics, editAssetSelectedCategory, "category", modal.categoryX, modal.categoryY, modal.categoryW, modal.fieldH);
+
+        drawEditLabel(guiGraphics, "Type", modal.typeX, modal.typeY - 12);
+        drawEditSelectorField(guiGraphics, editAssetSelectedType, "type", modal.typeX, modal.typeY, modal.typeW, modal.fieldH);
+
+        drawEditLabel(guiGraphics, "Minecraft Version", modal.versionX, modal.versionY - 12);
+        drawEditSelectorField(guiGraphics, editAssetSelectedVersion, "version", modal.versionX, modal.versionY, modal.versionW, modal.fieldH);
+
+        drawEditLabel(guiGraphics, "Author", modal.authorX, modal.authorY - 12);
+        drawEditStaticField(guiGraphics, "BuilderX", modal.authorX, modal.authorY, modal.authorW, modal.fieldH);
+
+        drawEditLabel(guiGraphics, "Tags", modal.tagsX, modal.tagsY - 12);
+        drawPanel(guiGraphics, modal.tagsX, modal.tagsY, modal.tagsW, modal.fieldH, COLOR_PANEL, COLOR_BORDER);
+        int tagX = modal.tagsX + 8;
+        String[] tags = {"tower", "medieval", "build", "stone"};
+        for (String tag : tags) {
+            int tagW = this.font.width(tag) + 20;
+            if (tagX + tagW > modal.tagsX + modal.tagsW - 58) {
+                break;
+            }
+            drawPanel(guiGraphics, tagX, modal.tagsY + 3, tagW, 16, 0xFF14263A, COLOR_BORDER);
+            guiGraphics.drawString(this.font, tag, tagX + 6, modal.tagsY + 7, COLOR_TEXT);
+            guiGraphics.drawString(this.font, "x", tagX + tagW - 10, modal.tagsY + 7, COLOR_TEXT_DIM);
+            tagX += tagW + 5;
+        }
+        drawClippedString(guiGraphics, "Add tag...", tagX + 4, modal.tagsY + 7, modal.tagsX + modal.tagsW - tagX - 32, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, "⌄", modal.tagsX + modal.tagsW - 18, modal.tagsY + 7, COLOR_TEXT_DIM);
+
+        drawPanel(guiGraphics, modal.variantsBoxX, modal.variantsBoxY, modal.variantsBoxW, modal.variantsBoxH, 0xDD0F1B2D, COLOR_BORDER);
+        drawEditSectionHeader(guiGraphics, "2", "VARIANTS (" + editAssetVariantCount + " VARIANTS)", modal.variantsBoxX + 12, modal.variantsBoxY + 12, modal.variantsBoxW - 24);
+        drawClippedString(guiGraphics, "Later: link assets or add .schem / .schematic / .blueprint files.",
+                modal.variantsBoxX + 12, modal.variantsBoxY + 31, modal.variantsBoxW - 24, COLOR_TEXT_DIM);
+
+        int rowCount = Math.min(editAssetVariantCount, 2);
+        if (rowCount >= 1) {
+            drawEditVariantRow(guiGraphics, "Default", "Active", modal.variantRowX, modal.variantRowY, modal.variantRowW, modal.variantRowH, true);
+        }
+        if (rowCount >= 2) {
+            drawEditVariantRow(guiGraphics, "Ruined", "", modal.variantRowX, modal.variantRowY + modal.variantRowH + modal.variantRowGap, modal.variantRowW, modal.variantRowH, false);
+        }
+        if (editAssetVariantCount > 2) {
+            guiGraphics.drawString(this.font, "+" + (editAssetVariantCount - 2) + " more variants", modal.variantRowX + 8, modal.variantRowY + (modal.variantRowH + modal.variantRowGap) * 2 + 8, COLOR_TEXT_DIM);
+        }
+        drawButtonBox(guiGraphics, "+ Add Variant", modal.addVariantX, modal.addVariantY, modal.addVariantW, modal.buttonH, false);
+        drawButtonBoxState(guiGraphics, "Remove Selected", modal.removeVariantX, modal.removeVariantY, modal.removeVariantW, modal.buttonH, false, editAssetVariantCount > 1);
+
+        drawPanel(guiGraphics, modal.filesX, modal.filesY, modal.filesW, modal.filesH, 0xDD0F1B2D, COLOR_BORDER);
+        drawEditSectionHeader(guiGraphics, "3", "FILES / OPTIONS", modal.filesX + 12, modal.filesY + 12, modal.filesW - 24);
+        drawEditFileField(guiGraphics, "Structure file (.schem)", "stone_tower_v1.schem", modal.structureFileX, modal.structureFileY, modal.structureFileW, modal.fileFieldH);
+        drawEditFileField(guiGraphics, "Preview image", mockPreviewImageSelected ? mockPreviewImageName : "stone_tower_preview.png", modal.previewFileX, modal.previewFileY, modal.previewFileW, modal.fileFieldH);
+
+        if (modal.filesH >= 118) {
+            int optionY = modal.filesY + modal.filesH - 30;
+            int rightOptionX = modal.filesX + Math.max(118, modal.filesW / 2);
+            guiGraphics.drawString(this.font, "☆ Favorite", modal.structureFileX, optionY + 7, COLOR_TEXT_DIM);
+            drawMockToggle(guiGraphics, modal.favoriteToggleX, optionY + 3, asset != null && asset.isFavorite());
+            guiGraphics.drawString(this.font, "◉ Visible", rightOptionX, optionY + 7, COLOR_TEXT_DIM);
+            drawMockToggle(guiGraphics, modal.visibleToggleX, optionY + 3, true);
+        }
+
+        drawEditPreviewPanel(guiGraphics, modal, asset);
+
+        guiGraphics.fill(modal.panelX + 16, modal.cancelY - 11, modal.panelX + modal.panelW - 16, modal.cancelY - 10, COLOR_BORDER);
+        drawButtonBox(guiGraphics, "Delete Asset", modal.deleteX, modal.deleteY, modal.deleteW, modal.buttonH, false);
+        guiGraphics.drawString(this.font, "!", modal.deleteX + 10, modal.deleteY + 8, 0xFFFF5D7A);
+        drawButtonBox(guiGraphics, "Cancel", modal.cancelX, modal.cancelY, modal.cancelW, modal.buttonH, false);
+        drawButtonBoxState(guiGraphics, "Save Changes", modal.saveX, modal.saveY, modal.saveW, modal.buttonH, true, isEditAssetFormValid());
+
+        drawEditDropdownList(guiGraphics, modal);
     }
 
     private void drawAssetDetailsPanel(GuiGraphics guiGraphics, int rootX, int rootY, int rootW, int bodyY) {
@@ -3153,6 +5182,14 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(this.font, text, x + 12, textY, textColor);
     }
 
+    private void drawSelectorField(GuiGraphics guiGraphics, String text, int x, int y, int width, int height) {
+        drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
+
+        String label = fitTextToWidth(text + "  >", width - 20);
+        int textY = y + (height - this.font.lineHeight) / 2;
+        guiGraphics.drawString(this.font, label, x + 10, textY, COLOR_TEXT);
+    }
+
     private void drawButtonBox(GuiGraphics guiGraphics, String label, int x, int y, int width, int height, boolean primary) {
         int background = primary ? 0xFF2F9BE6 : COLOR_PANEL;
         int border = primary ? 0xFF73C8FF : COLOR_BORDER;
@@ -3220,19 +5257,20 @@ public class ArchivScreen extends Screen {
 
     private void drawAssetContextMenu(GuiGraphics guiGraphics, int x, int y, int width, ArchivAsset asset, int mouseX, int mouseY) {
         int itemH = 22;
-        int height = itemH * 2;
+        int height = itemH * 3;
 
-        boolean deleteHovered = isInside(mouseX, mouseY, x, y, width, itemH);
+        boolean editHovered = isInside(mouseX, mouseY, x, y, width, itemH);
         boolean addHovered = isHoveringAddToCollectionRow(mouseX, mouseY, x, y, width);
+        boolean deleteHovered = isInside(mouseX, mouseY, x, y + (itemH * 2), width, itemH);
         boolean showRollup = shouldShowCollectionRollup(mouseX, mouseY, x, y, width);
 
         drawPanel(guiGraphics, x, y, width, height, 0xFF142136, COLOR_BORDER_ACTIVE);
 
-        if (deleteHovered) {
+        if (editHovered) {
             guiGraphics.fill(x + 1, y + 1, x + width - 1, y + itemH, 0xFF25364F);
         }
 
-        guiGraphics.drawString(this.font, "Delete Asset", x + 10, y + 7, 0xFFFFD7DE);
+        guiGraphics.drawString(this.font, "Edit Asset", x + 10, y + 7, COLOR_TEXT);
 
         guiGraphics.fill(x + 1, y + itemH, x + width - 1, y + itemH + 1, COLOR_BORDER);
 
@@ -3241,6 +5279,14 @@ public class ArchivScreen extends Screen {
         }
 
         guiGraphics.drawString(this.font, "Add to Collection  >", x + 10, y + itemH + 7, COLOR_TEXT);
+
+        guiGraphics.fill(x + 1, y + (itemH * 2), x + width - 1, y + (itemH * 2) + 1, COLOR_BORDER);
+
+        if (deleteHovered) {
+            guiGraphics.fill(x + 1, y + (itemH * 2) + 1, x + width - 1, y + height - 1, 0xFF25364F);
+        }
+
+        guiGraphics.drawString(this.font, "Delete Asset", x + 10, y + (itemH * 2) + 7, 0xFFFFD7DE);
 
         if (!showRollup) {
             return;
@@ -3341,6 +5387,301 @@ public class ArchivScreen extends Screen {
 
     private void drawEmptyState(GuiGraphics guiGraphics, int x, int y, int width, int height) {
         drawEmptyState(guiGraphics, x, y, width, height, "No assets found", "Try another category or import new assets.");
+    }
+
+    private void drawSettingsTab(GuiGraphics guiGraphics, int contentX, int contentY, int contentW, int contentH) {
+        SettingsLayout layout = buildSettingsLayout(contentX, contentY, contentW, contentH);
+
+        if (!"Metadata".equals(selectedSettingsSection)) {
+            guiGraphics.drawString(this.font, "Settings", layout.innerX, layout.innerY, COLOR_TEXT);
+            guiGraphics.drawString(this.font, "Customize Archiv to fit your build workflow.", layout.innerX, layout.innerY + 16, COLOR_TEXT_DIM);
+
+            int panelW = Math.min(560, layout.innerW - 20);
+            int panelH = 150;
+            int panelX = layout.innerX;
+            int panelY = layout.groupY;
+
+            drawPanel(guiGraphics, panelX, panelY, panelW, panelH, COLOR_PANEL, COLOR_BORDER);
+            guiGraphics.drawString(this.font, selectedSettingsSection, panelX + 14, panelY + 16, COLOR_TEXT);
+            guiGraphics.drawString(this.font, "This settings section is planned for a later pass.", panelX + 14, panelY + 40, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, "For now, Metadata controls the shared values used by Import and Edit Asset.", panelX + 14, panelY + 58, COLOR_TEXT_DIM);
+            guiGraphics.drawString(this.font, "Next passes can reuse this same Settings layout.", panelX + 14, panelY + 76, COLOR_TEXT_DIM);
+            return;
+        }
+
+        drawMetadataSettings(guiGraphics, layout);
+    }
+
+    private void drawMetadataGroupTile(GuiGraphics guiGraphics, String group, int x, int y, int width, int height, boolean active) {
+        int background = active ? COLOR_PANEL_ALT : COLOR_PANEL;
+        int border = active ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
+        int accent = getMetadataAccentColor(group, getMetadataGroupCount(group));
+
+        drawPanel(guiGraphics, x, y, width, height, background, border);
+
+        if (active) {
+            guiGraphics.fill(x, y + 1, x + 3, y + height - 1, COLOR_BORDER_ACTIVE);
+        }
+
+        int iconSize = 24;
+        int iconX = x + 12;
+        int iconY = y + (height - iconSize) / 2;
+        drawPanel(guiGraphics, iconX, iconY, iconSize, iconSize, 0xFF10243A, accent);
+
+        String icon = getMetadataGroupIcon(group);
+        guiGraphics.drawString(this.font, icon, iconX + (iconSize - this.font.width(icon)) / 2, iconY + 8, COLOR_TEXT);
+
+        int textX = iconX + iconSize + 12;
+        guiGraphics.drawString(this.font, fitTextToWidth(group, width - 88), textX, y + 7, active ? COLOR_TEXT : COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, fitTextToWidth(getMetadataGroupSubtitle(group), width - 88), textX, y + 21, COLOR_TEXT_DIM);
+
+        String count = String.valueOf(getMetadataGroupCount(group));
+        int badgeW = Math.max(18, this.font.width(count) + 10);
+        drawPanel(guiGraphics, x + width - badgeW - 10, y + 8, badgeW, 18, active ? 0xFF1D5F91 : 0xFF162233, active ? COLOR_BORDER_ACTIVE : COLOR_BORDER);
+        guiGraphics.drawString(this.font, count, x + width - badgeW - 10 + (badgeW - this.font.width(count)) / 2, y + 13, COLOR_TEXT);
+    }
+
+    private void drawMetadataOptionRow(GuiGraphics guiGraphics, String option, int index, int x, int y, int width, int height, boolean active) {
+        int background = active ? COLOR_PANEL_ALT : COLOR_PANEL;
+        int border = active ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
+        int accent = getMetadataAccentColor(option, index);
+
+        drawPanel(guiGraphics, x, y, width, height, background, border);
+
+        if (active) {
+            guiGraphics.fill(x + 1, y + 1, x + width - 1, y + 3, COLOR_BORDER_ACTIVE);
+        }
+
+        // Drag handle visual only for now. The real reorder behavior comes in the next pass.
+        drawDragHandle(guiGraphics, x + 10, y + (height / 2) - 5, active ? COLOR_BORDER_ACTIVE : COLOR_TEXT_DIM);
+
+        int iconSize = 21;
+        int iconX = x + 26;
+        int iconY = y + (height - iconSize) / 2;
+        drawPanel(guiGraphics, iconX, iconY, iconSize, iconSize, 0xFF10243A, accent);
+
+        String icon = getMetadataOptionIcon(option, index);
+        guiGraphics.drawString(this.font, icon, iconX + (iconSize - this.font.width(icon)) / 2, iconY + 7, COLOR_TEXT);
+
+        int eyeX = x + width - 25;
+        guiGraphics.drawString(this.font, fitTextToWidth(option, width - 96), iconX + iconSize + 10, y + 11, active ? COLOR_TEXT : COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, "○", eyeX, y + 11, COLOR_BORDER_ACTIVE);
+    }
+
+    private void drawMetadataEditorField(GuiGraphics guiGraphics, String label, String value, int x, int y, int width) {
+        guiGraphics.drawString(this.font, label, x, y, COLOR_TEXT_DIM);
+        drawPanel(guiGraphics, x + 92, y - 5, width - 92, 24, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.drawString(this.font, fitTextToWidth(value, width - 110), x + 102, y + 2, COLOR_TEXT);
+    }
+
+    private void drawUsagePill(GuiGraphics guiGraphics, String label, int x, int y, int width) {
+        drawPanel(guiGraphics, x, y, width, 18, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "✓", x + 7, y + 5, COLOR_SUCCESS);
+        guiGraphics.drawString(this.font, fitTextToWidth(label, width - 24), x + 20, y + 5, COLOR_TEXT_DIM);
+    }
+
+    private void drawMetadataInfoBox(GuiGraphics guiGraphics, String line1, String line2, int x, int y, int width, int height) {
+        drawPanel(guiGraphics, x, y, width, height, 0xFF10243A, COLOR_BORDER_ACTIVE);
+        guiGraphics.drawString(this.font, "i", x + 12, y + 12, COLOR_BORDER_ACTIVE);
+        guiGraphics.drawString(this.font, fitTextToWidth(line1, width - 44), x + 32, y + 10, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, fitTextToWidth(line2, width - 44), x + 32, y + 26, COLOR_TEXT_DIM);
+    }
+
+    private void drawMockToggle(GuiGraphics guiGraphics, int x, int y, boolean active) {
+        int bg = active ? 0xFF2F9BE6 : 0xFF162233;
+        int border = active ? 0xFF73C8FF : COLOR_BORDER;
+        drawPanel(guiGraphics, x, y, 32, 16, bg, border);
+
+        int knobX = active ? x + 18 : x + 2;
+        guiGraphics.fill(knobX, y + 2, knobX + 12, y + 14, 0xFFF2F7FF);
+    }
+
+    private void drawMetadataSettings(GuiGraphics guiGraphics, SettingsLayout layout) {
+        updateMetadataScrollLimits(layout);
+
+        guiGraphics.drawString(this.font, "Metadata", layout.innerX, layout.innerY, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "Configure categories, types, versions, and other metadata used across Archiv.", layout.innerX, layout.innerY + 18, COLOR_TEXT_DIM);
+
+        int panelBottom = getSettingsPanelBottom(layout);
+        int bottomButtonY = getSettingsPanelButtonY(layout);
+
+        // left: metadata groups
+        drawPanel(guiGraphics, layout.groupX, layout.groupY, layout.groupW, layout.editorH, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "Metadata Groups", layout.groupX + 12, layout.groupY + 12, COLOR_TEXT);
+
+        int groupListX = getMetadataGroupsViewportX(layout);
+        int groupListY = getMetadataGroupsViewportY(layout);
+        int groupListW = getMetadataGroupsViewportW(layout);
+        int groupListH = getMetadataGroupsViewportH(layout);
+
+        guiGraphics.enableScissor(groupListX, groupListY, groupListX + groupListW, groupListY + groupListH);
+        for (int i = 0; i < metadataGroups.length; i++) {
+            String group = metadataGroups[i];
+            int groupY = groupListY + i * (layout.groupItemH + layout.groupGap) - metadataGroupsScrollOffset;
+
+            if (groupY + layout.groupItemH < groupListY || groupY > groupListY + groupListH) {
+                continue;
+            }
+
+            drawMetadataGroupTile(guiGraphics, group, groupListX, groupY, groupListW, layout.groupItemH, group.equals(selectedMetadataGroup));
+        }
+        guiGraphics.disableScissor();
+
+        drawButtonBoxState(guiGraphics, "+ New Group", layout.groupX + 10, bottomButtonY, layout.groupW - 20, 24, false, false);
+
+        // center: selected group list
+        drawPanel(guiGraphics, layout.listX, layout.listY, layout.listW, layout.editorH, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.drawString(this.font, selectedMetadataGroup, layout.listX + 12, layout.listY + 12, COLOR_TEXT);
+
+        int searchX = layout.listX + 12;
+        int searchY = layout.listY + 34;
+        int searchW = Math.max(90, layout.listW - 78);
+        drawPanel(guiGraphics, searchX, searchY, searchW, 24, COLOR_ROOT, COLOR_BORDER);
+
+        String searchPlaceholder = switch (selectedMetadataGroup) {
+            case "Types" -> "Search types...";
+            case "Minecraft Versions" -> "Search versions...";
+            case "Variant Presets" -> "Search variants...";
+            case "Tags / Keywords" -> "Search tags...";
+            case "Materials" -> "Search materials...";
+            default -> "Search categories...";
+        };
+        drawClippedString(guiGraphics, searchPlaceholder, searchX + 10, searchY + 8, searchW - 20, COLOR_TEXT_DIM);
+
+        drawPanel(guiGraphics, searchX + searchW + 8, searchY, 24, 24, COLOR_PANEL_ALT, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "v", searchX + searchW + 17, searchY + 8, COLOR_TEXT_DIM);
+        drawPanel(guiGraphics, searchX + searchW + 38, searchY, 24, 24, COLOR_PANEL_ALT, COLOR_BORDER);
+        guiGraphics.drawString(this.font, ":", searchX + searchW + 48, searchY + 8, COLOR_TEXT_DIM);
+
+        List<String> options = getSelectedMetadataOptions();
+        int selectedIndex = getSelectedMetadataIndex();
+
+        int optionListX = getMetadataOptionsViewportX(layout);
+        int optionListY = getMetadataOptionsViewportY(layout);
+        int optionListW = getMetadataOptionsViewportW(layout);
+        int optionListH = getMetadataOptionsViewportH(layout);
+
+        guiGraphics.enableScissor(optionListX, optionListY, optionListX + optionListW, optionListY + optionListH);
+        if (options.isEmpty()) {
+            drawPanel(guiGraphics, optionListX, optionListY, optionListW, 96, COLOR_ROOT, COLOR_BORDER);
+            guiGraphics.drawString(this.font, selectedMetadataGroup, optionListX + 12, optionListY + 22, COLOR_TEXT);
+            drawClippedString(guiGraphics, "This metadata group is visual-only for now.", optionListX + 12, optionListY + 42, optionListW - 24, COLOR_TEXT_DIM);
+            drawClippedString(guiGraphics, "We'll connect editing in a later pass.", optionListX + 12, optionListY + 58, optionListW - 24, COLOR_TEXT_DIM);
+        } else {
+            for (int i = 0; i < options.size(); i++) {
+                int rowY = optionListY + i * (layout.listItemH + layout.listGap) - metadataOptionsScrollOffset;
+
+                if (rowY + layout.listItemH < optionListY || rowY > optionListY + optionListH) {
+                    continue;
+                }
+
+                drawMetadataOptionRow(guiGraphics, options.get(i), i, optionListX, rowY, optionListW, layout.listItemH, i == selectedIndex);
+            }
+        }
+        guiGraphics.disableScissor();
+
+        String addLabel = switch (selectedMetadataGroup) {
+            case "Types" -> "+ Add Type";
+            case "Minecraft Versions" -> "+ Add Version";
+            case "Variant Presets" -> "+ Add Variant";
+            case "Tags / Keywords" -> "+ Add Tag";
+            case "Materials" -> "+ Add Material";
+            default -> "+ Add Category";
+        };
+        drawButtonBoxState(guiGraphics, addLabel, layout.listX + 10, bottomButtonY, layout.listW - 20, 24, false, isSelectedMetadataGroupEditable());
+
+        // right: metadata editor
+        drawPanel(guiGraphics, layout.editorX, layout.editorY, layout.editorW, layout.editorH, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.drawString(this.font, "Metadata Editor", layout.editorX + 12, layout.editorY + 12, COLOR_TEXT);
+
+        String selectedName = options.isEmpty()
+                ? selectedMetadataGroup
+                : options.get(clampInt(selectedIndex, 0, options.size() - 1));
+        boolean editable = isSelectedMetadataGroupEditable() && !options.isEmpty();
+        int accent = getMetadataAccentColor(selectedName, selectedIndex);
+
+        int fieldX = layout.editorX + 12;
+        int fieldW = layout.editorW - 24;
+        int editorBodyY = layout.editorY + 34;
+        int editorBodyBottom = Math.max(editorBodyY + 16, layout.addY - 8);
+
+        guiGraphics.enableScissor(fieldX, editorBodyY, fieldX + fieldW, editorBodyBottom);
+
+        guiGraphics.drawString(this.font, "Selected:", fieldX, editorBodyY + 2, COLOR_TEXT_DIM);
+        drawClippedString(guiGraphics, selectedName, fieldX + 56, editorBodyY + 2, fieldW - 62, COLOR_BORDER_ACTIVE);
+
+        int cursorY = editorBodyY + 28;
+        drawMetadataEditorField(guiGraphics, "Display Name", selectedName, fieldX, cursorY, fieldW);
+        cursorY += 30;
+        drawMetadataEditorField(guiGraphics, "Slug", trimToEmpty(selectedName).toLowerCase().replace(" ", "-").replace("/", "-"), fieldX, cursorY, fieldW);
+        cursorY += 38;
+
+        guiGraphics.drawString(this.font, "Icon", fieldX, cursorY, COLOR_TEXT_DIM);
+        drawPanel(guiGraphics, fieldX, cursorY + 12, 70, 24, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.drawString(this.font, getMetadataOptionIcon(selectedName, selectedIndex), fieldX + 12, cursorY + 20, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "v", fieldX + 54, cursorY + 20, COLOR_TEXT_DIM);
+
+        int accentX = fieldX + 92;
+        guiGraphics.drawString(this.font, "Accent Color", accentX, cursorY, COLOR_TEXT_DIM);
+        drawPanel(guiGraphics, accentX, cursorY + 12, fieldW - 92, 24, COLOR_PANEL, COLOR_BORDER);
+        guiGraphics.fill(accentX + 10, cursorY + 18, accentX + 42, cursorY + 30, accent);
+        drawClippedString(guiGraphics, "#" + Integer.toHexString(accent).substring(2).toUpperCase(), accentX + 52, cursorY + 20, fieldW - 162, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "v", fieldX + fieldW - 18, cursorY + 20, COLOR_TEXT_DIM);
+        cursorY += 52;
+
+        guiGraphics.drawString(this.font, "Description", fieldX, cursorY, COLOR_TEXT_DIM);
+        int descH = 42;
+        drawPanel(guiGraphics, fieldX, cursorY + 12, fieldW, descH, COLOR_PANEL, COLOR_BORDER);
+        String descLine1 = switch (selectedMetadataGroup) {
+            case "Types" -> "Asset type used by cards and filters.";
+            case "Minecraft Versions" -> "Supported version used in metadata.";
+            case "Variant Presets" -> "Preset labels for common variants.";
+            case "Tags / Keywords" -> "Search labels used to find assets.";
+            case "Materials" -> "Common materials for future filters.";
+            default -> "High-level theme used to organize assets.";
+        };
+        String descLine2 = editable
+                ? "Available in Browse, Import and Edit Asset."
+                : "This group is planned for a later pass.";
+        drawClippedString(guiGraphics, descLine1, fieldX + 10, cursorY + 22, fieldW - 20, COLOR_TEXT_DIM);
+        drawClippedString(guiGraphics, descLine2, fieldX + 10, cursorY + 36, fieldW - 20, COLOR_TEXT_DIM);
+        cursorY += 66;
+
+        if (cursorY + 34 <= editorBodyBottom) {
+            guiGraphics.drawString(this.font, "Used In", fieldX, cursorY, COLOR_TEXT_DIM);
+            int pillGap = 6;
+            int pillW = Math.max(62, (fieldW - (pillGap * 2)) / 3);
+            drawUsagePill(guiGraphics, "Browse", fieldX, cursorY + 14, pillW);
+            drawUsagePill(guiGraphics, "Import", fieldX + pillW + pillGap, cursorY + 14, pillW);
+            drawUsagePill(guiGraphics, "Edit", fieldX + (pillW + pillGap) * 2, cursorY + 14, pillW);
+            cursorY += 42;
+        }
+
+        if (cursorY + 20 <= editorBodyBottom) {
+            guiGraphics.drawString(this.font, "Active", fieldX, cursorY, COLOR_TEXT_DIM);
+            drawMockToggle(guiGraphics, layout.editorX + layout.editorW - 46, cursorY - 4, true);
+            cursorY += 30;
+        }
+
+        if (cursorY + 44 <= editorBodyBottom) {
+            String infoLine1 = editable
+                    ? "Active and available across Archiv."
+                    : "Planned for the expanded metadata system.";
+            String infoLine2 = editable
+                    ? "Changes affect Import, Edit and Browse."
+                    : "Categories, Types and Versions are editable now.";
+            drawMetadataInfoBox(guiGraphics, infoLine1, infoLine2, fieldX, cursorY, fieldW, 44);
+        }
+
+        guiGraphics.disableScissor();
+
+        drawButtonBoxState(guiGraphics, "+ Add", layout.addX, layout.addY, layout.addW, layout.buttonH, true, editable);
+        drawButtonBoxState(guiGraphics, "Duplicate", layout.duplicateX, layout.duplicateY, layout.duplicateW, layout.buttonH, false, editable);
+        drawButtonBoxState(guiGraphics, "Remove", layout.removeX, layout.removeY, layout.removeW, layout.buttonH, false, editable && options.size() > 1);
+
+        drawButtonBox(guiGraphics, "Reset to Default", layout.resetX, layout.resetY, layout.resetW, layout.buttonH, false);
+        drawButtonBox(guiGraphics, "Cancel", layout.cancelX, layout.cancelY, layout.cancelW, layout.buttonH, false);
+        drawButtonBox(guiGraphics, "Save Changes", layout.saveX, layout.saveY, layout.saveW, layout.buttonH, true);
     }
 
     private void drawTabPlaceholder(GuiGraphics guiGraphics, int x, int y, int width, int height, String tabName) {
@@ -3512,7 +5853,7 @@ public class ArchivScreen extends Screen {
         boolean allAssetsSection = "All Assets".equals(selectedMyAssetsSection);
         boolean showImportedGrid = myAssetsShowsImportedGrid();
 
-            int importedTitleBaseY = sectionBaseY;
+        int importedTitleBaseY = sectionBaseY;
 
         if (allAssetsSection) {
             importedTitleBaseY = sectionBaseY;
@@ -3532,23 +5873,23 @@ public class ArchivScreen extends Screen {
             }
         }
 
-            if (collectionsSection) {
-                int collectionBaseY = sectionBaseY + 34;
-                int collectionH = 94;
-                int collectionInfoGap = 16;
-                int collectionInfoH = 54;
+        if (collectionsSection) {
+            int collectionBaseY = sectionBaseY + 34;
+            int collectionH = 94;
+            int collectionInfoGap = 16;
+            int collectionInfoH = 54;
 
-                importedTitleBaseY = collectionBaseY + collectionH + collectionInfoGap + collectionInfoH + 20;
-            }
+            importedTitleBaseY = collectionBaseY + collectionH + collectionInfoGap + collectionInfoH + 20;
+        }
 
-            int contentBottomBaseY;
+        int contentBottomBaseY;
 
-            if (!showImportedGrid) {
-                contentBottomBaseY = sectionBaseY + 120;
-            } else {
-                CardGridLayout measureLayout = buildMyAssetsImportedGridLayout(contentX, contentW, importedTitleBaseY, visibleAssets.size());
-                contentBottomBaseY = importedTitleBaseY + 18 + measureLayout.cardsAreaH + 18;
-            }
+        if (!showImportedGrid) {
+            contentBottomBaseY = sectionBaseY + 120;
+        } else {
+            CardGridLayout measureLayout = buildMyAssetsImportedGridLayout(contentX, contentW, importedTitleBaseY, visibleAssets.size());
+            contentBottomBaseY = importedTitleBaseY + 18 + measureLayout.cardsAreaH + 18;
+        }
 
         int viewportBottom = contentY + contentH - 12;
         myAssetsMaxScroll = Math.max(0, contentBottomBaseY - viewportBottom);
@@ -3974,10 +6315,10 @@ public class ArchivScreen extends Screen {
         int previewInfoY = compact ? sectionY + 132 : sectionY + 150;
 
         String previewName = mockDetailsFilled ? preset.name : "Unnamed Asset";
-        String previewType = mockDetailsFilled ? preset.type : "Unknown Type";
-        String previewVersion = mockDetailsFilled ? preset.version : "Unknown";
+        String previewType = mockDetailsFilled ? getCurrentImportType() : "Unknown Type";
+        String previewVersion = mockDetailsFilled ? getCurrentImportVersion() : "Unknown";
         String previewAuthor = mockDetailsFilled ? preset.author : "Unknown";
-        String previewCategory = mockDetailsFilled ? preset.macroCategory : "Uncategorized";
+        String previewCategory = mockDetailsFilled ? getCurrentImportCategory() : "Uncategorized";
         String previewFormat = mockStructureFileSelected ? mockStructureFileFormat : "No file";
         String previewImageStatus = mockPreviewImageSelected ? mockPreviewImageFormat + "  •  " + mockPreviewImageRatio : "No preview image";
 
@@ -4010,37 +6351,33 @@ public class ArchivScreen extends Screen {
             drawButtonBox(guiGraphics, mockDetailsFilled ? "Clear" : "Auto Fill", detailsActionX, detailsActionY, detailsActionW, detailsActionH, false);
         }
 
-        int formX = innerX + 12;
-        int fieldGap = 12;
-        int fieldH = compact ? 22 : 28;
-        int verticalGap = compact ? 10 : 12;
+        ImportDetailsFormLayout form = buildImportDetailsFormLayout(layout);
 
-        int fieldW1 = (leftAreaW - 48) / 3;
-        int fieldW2 = fieldW1;
-        int fieldW3 = fieldW1;
-        int wideFieldW = (leftAreaW - 36) / 2;
+        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.name : "Asset Name...", form.nameX, form.nameY, form.fieldW1, form.fieldH, mockDetailsFilled);
 
-        int topPadding = detailsStepActive ? (compact ? 44 : 50) : (compact ? 34 : 38);
-        int bottomPadding = compact ? 10 : 14;
+        if (mockDetailsFilled) {
+            drawSelectorField(guiGraphics, getCurrentImportCategory(), form.categoryX, form.categoryY, form.fieldW2, form.fieldH);
+        } else {
+            drawFieldBox(guiGraphics, "Macro Category...", form.categoryX, form.categoryY, form.fieldW2, form.fieldH, false);
+        }
 
-        int totalFieldsHeight = (fieldH * 3) + (verticalGap * 2);
-        int availableFormHeight = detailsH - topPadding - bottomPadding;
-        int extraSpace = Math.max(0, availableFormHeight - totalFieldsHeight);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.author : "Author...", form.authorX, form.authorY, form.fieldW3, form.fieldH, mockDetailsFilled);
 
-        int formY1 = detailsY + topPadding + (extraSpace / 2);
-        int formY2 = formY1 + fieldH + verticalGap;
-        int formY3 = formY2 + fieldH + verticalGap;
+        if (mockDetailsFilled) {
+            drawSelectorField(guiGraphics, getCurrentImportType(), form.typeX, form.typeY, form.fieldW1, form.fieldH);
+            drawSelectorField(guiGraphics, getCurrentImportVersion(), form.versionX, form.versionY, form.fieldW2, form.fieldH);
 
-        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.name : "Asset Name...", formX, formY1, fieldW1, fieldH, mockDetailsFilled);
-        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.macroCategory : "Macro Category...", formX + fieldW1 + fieldGap, formY1, fieldW2, fieldH, mockDetailsFilled);
-        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.author : "Author...", formX + fieldW1 + fieldGap + fieldW2 + fieldGap, formY1, fieldW3, fieldH, mockDetailsFilled);
+            drawPanel(guiGraphics, form.variantsX, form.variantsY, form.fieldW3, form.fieldH, COLOR_PANEL, COLOR_BORDER);
+            String variantsLabel = "-  " + getCurrentImportVariantCount() + " variants  +";
+            guiGraphics.drawString(this.font, fitTextToWidth(variantsLabel, form.fieldW3 - 18), form.variantsX + 9, form.variantsY + 7, COLOR_TEXT);
+        } else {
+            drawFieldBox(guiGraphics, "Type...", form.typeX, form.typeY, form.fieldW1, form.fieldH, false);
+            drawFieldBox(guiGraphics, "Minecraft Version...", form.versionX, form.versionY, form.fieldW2, form.fieldH, false);
+            drawFieldBox(guiGraphics, "Variants...", form.variantsX, form.variantsY, form.fieldW3, form.fieldH, false);
+        }
 
-        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.type : "Type...", formX, formY2, fieldW1, fieldH, mockDetailsFilled);
-        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.version : "Minecraft Version...", formX + fieldW1 + fieldGap, formY2, fieldW2, fieldH, mockDetailsFilled);
-        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.variants : "Variants...", formX + fieldW1 + fieldGap + fieldW2 + fieldGap, formY2, fieldW3, fieldH, mockDetailsFilled);
-
-        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.tags : "Tags...", formX, formY3, wideFieldW, fieldH, mockDetailsFilled);
-        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.fileInfo : "File Info...", formX + wideFieldW + fieldGap, formY3, wideFieldW, fieldH, mockDetailsFilled);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.tags : "Tags...", form.tagsX, form.tagsY, form.wideFieldW, form.fieldH, mockDetailsFilled);
+        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.fileInfo : "File Info...", form.fileX, form.fileY, form.wideFieldW, form.fieldH, mockDetailsFilled);
 
         drawInactiveOverlay(guiGraphics, innerX, detailsY, leftAreaW, detailsH, !detailsStepActive);
 
@@ -4297,6 +6634,17 @@ public class ArchivScreen extends Screen {
         guiGraphics.fill(x, y, x + 2, y + 2, color);
         guiGraphics.fill(x, y + 5, x + 2, y + 7, color);
         guiGraphics.fill(x, y + 10, x + 2, y + 12, color);
+    }
+
+    private void drawDragHandle(GuiGraphics guiGraphics, int x, int y, int color) {
+        // Six-dot grip, shared by Settings and Edit Asset so reorder handles
+        // keep the same visual language across Archiv.
+        int dot = 2;
+        int gap = 5;
+        for (int row = 0; row < 3; row++) {
+            guiGraphics.fill(x, y + row * gap, x + dot, y + row * gap + dot, color);
+            guiGraphics.fill(x + gap, y + row * gap, x + gap + dot, y + row * gap + dot, color);
+        }
     }
 
     private void drawDot(GuiGraphics guiGraphics, int x, int y, int color) {
