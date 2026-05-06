@@ -6,6 +6,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
@@ -108,10 +109,18 @@ public class ArchivScreen extends Screen {
     private String browseViewMode = "Grid";
     private int selectedImportStep = 1;
 
-    private String importSelectedMacroCategory = "Medieval";
-    private String importSelectedType = "Structure";
-    private String importSelectedVersion = "1.20.1";
-    private int importSelectedVariantCount = 2;
+    private String importSelectedMacroCategory = "";
+    private String importSelectedType = "";
+    private String importSelectedVersion = "";
+    private int importSelectedVariantCount = 1;
+    private String importDropdownOpen = null;
+    private int importDropdownScrollIndex = 0;
+    private boolean updatingImportTagsBox = false;
+    private final List<String> importTags = new ArrayList<>();
+
+    private EditBox importAssetNameBox;
+    private EditBox importAuthorBox;
+    private EditBox importTagInputBox;
 
     private String selectedLibraryAssetName = null;
     private String libraryActionMessage = "No asset selected";
@@ -823,6 +832,59 @@ public class ArchivScreen extends Screen {
         });
 
         this.addRenderableWidget(browseSearchBox);
+
+        ImportLayout importLayout = buildImportLayout(chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
+        ImportDetailsFormLayout importForm = buildImportDetailsFormLayout(importLayout);
+
+        importAssetNameBox = new EditBox(
+                this.font,
+                importForm.nameX + 8,
+                importForm.nameY + 2,
+                importForm.fieldW1 - 16,
+                importForm.fieldH - 4,
+                Component.literal("Import Asset Name")
+        );
+        importAssetNameBox.setBordered(false);
+        importAssetNameBox.setMaxLength(48);
+        importAssetNameBox.setTextColor(COLOR_TEXT);
+        importAssetNameBox.setTextColorUneditable(COLOR_TEXT_DIM);
+        importAssetNameBox.setHint(Component.literal("Enter asset name..."));
+        importAssetNameBox.setResponder(value -> markImportDetailsEdited());
+
+        importAuthorBox = new EditBox(
+                this.font,
+                importForm.authorX + 8,
+                importForm.authorY + 2,
+                importForm.fieldW3 - 16,
+                importForm.fieldH - 4,
+                Component.literal("Import Author")
+        );
+        importAuthorBox.setBordered(false);
+        importAuthorBox.setMaxLength(40);
+        importAuthorBox.setTextColor(COLOR_TEXT);
+        importAuthorBox.setTextColorUneditable(COLOR_TEXT_DIM);
+        importAuthorBox.setHint(Component.literal("Enter author name..."));
+        importAuthorBox.setResponder(value -> markImportDetailsEdited());
+
+        importTagInputBox = new EditBox(
+                this.font,
+                importForm.tagsX + 8,
+                importForm.tagsY + 2,
+                importForm.wideFieldW - 16,
+                importForm.fieldH - 4,
+                Component.literal("Import Tags")
+        );
+        importTagInputBox.setBordered(false);
+        importTagInputBox.setMaxLength(48);
+        importTagInputBox.setTextColor(COLOR_TEXT);
+        importTagInputBox.setTextColorUneditable(COLOR_TEXT_DIM);
+        importTagInputBox.setHint(Component.literal("Use comma to add tags..."));
+        importTagInputBox.setResponder(this::handleImportTagInputChanged);
+
+        this.addRenderableWidget(importAssetNameBox);
+        this.addRenderableWidget(importAuthorBox);
+        this.addRenderableWidget(importTagInputBox);
+
         CreateCollectionModalLayout collectionModal = buildCreateCollectionModalLayout();
 
         collectionNameBox = new EditBox(
@@ -1010,7 +1072,10 @@ public class ArchivScreen extends Screen {
         layout.rootW = this.width - (layout.margin * 2);
         layout.rootH = this.height - (layout.margin * 2);
 
-        layout.headerH = 58;
+        // Compact chrome: the tabs now sit on the header baseline instead of
+        // floating with a large vertical gap. This gives every tab more usable
+        // body height without changing the content APIs used by the other tabs.
+        layout.headerH = 48;
         layout.footerH = 24;
         layout.sidebarW = 180;
 
@@ -1022,16 +1087,16 @@ public class ArchivScreen extends Screen {
         layout.contentW = layout.rootW - layout.sidebarW;
         layout.contentH = layout.bodyH;
 
-        layout.tabY = layout.rootY + 10;
-        layout.tabX = layout.rootX + 150;
+        layout.tabX = layout.rootX + 144;
         layout.tabW = 110;
-        layout.tabH = 38;
-        layout.tabGap = 8;
+        layout.myAssetsW = 120;
+        layout.tabH = 36;
+        layout.tabGap = 0;
+        layout.tabY = layout.rootY + layout.headerH - layout.tabH;
 
-        layout.myAssetsX = layout.tabX + (layout.tabW + layout.tabGap);
-        layout.myAssetsW = layout.tabW + 10;
-        layout.importX = layout.tabX + (layout.tabW + layout.tabGap) * 2 + 10;
-        layout.settingsX = layout.tabX + (layout.tabW + layout.tabGap) * 3 + 10;
+        layout.myAssetsX = layout.tabX + layout.tabW + layout.tabGap;
+        layout.importX = layout.myAssetsX + layout.myAssetsW + layout.tabGap;
+        layout.settingsX = layout.importX + layout.tabW + layout.tabGap;
 
         layout.sidebarItemX = layout.rootX + 12;
         layout.sidebarItemY = layout.bodyY + 34;
@@ -1154,31 +1219,24 @@ public class ArchivScreen extends Screen {
     private ImportLayout buildImportLayout(int contentX, int contentY, int contentW, int contentH) {
         ImportLayout layout = new ImportLayout();
 
-        boolean compact = true;
-        boolean detailsStepActive = selectedImportStep == 3;
-        boolean saveStepActive = selectedImportStep == 4;
-        boolean compactTopSections = detailsStepActive || saveStepActive;
+        int padX = 18;
+        int padTop = 10;
+        int padBottom = 4;
+        int gap = 10;
+        int detailsGap = 8;
+        int actionsGap = 10;
+        int fieldGap = 10;
+        int titleBlockH = 34;
 
-        int pad = 18;
-        int gap = compact ? 12 : 16;
-        int detailsGap = compact ? 10 : 16;
-        int actionsBarH = 28;
-        int actionsBottomMargin = compact ? 8 : 18;
-        int actionsGap = saveStepActive ? 28 : (compact ? 8 : 12);
-        int fieldGap = 12;
-        int titleBlockH = compact ? 48 : 40;
-
-        layout.innerX = contentX + pad;
-        layout.innerY = contentY + pad;
-        layout.innerW = contentW - (pad * 2);
-        layout.innerH = contentH - (pad * 2);
+        layout.innerX = contentX + padX;
+        layout.innerY = contentY + padTop;
+        layout.innerW = contentW - (padX * 2);
+        layout.innerH = contentH - padTop - padBottom;
 
         layout.sectionY = layout.innerY + titleBlockH;
 
-        layout.previewColumnW = compact ? 210 : 220;
+        layout.previewColumnW = clampInt((layout.innerW * 27) / 100, 210, 248);
         layout.leftAreaW = layout.innerW - layout.previewColumnW - gap;
-
-        layout.topBoxH = compactTopSections ? 72 : (compact ? 118 : 170);
 
         layout.structureW = (layout.leftAreaW * 58) / 100;
         layout.imageW = layout.leftAreaW - layout.structureW - gap;
@@ -1187,21 +1245,45 @@ public class ArchivScreen extends Screen {
         layout.imageX = layout.structureX + layout.structureW + gap;
         layout.previewX = layout.innerX + layout.leftAreaW + gap;
 
-        layout.boxButtonY = compact ? layout.sectionY + 80 : layout.sectionY + 118;
+        layout.buttonH = 26;
+        layout.saveW = 88;
+        layout.cancelW = 90;
+        layout.resetW = 90;
 
+        // Bottom action bar: keep it attached to the bottom of the content area,
+        // but still above the footer. This gives Import more vertical space while
+        // preventing the buttons from bleeding into the status/footer strip.
+        layout.actionsY = contentY + contentH - layout.buttonH - 6;
+
+        int availableBeforeActions = layout.actionsY - actionsGap - layout.sectionY;
+        int preferredTopBoxH = clampInt((availableBeforeActions * 36) / 100, 116, 132);
+        int minimumDetailsH = 184;
+
+        layout.topBoxH = preferredTopBoxH;
         layout.detailsY = layout.sectionY + layout.topBoxH + detailsGap;
-        layout.actionsY = layout.innerY + layout.innerH - actionsBottomMargin - actionsBarH;
         layout.detailsH = layout.actionsY - actionsGap - layout.detailsY;
+
+        // If the details form would become too short, borrow height from the top
+        // cards instead of letting labels/fields collide.
+        if (layout.detailsH < minimumDetailsH) {
+            int deficit = minimumDetailsH - layout.detailsH;
+            layout.topBoxH = Math.max(108, layout.topBoxH - deficit);
+            layout.detailsY = layout.sectionY + layout.topBoxH + detailsGap;
+            layout.detailsH = layout.actionsY - actionsGap - layout.detailsY;
+        }
+
+        layout.detailsH = Math.max(170, layout.detailsH);
+        int maxDetailsBottom = layout.actionsY - actionsGap;
+        if (layout.detailsY + layout.detailsH > maxDetailsBottom) {
+            layout.detailsH = Math.max(158, maxDetailsBottom - layout.detailsY);
+        }
+
+        layout.boxButtonY = layout.sectionY + layout.topBoxH - 36;
 
         layout.detailsActionW = 92;
         layout.detailsActionH = 20;
         layout.detailsActionX = layout.innerX + layout.leftAreaW - layout.detailsActionW - 12;
         layout.detailsActionY = layout.detailsY + 10;
-
-        layout.buttonH = 28;
-        layout.saveW = 88;
-        layout.cancelW = 90;
-        layout.resetW = 90;
 
         layout.saveX = layout.innerX + layout.innerW - layout.saveW;
         layout.cancelX = layout.saveX - fieldGap - layout.cancelW;
@@ -1213,34 +1295,40 @@ public class ArchivScreen extends Screen {
     private ImportDetailsFormLayout buildImportDetailsFormLayout(ImportLayout layout) {
         ImportDetailsFormLayout form = new ImportDetailsFormLayout();
 
-        boolean compact = true;
-        boolean detailsStepActive = selectedImportStep == 3;
-
-        int innerX = layout.innerX;
         int leftAreaW = layout.leftAreaW;
         int detailsY = layout.detailsY;
         int detailsH = layout.detailsH;
 
-        int formX = innerX + 12;
+        int formX = layout.innerX + 12;
         int fieldGap = 12;
-        int verticalGap = compact ? 10 : 12;
 
-        form.fieldH = compact ? 22 : 28;
+        form.fieldH = detailsH < 178 ? 24 : 26;
         form.fieldW1 = (leftAreaW - 48) / 3;
         form.fieldW2 = form.fieldW1;
         form.fieldW3 = form.fieldW1;
         form.wideFieldW = (leftAreaW - 36) / 2;
 
-        int topPadding = detailsStepActive ? (compact ? 44 : 50) : (compact ? 34 : 38);
-        int bottomPadding = compact ? 10 : 14;
+        // Stable 3-row form. We calculate from the available details height
+        // instead of using fixed magic numbers, so the labels remain above the
+        // fields and the bottom row stays inside the Asset Details panel.
+        int headerSpace = 48;
+        int bottomPadding = 14;
+        int minRowPitch = form.fieldH + 20;
+        int maxRowPitch = form.fieldH + 30;
 
-        int totalFieldsHeight = (form.fieldH * 3) + (verticalGap * 2);
-        int availableFormHeight = detailsH - topPadding - bottomPadding;
-        int extraSpace = Math.max(0, availableFormHeight - totalFieldsHeight);
+        int firstRowY = detailsY + headerSpace;
+        int lastRowMaxY = detailsY + detailsH - form.fieldH - bottomPadding;
+        int rowPitch = clampInt((lastRowMaxY - firstRowY) / 2, minRowPitch, maxRowPitch);
 
-        int formY1 = detailsY + topPadding + (extraSpace / 2);
-        int formY2 = formY1 + form.fieldH + verticalGap;
-        int formY3 = formY2 + form.fieldH + verticalGap;
+        int neededBottom = firstRowY + (rowPitch * 2) + form.fieldH + bottomPadding;
+        if (neededBottom > detailsY + detailsH) {
+            int overflow = neededBottom - (detailsY + detailsH);
+            firstRowY = Math.max(detailsY + 42, firstRowY - overflow);
+        }
+
+        int formY1 = firstRowY;
+        int formY2 = formY1 + rowPitch;
+        int formY3 = formY2 + rowPitch;
 
         form.nameX = formX;
         form.nameY = formY1;
@@ -1262,6 +1350,282 @@ public class ArchivScreen extends Screen {
         form.fileY = formY3;
 
         return form;
+    }
+
+    private void setEditBoxBounds(EditBox box, int x, int y, int width) {
+        if (box == null) {
+            return;
+        }
+
+        box.setX(x);
+        box.setY(y);
+        box.setWidth(Math.max(12, width));
+    }
+
+    private boolean isImportDetailsActive() {
+        return "Import".equals(selectedTopTab)
+                && selectedImportStep == 3
+                && !createCollectionModalOpen
+                && !editAssetModalOpen
+                && !assetDetailsOpen
+                && !deleteConfirmOpen;
+    }
+
+    private void updateImportDetailWidgets(ScreenChromeLayout chrome) {
+        ImportLayout layout = buildImportLayout(chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
+        ImportDetailsFormLayout form = buildImportDetailsFormLayout(layout);
+
+        boolean active = isImportDetailsActive();
+
+        if (importAssetNameBox != null) {
+            setEditBoxBounds(importAssetNameBox, form.nameX + 8, getCenteredEditBoxTextY(form.nameY, form.fieldH), form.fieldW1 - 16);
+            importAssetNameBox.visible = active;
+            importAssetNameBox.active = active;
+            if (!active) {
+                importAssetNameBox.setFocused(false);
+            }
+        }
+
+        if (importAuthorBox != null) {
+            setEditBoxBounds(importAuthorBox, form.authorX + 8, getCenteredEditBoxTextY(form.authorY, form.fieldH), form.fieldW3 - 16);
+            importAuthorBox.visible = active;
+            importAuthorBox.active = active;
+            if (!active) {
+                importAuthorBox.setFocused(false);
+            }
+        }
+
+        if (importTagInputBox != null) {
+            int inputX = getImportTagInputX(form);
+            int inputW = Math.max(40, form.tagsX + form.wideFieldW - inputX - 8);
+            setEditBoxBounds(importTagInputBox, inputX, getCenteredEditBoxTextY(form.tagsY, form.fieldH), inputW);
+            boolean tagInputVisible = active && importDropdownOpen == null;
+            importTagInputBox.visible = tagInputVisible;
+            importTagInputBox.active = tagInputVisible;
+            if (!tagInputVisible) {
+                importTagInputBox.setFocused(false);
+            }
+        }
+    }
+
+    private int getImportTagsContentWidth() {
+        int width = 0;
+
+        for (String tag : importTags) {
+            width += this.font.width(tag) + 25;
+        }
+
+        return width;
+    }
+
+    private int getImportTagInputReserveW(ImportDetailsFormLayout form) {
+        return clampInt(form.wideFieldW / 3, 96, 128);
+    }
+
+    private int getImportVisibleTagLimit(ImportDetailsFormLayout form) {
+        if (importTags.isEmpty()) {
+            return 0;
+        }
+
+        int fieldLeft = form.tagsX + 8;
+        int fieldRight = form.tagsX + form.wideFieldW - 8;
+        int inputReserveW = getImportTagInputReserveW(form);
+        int hiddenReserveW = 42;
+        int maxTagRight = fieldRight - inputReserveW - 6;
+
+        int tagX = fieldLeft;
+        int visibleCount = 0;
+
+        for (int i = 0; i < importTags.size(); i++) {
+            String tag = importTags.get(i);
+            int tagW = this.font.width(tag) + 20;
+            boolean hasHiddenAfterThis = i < importTags.size() - 1;
+            int reservedRight = hasHiddenAfterThis ? hiddenReserveW + 5 : 0;
+
+            if (tagX + tagW + reservedRight > maxTagRight) {
+                break;
+            }
+
+            tagX += tagW + 5;
+            visibleCount++;
+        }
+
+        return visibleCount;
+    }
+
+    private int getImportTagsOverflowOffset(ImportDetailsFormLayout form) {
+        // Compact mode keeps the first visible tags anchored on the left.
+        // Hidden tags are represented by +N and shown in the focus popover.
+        return 0;
+    }
+
+    private int getImportTagInputX(ImportDetailsFormLayout form) {
+        int fieldLeft = form.tagsX + 8;
+        int fieldRight = form.tagsX + form.wideFieldW - 8;
+        int inputReserveW = getImportTagInputReserveW(form);
+        int visibleLimit = getImportVisibleTagLimit(form);
+
+        int tagX = fieldLeft;
+        for (int i = 0; i < visibleLimit; i++) {
+            String tag = importTags.get(i);
+            tagX += this.font.width(tag) + 25;
+        }
+
+        int hiddenCount = Math.max(0, importTags.size() - visibleLimit);
+        if (hiddenCount > 0) {
+            String hiddenLabel = "+" + hiddenCount;
+            tagX += this.font.width(hiddenLabel) + 19;
+        }
+
+        int maxInputX = fieldRight - inputReserveW;
+        return clampInt(tagX + 4, fieldLeft, Math.max(fieldLeft, maxInputX));
+    }
+
+    private void markImportDetailsEdited() {
+        mockDetailsFilled = true;
+        mockAssetSaved = false;
+    }
+
+    private String getCurrentImportName() {
+        return importAssetNameBox == null ? "" : trimToEmpty(importAssetNameBox.getValue());
+    }
+
+    private String getCurrentImportAuthor() {
+        return importAuthorBox == null ? "" : trimToEmpty(importAuthorBox.getValue());
+    }
+
+    private String getCurrentImportTagsDisplay() {
+        if (importTags.isEmpty()) {
+            return "";
+        }
+        return String.join(", ", importTags);
+    }
+
+    private void setImportTextBoxValue(EditBox box, String value) {
+        if (box == null) {
+            return;
+        }
+        box.setValue(value == null ? "" : value);
+    }
+
+    private void clearImportDetailFields() {
+        setImportTextBoxValue(importAssetNameBox, "");
+        setImportTextBoxValue(importAuthorBox, "");
+
+        importSelectedMacroCategory = "";
+        importSelectedType = "";
+        importSelectedVersion = "";
+        importSelectedVariantCount = 1;
+
+        importTags.clear();
+        if (importTagInputBox != null) {
+            updatingImportTagsBox = true;
+            importTagInputBox.setValue("");
+            updatingImportTagsBox = false;
+        }
+        importDropdownOpen = null;
+        importDropdownScrollIndex = 0;
+    }
+
+    private void addImportTag(String rawTag) {
+        String tag = trimToEmpty(rawTag).replace("#", "");
+        if (tag.isBlank()) {
+            return;
+        }
+
+        for (String existing : importTags) {
+            if (existing.equalsIgnoreCase(tag)) {
+                return;
+            }
+        }
+
+        importTags.add(tag);
+    }
+
+    private void setImportTagsFromCommaText(String tagsText) {
+        importTags.clear();
+        if (tagsText == null || tagsText.isBlank()) {
+            return;
+        }
+
+        String[] parts = tagsText.split(",");
+        for (String part : parts) {
+            addImportTag(part);
+        }
+    }
+
+    private void handleImportTagInputChanged(String value) {
+        if (updatingImportTagsBox) {
+            return;
+        }
+
+        markImportDetailsEdited();
+
+        if (value == null || !value.contains(",")) {
+            return;
+        }
+
+        String[] parts = value.split(",", -1);
+        for (int i = 0; i < parts.length - 1; i++) {
+            addImportTag(parts[i]);
+        }
+
+        String remainder = parts[parts.length - 1].trim();
+        updatingImportTagsBox = true;
+        importTagInputBox.setValue(remainder);
+        updatingImportTagsBox = false;
+    }
+
+    private void flushImportTagInput() {
+        if (importTagInputBox == null) {
+            return;
+        }
+
+        String value = trimToEmpty(importTagInputBox.getValue());
+        if (value.isBlank()) {
+            return;
+        }
+
+        addImportTag(value);
+        updatingImportTagsBox = true;
+        importTagInputBox.setValue("");
+        updatingImportTagsBox = false;
+        markImportDetailsEdited();
+    }
+
+    private void focusOnly(EditBox target, EditBox... boxes) {
+        for (EditBox box : boxes) {
+            if (box != null) {
+                box.setFocused(box == target);
+            }
+        }
+        this.setFocused(target);
+    }
+
+    private int getImportDropdownRowH() {
+        return 22;
+    }
+
+    private int getImportDropdownMaxVisibleRows() {
+        return 4;
+    }
+
+    private int getImportDropdownVisibleRows(String dropdownName) {
+        return Math.max(1, Math.min(getImportDropdownMaxVisibleRows(), getImportDropdownOptions(dropdownName).size()));
+    }
+
+    private int getImportDropdownPanelH(String dropdownName) {
+        return getImportDropdownVisibleRows(dropdownName) * getImportDropdownRowH();
+    }
+
+    private int getImportDropdownPanelY(ImportDetailsFormLayout form, String dropdownName) {
+        // In the import form, dropdowns should behave like rollups below the field.
+        // Opening upward made the Type menu slip under the Asset Name row.
+        return getImportDropdownY(form, dropdownName);
+    }
+
+    private int getImportDropdownMaxScrollIndex(String dropdownName) {
+        return Math.max(0, getImportDropdownOptions(dropdownName).size() - getImportDropdownVisibleRows(dropdownName));
     }
 
     private SettingsLayout buildSettingsLayout(int contentX, int contentY, int contentW, int contentH) {
@@ -2399,11 +2763,25 @@ public class ArchivScreen extends Screen {
     }
 
     private boolean isImportReady() {
-        return mockStructureFileSelected && mockDetailsFilled;
+        return mockStructureFileSelected
+                && !getCurrentImportName().isBlank()
+                && !getCurrentImportAuthor().isBlank()
+                && !getCurrentImportCategory().isBlank()
+                && !getCurrentImportType().isBlank()
+                && !getCurrentImportVersion().isBlank();
     }
 
     private boolean hasImportData() {
-        return mockStructureFileSelected || mockPreviewImageSelected || mockDetailsFilled || mockAssetSaved;
+        return mockStructureFileSelected
+                || mockPreviewImageSelected
+                || mockDetailsFilled
+                || mockAssetSaved
+                || !getCurrentImportName().isBlank()
+                || !getCurrentImportAuthor().isBlank()
+                || !getCurrentImportCategory().isBlank()
+                || !getCurrentImportType().isBlank()
+                || !getCurrentImportVersion().isBlank()
+                || !importTags.isEmpty();
     }
 
     private void resetImportState() {
@@ -2412,6 +2790,12 @@ public class ArchivScreen extends Screen {
         mockDetailsFilled = false;
         mockAssetSaved = false;
         selectedImportStep = 1;
+        clearImportDetailFields();
+        importSelectedMacroCategory = "";
+        importSelectedType = "";
+        importSelectedVersion = "";
+        importSelectedVariantCount = 1;
+        mockDetailsFilled = false;
         normalizeMetadataSelections();
     }
 
@@ -2429,7 +2813,8 @@ public class ArchivScreen extends Screen {
     }
 
     private String getNextSavedAssetName() {
-        String baseName = getCurrentImportPreset().name;
+        String typedName = getCurrentImportName();
+        String baseName = typedName.isBlank() ? getCurrentImportPreset().name : typedName;
         int sameNameCount = 0;
 
         for (ArchivAsset asset : savedAssets) {
@@ -2456,13 +2841,15 @@ public class ArchivScreen extends Screen {
 
     private ArchivAsset buildSavedAssetFromImport() {
         ImportPreset preset = getCurrentImportPreset();
-        String type = getCurrentImportType();
+        String type = getSafeOption(assetTypes, getCurrentImportType());
+        String category = getSafeOption(macroCategories, getCurrentImportCategory());
+        String version = getSafeOption(minecraftVersions, getCurrentImportVersion());
 
         return new ArchivAsset(
                 getNextSavedAssetName(),
-                getCurrentImportCategory(),
+                category,
                 type,
-                getCurrentImportVersion(),
+                version,
                 mockPreviewImageSelected ? MOCK_PREVIEW_IMAGE_COLOR : MOCK_NO_PREVIEW_IMAGE_COLOR,
                 getChipColorForEditedAsset(type, preset.chipColor),
                 getImportVariantCount(),
@@ -2611,9 +2998,15 @@ public class ArchivScreen extends Screen {
             selectedCategory = "All";
         }
 
-        importSelectedMacroCategory = getSafeOption(macroCategories, importSelectedMacroCategory);
-        importSelectedType = getSafeOption(assetTypes, importSelectedType);
-        importSelectedVersion = getSafeOption(minecraftVersions, importSelectedVersion);
+        if (!trimToEmpty(importSelectedMacroCategory).isBlank()) {
+            importSelectedMacroCategory = getSafeOption(macroCategories, importSelectedMacroCategory);
+        }
+        if (!trimToEmpty(importSelectedType).isBlank()) {
+            importSelectedType = getSafeOption(assetTypes, importSelectedType);
+        }
+        if (!trimToEmpty(importSelectedVersion).isBlank()) {
+            importSelectedVersion = getSafeOption(minecraftVersions, importSelectedVersion);
+        }
 
         editAssetSelectedCategory = getSafeOption(macroCategories, editAssetSelectedCategory);
         editAssetSelectedType = getSafeOption(assetTypes, editAssetSelectedType);
@@ -2871,22 +3264,193 @@ public class ArchivScreen extends Screen {
         importSelectedType = getSafeOption(assetTypes, preset.type);
         importSelectedVersion = getSafeOption(minecraftVersions, preset.version);
         importSelectedVariantCount = getImportPresetVariantCount(preset);
+        setImportTextBoxValue(importAssetNameBox, preset.name);
+        setImportTextBoxValue(importAuthorBox, preset.author);
+        setImportTagsFromCommaText(preset.tags);
+        if (importTagInputBox != null) {
+            updatingImportTagsBox = true;
+            importTagInputBox.setValue("");
+            updatingImportTagsBox = false;
+        }
+        mockDetailsFilled = true;
+        mockAssetSaved = false;
     }
 
     private String getCurrentImportCategory() {
-        return getSafeOption(macroCategories, importSelectedMacroCategory);
+        return trimToEmpty(importSelectedMacroCategory);
     }
 
     private String getCurrentImportType() {
-        return getSafeOption(assetTypes, importSelectedType);
+        return trimToEmpty(importSelectedType);
     }
 
     private String getCurrentImportVersion() {
-        return getSafeOption(minecraftVersions, importSelectedVersion);
+        return trimToEmpty(importSelectedVersion);
     }
 
     private int getCurrentImportVariantCount() {
         return clampInt(importSelectedVariantCount, 1, 99);
+    }
+
+    private List<String> getImportDropdownOptions(String dropdownName) {
+        if ("category".equals(dropdownName)) {
+            return macroCategories;
+        }
+
+        if ("type".equals(dropdownName)) {
+            return assetTypes;
+        }
+
+        if ("version".equals(dropdownName)) {
+            return minecraftVersions;
+        }
+
+        return new ArrayList<>();
+    }
+
+    private int getImportDropdownX(ImportDetailsFormLayout form, String dropdownName) {
+        if ("type".equals(dropdownName)) {
+            return form.typeX;
+        }
+
+        if ("version".equals(dropdownName)) {
+            return form.versionX;
+        }
+
+        return form.categoryX;
+    }
+
+    private int getImportDropdownY(ImportDetailsFormLayout form, String dropdownName) {
+        if ("type".equals(dropdownName)) {
+            return form.typeY + form.fieldH + 2;
+        }
+
+        if ("version".equals(dropdownName)) {
+            return form.versionY + form.fieldH + 2;
+        }
+
+        return form.categoryY + form.fieldH + 2;
+    }
+
+    private int getImportDropdownW(ImportDetailsFormLayout form, String dropdownName) {
+        if ("type".equals(dropdownName)) {
+            return form.fieldW1;
+        }
+
+        if ("version".equals(dropdownName)) {
+            return form.fieldW2;
+        }
+
+        return form.fieldW2;
+    }
+
+    private String getImportDropdownValue(String dropdownName) {
+        if ("type".equals(dropdownName)) {
+            return getCurrentImportType();
+        }
+
+        if ("version".equals(dropdownName)) {
+            return getCurrentImportVersion();
+        }
+
+        return getCurrentImportCategory();
+    }
+
+    private void setImportDropdownValue(String dropdownName, String value) {
+        markImportDetailsEdited();
+
+        if ("category".equals(dropdownName)) {
+            importSelectedMacroCategory = getSafeOption(macroCategories, value);
+            libraryActionMessage = "Import category: " + importSelectedMacroCategory;
+            return;
+        }
+
+        if ("type".equals(dropdownName)) {
+            importSelectedType = getSafeOption(assetTypes, value);
+            libraryActionMessage = "Import type: " + importSelectedType;
+            return;
+        }
+
+        if ("version".equals(dropdownName)) {
+            importSelectedVersion = getSafeOption(minecraftVersions, value);
+            libraryActionMessage = "Import version: " + importSelectedVersion;
+        }
+    }
+
+    private void toggleImportDropdown(String dropdownName) {
+        if (dropdownName == null) {
+            importDropdownOpen = null;
+            importDropdownScrollIndex = 0;
+            return;
+        }
+
+        if (dropdownName.equals(importDropdownOpen)) {
+            importDropdownOpen = null;
+            importDropdownScrollIndex = 0;
+            return;
+        }
+
+        importDropdownOpen = dropdownName;
+        importDropdownScrollIndex = 0;
+        if (importAssetNameBox != null) importAssetNameBox.setFocused(false);
+        if (importAuthorBox != null) importAuthorBox.setFocused(false);
+        if (importTagInputBox != null) importTagInputBox.setFocused(false);
+        this.setFocused(null);
+        markImportDetailsEdited();
+    }
+
+    private boolean handleImportDropdownClick(double mouseX, double mouseY, ImportDetailsFormLayout form) {
+        if (importDropdownOpen == null) {
+            return false;
+        }
+
+        List<String> options = getImportDropdownOptions(importDropdownOpen);
+        int rowH = getImportDropdownRowH();
+        int x = getImportDropdownX(form, importDropdownOpen);
+        int y = getImportDropdownPanelY(form, importDropdownOpen);
+        int w = getImportDropdownW(form, importDropdownOpen);
+        int h = getImportDropdownPanelH(importDropdownOpen);
+
+        if (!isInside(mouseX, mouseY, x, y, w, h)) {
+            return false;
+        }
+
+        if (!options.isEmpty()) {
+            int startIndex = clampInt(importDropdownScrollIndex, 0, getImportDropdownMaxScrollIndex(importDropdownOpen));
+            int visibleIndex = clampInt((int) ((mouseY - y) / rowH), 0, getImportDropdownVisibleRows(importDropdownOpen) - 1);
+            int index = clampInt(startIndex + visibleIndex, 0, options.size() - 1);
+            setImportDropdownValue(importDropdownOpen, options.get(index));
+        }
+
+        importDropdownOpen = null;
+        importDropdownScrollIndex = 0;
+        return true;
+    }
+
+    private boolean isInsideImportSelector(double mouseX, double mouseY, ImportDetailsFormLayout form, String dropdownName) {
+        return isInside(
+                mouseX,
+                mouseY,
+                getImportDropdownX(form, dropdownName),
+                getImportDropdownY(form, dropdownName) - form.fieldH - 2,
+                getImportDropdownW(form, dropdownName),
+                form.fieldH
+        );
+    }
+
+    private boolean isInsideImportDropdownPanel(double mouseX, double mouseY, ImportDetailsFormLayout form) {
+        if (importDropdownOpen == null) {
+            return false;
+        }
+
+        return isInside(
+                mouseX,
+                mouseY,
+                getImportDropdownX(form, importDropdownOpen),
+                getImportDropdownPanelY(form, importDropdownOpen),
+                getImportDropdownW(form, importDropdownOpen),
+                getImportDropdownPanelH(importDropdownOpen)
+        );
     }
 
     private boolean collectionNameExists(String name) {
@@ -3659,6 +4223,8 @@ public class ArchivScreen extends Screen {
                 beginFreshImportSession();
             } else {
                 selectedImportStep = 1;
+                importDropdownOpen = null;
+                importDropdownScrollIndex = 0;
             }
             return true;
         }
@@ -3767,6 +4333,8 @@ public class ArchivScreen extends Screen {
 
                 if (isInside(mouseX, mouseY, chrome.rootX + 12, currentY, 156, 34)) {
                     selectedImportStep = i + 1;
+                    importDropdownOpen = null;
+                    importDropdownScrollIndex = 0;
                     return true;
                 }
             }
@@ -3824,31 +4392,51 @@ public class ArchivScreen extends Screen {
             if (selectedImportStep == 3) {
                 ImportDetailsFormLayout detailsForm = buildImportDetailsFormLayout(layout);
 
-                if (isInside(mouseX, mouseY, detailsForm.categoryX, detailsForm.categoryY, detailsForm.fieldW2, detailsForm.fieldH)) {
-                    mockDetailsFilled = true;
-                    mockAssetSaved = false;
-                    importSelectedMacroCategory = cycleOption(macroCategories, importSelectedMacroCategory);
-                    libraryActionMessage = "Import category: " + importSelectedMacroCategory;
+                if (handleImportDropdownClick(mouseX, mouseY, detailsForm)) {
                     return true;
                 }
 
-                if (isInside(mouseX, mouseY, detailsForm.typeX, detailsForm.typeY, detailsForm.fieldW1, detailsForm.fieldH)) {
-                    mockDetailsFilled = true;
-                    mockAssetSaved = false;
-                    importSelectedType = cycleOption(assetTypes, importSelectedType);
-                    libraryActionMessage = "Import type: " + importSelectedType;
+                if (importAssetNameBox != null && isInside(mouseX, mouseY, importAssetNameBox.getX(), importAssetNameBox.getY(), importAssetNameBox.getWidth(), importAssetNameBox.getHeight())) {
+                    importDropdownOpen = null;
+                    focusOnly(importAssetNameBox, importAssetNameBox, importAuthorBox, importTagInputBox);
+                    markImportDetailsEdited();
+                    return super.mouseClicked(event, doubleClick);
+                }
+
+                if (importAuthorBox != null && isInside(mouseX, mouseY, importAuthorBox.getX(), importAuthorBox.getY(), importAuthorBox.getWidth(), importAuthorBox.getHeight())) {
+                    importDropdownOpen = null;
+                    focusOnly(importAuthorBox, importAssetNameBox, importAuthorBox, importTagInputBox);
+                    markImportDetailsEdited();
+                    return super.mouseClicked(event, doubleClick);
+                }
+
+                if (importTagInputBox != null && isInside(mouseX, mouseY, detailsForm.tagsX, detailsForm.tagsY, detailsForm.wideFieldW, detailsForm.fieldH)) {
+                    importDropdownOpen = null;
+                    focusOnly(importTagInputBox, importAssetNameBox, importAuthorBox, importTagInputBox);
+                    markImportDetailsEdited();
+                    return super.mouseClicked(event, doubleClick);
+                }
+
+                if (isInsideImportSelector(mouseX, mouseY, detailsForm, "category")) {
+                    toggleImportDropdown("category");
+                    libraryActionMessage = "Choose import category";
                     return true;
                 }
 
-                if (isInside(mouseX, mouseY, detailsForm.versionX, detailsForm.versionY, detailsForm.fieldW2, detailsForm.fieldH)) {
-                    mockDetailsFilled = true;
-                    mockAssetSaved = false;
-                    importSelectedVersion = cycleOption(minecraftVersions, importSelectedVersion);
-                    libraryActionMessage = "Import version: " + importSelectedVersion;
+                if (isInsideImportSelector(mouseX, mouseY, detailsForm, "type")) {
+                    toggleImportDropdown("type");
+                    libraryActionMessage = "Choose import type";
+                    return true;
+                }
+
+                if (isInsideImportSelector(mouseX, mouseY, detailsForm, "version")) {
+                    toggleImportDropdown("version");
+                    libraryActionMessage = "Choose Minecraft version";
                     return true;
                 }
 
                 if (isInside(mouseX, mouseY, detailsForm.variantsX, detailsForm.variantsY, detailsForm.fieldW3, detailsForm.fieldH)) {
+                    importDropdownOpen = null;
                     mockDetailsFilled = true;
                     mockAssetSaved = false;
 
@@ -3864,14 +4452,22 @@ public class ArchivScreen extends Screen {
                 }
 
                 if (isInside(mouseX, mouseY, layout.detailsActionX, layout.detailsActionY, layout.detailsActionW, layout.detailsActionH)) {
-                    mockDetailsFilled = !mockDetailsFilled;
+                    importDropdownOpen = null;
                     mockAssetSaved = false;
 
                     if (mockDetailsFilled) {
+                        clearImportDetailFields();
+                        mockDetailsFilled = false;
+                    } else {
                         applyImportPresetMetadata();
-                        selectedImportStep = 4;
                     }
 
+                    return true;
+                }
+
+                if (importDropdownOpen != null) {
+                    importDropdownOpen = null;
+                    importDropdownScrollIndex = 0;
                     return true;
                 }
             }
@@ -4329,8 +4925,44 @@ public class ArchivScreen extends Screen {
     }
 
     @Override
+    public boolean keyPressed(KeyEvent event) {
+        int keyCode = event.key();
+
+        if (isImportDetailsActive() && importTagInputBox != null && importTagInputBox.isFocused()) {
+            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+                flushImportTagInput();
+                return true;
+            }
+
+            if (keyCode == GLFW.GLFW_KEY_BACKSPACE
+                    && trimToEmpty(importTagInputBox.getValue()).isBlank()
+                    && !importTags.isEmpty()) {
+                importTags.remove(importTags.size() - 1);
+                markImportDetailsEdited();
+                return true;
+            }
+        }
+
+        return super.keyPressed(event);
+    }
+
+    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         ScreenChromeLayout chrome = buildChromeLayout();
+
+        if (isImportDetailsActive() && importDropdownOpen != null) {
+            ImportLayout importLayout = buildImportLayout(chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
+            ImportDetailsFormLayout importForm = buildImportDetailsFormLayout(importLayout);
+
+            if (isInsideImportDropdownPanel(mouseX, mouseY, importForm)) {
+                importDropdownScrollIndex = clampInt(
+                        importDropdownScrollIndex - ((int) verticalAmount),
+                        0,
+                        getImportDropdownMaxScrollIndex(importDropdownOpen)
+                );
+                return true;
+            }
+        }
 
         if ("Settings".equals(selectedTopTab) && "Metadata".equals(selectedSettingsSection)) {
             SettingsLayout settingsLayout = buildSettingsLayout(chrome.contentX, chrome.contentY, chrome.contentW, chrome.contentH);
@@ -4561,6 +5193,8 @@ public class ArchivScreen extends Screen {
                 }
             }
         }
+
+        updateImportDetailWidgets(chrome);
 
         boolean collectionModalActive = createCollectionModalOpen;
 
@@ -4818,7 +5452,7 @@ public class ArchivScreen extends Screen {
             String icon = "version".equals(editAssetDropdownOpen)
                     ? "▣"
                     : getMetadataOptionIcon(option, i);
-            int textY = rowY + (rowH - this.font.lineHeight) / 2;
+            int textY = getFieldTextY(rowY, rowH);
             guiGraphics.drawString(this.font, icon, x + 10, textY, selected ? COLOR_BORDER_ACTIVE : COLOR_TEXT_DIM);
             drawClippedString(guiGraphics, option, x + 28, textY, w - 56, selected ? COLOR_TEXT : COLOR_TEXT_DIM);
 
@@ -5133,7 +5767,8 @@ public class ArchivScreen extends Screen {
             guiGraphics.fill(x, y + height - 2, x + width, y + height, COLOR_BORDER_ACTIVE);
         }
 
-        guiGraphics.drawString(this.font, label, x + 14, y + 14, textColor);
+        int textY = y + (height - this.font.lineHeight) / 2;
+        guiGraphics.drawString(this.font, label, x + 14, textY, textColor);
     }
 
     private void drawSidebarItem(GuiGraphics guiGraphics, String label, int x, int y, int width, int height, boolean active) {
@@ -5173,21 +5808,263 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(this.font, label, x + 12, textY, COLOR_TEXT_DIM);
     }
 
+    private int getFieldTextY(int y, int height) {
+        return y + Math.max(0, (height - this.font.lineHeight) / 2) + 2;
+    }
+
+    private int getCenteredEditBoxTextY(int fieldY, int fieldH) {
+        return fieldY + Math.max(0, (fieldH - this.font.lineHeight) / 2) + 3;
+    }
+
+    private int getImportLabelY(int fieldY) {
+        return fieldY - 16;
+    }
+
+    private String getImportDropdownPlaceholder(String dropdownName) {
+        if ("type".equals(dropdownName)) {
+            return "Select type...";
+        }
+        if ("version".equals(dropdownName)) {
+            return "Select version...";
+        }
+        return "Select category...";
+    }
+
     private void drawFieldBox(GuiGraphics guiGraphics, String text, int x, int y, int width, int height, boolean filled) {
         drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
 
-        int textY = y + (height - this.font.lineHeight) / 2;
+        int textY = getFieldTextY(y, height);
         int textColor = filled ? COLOR_TEXT : COLOR_TEXT_DIM;
 
-        guiGraphics.drawString(this.font, text, x + 12, textY, textColor);
+        drawClippedString(guiGraphics, text, x + 12, textY, width - 24, textColor);
     }
 
     private void drawSelectorField(GuiGraphics guiGraphics, String text, int x, int y, int width, int height) {
         drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
 
         String label = fitTextToWidth(text + "  >", width - 20);
-        int textY = y + (height - this.font.lineHeight) / 2;
+        int textY = getFieldTextY(y, height);
         guiGraphics.drawString(this.font, label, x + 10, textY, COLOR_TEXT);
+    }
+
+    private void drawRequiredLabel(GuiGraphics guiGraphics, String label, int x, int y, boolean required) {
+        guiGraphics.drawString(this.font, label, x, y, COLOR_TEXT_DIM);
+        if (required) {
+            guiGraphics.drawString(this.font, "*", x + this.font.width(label) + 4, y, 0xFFFF6B86);
+        }
+    }
+
+    private void drawImportTextInputShell(GuiGraphics guiGraphics, String label, int x, int y, int width, int height, boolean required) {
+        drawRequiredLabel(guiGraphics, label, x, getImportLabelY(y), required);
+        drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
+    }
+
+    private void drawImportSelectorField(GuiGraphics guiGraphics, String label, String value, String dropdownName, int x, int y, int width, int height, boolean required) {
+        drawRequiredLabel(guiGraphics, label, x, getImportLabelY(y), required);
+        boolean open = dropdownName.equals(importDropdownOpen);
+        boolean empty = trimToEmpty(value).isBlank();
+        int border = open ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
+        drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, border);
+
+        String icon = empty
+                ? "□"
+                : switch (dropdownName) {
+            case "type" -> getMetadataOptionIcon(value, getSelectedIndex(assetTypes, value));
+            case "version" -> "▣";
+            default -> getMetadataOptionIcon(value, getSelectedIndex(macroCategories, value));
+        };
+
+        int textY = getFieldTextY(y, height);
+        int textColor = empty ? COLOR_TEXT_DIM : COLOR_TEXT;
+        String displayValue = empty ? getImportDropdownPlaceholder(dropdownName) : value;
+
+        guiGraphics.drawString(this.font, icon, x + 10, textY, open ? COLOR_BORDER_ACTIVE : COLOR_TEXT_DIM);
+        drawClippedString(guiGraphics, displayValue, x + 28, textY, width - 54, textColor);
+        guiGraphics.drawString(this.font, open ? "⌃" : "⌄", x + width - 18, textY, open ? COLOR_BORDER_ACTIVE : COLOR_TEXT_DIM);
+    }
+
+    private void drawImportTagsField(GuiGraphics guiGraphics, ImportDetailsFormLayout form) {
+        drawRequiredLabel(guiGraphics, "Tags", form.tagsX, getImportLabelY(form.tagsY), false);
+        drawPanel(guiGraphics, form.tagsX, form.tagsY, form.wideFieldW, form.fieldH, COLOR_PANEL, COLOR_BORDER);
+
+        int tagH = 16;
+        int tagGap = 5;
+        int tagY = form.tagsY + Math.max(2, (form.fieldH - tagH) / 2);
+        int tagX = form.tagsX + 8;
+        int tagClipX = form.tagsX + 2;
+        int tagClipY = form.tagsY + 2;
+        int tagClipW = form.wideFieldW - 4;
+        int tagClipH = form.fieldH - 4;
+
+        int visibleLimit = getImportVisibleTagLimit(form);
+        int hiddenCount = Math.max(0, importTags.size() - visibleLimit);
+
+        guiGraphics.enableScissor(tagClipX, tagClipY, tagClipX + tagClipW, tagClipY + tagClipH);
+
+        for (int i = 0; i < visibleLimit; i++) {
+            String tag = importTags.get(i);
+            int tagW = this.font.width(tag) + 20;
+
+            drawPanel(guiGraphics, tagX, tagY, tagW, tagH, 0xFF14263A, COLOR_BORDER);
+            int tagTextY = tagY + Math.max(0, (tagH - this.font.lineHeight) / 2) + 1;
+            guiGraphics.drawString(this.font, tag, tagX + 6, tagTextY, COLOR_TEXT);
+            guiGraphics.drawString(this.font, "x", tagX + tagW - 10, tagTextY, COLOR_TEXT_DIM);
+            tagX += tagW + tagGap;
+        }
+
+        if (hiddenCount > 0) {
+            String hiddenLabel = "+" + hiddenCount;
+            int hiddenW = this.font.width(hiddenLabel) + 14;
+            int hiddenX = tagX;
+            int maxHiddenX = form.tagsX + form.wideFieldW - getImportTagInputReserveW(form) - hiddenW - 12;
+            hiddenX = clampInt(hiddenX, form.tagsX + 8, Math.max(form.tagsX + 8, maxHiddenX));
+
+            drawPanel(guiGraphics, hiddenX, tagY, hiddenW, tagH, 0xFF14263A, COLOR_BORDER);
+            int hiddenTextY = tagY + Math.max(0, (tagH - this.font.lineHeight) / 2) + 1;
+            guiGraphics.drawString(this.font, hiddenLabel, hiddenX + 6, hiddenTextY, COLOR_TEXT_DIM);
+        }
+
+        guiGraphics.disableScissor();
+
+        boolean tagInputVisible = importTagInputBox != null && importTagInputBox.visible;
+        if (importTags.isEmpty() && !tagInputVisible) {
+            drawClippedString(guiGraphics, "Use comma to add tags...", form.tagsX + 10, getFieldTextY(form.tagsY, form.fieldH), form.wideFieldW - 20, COLOR_TEXT_DIM);
+        }
+    }
+
+    private void drawImportTagsViewer(GuiGraphics guiGraphics, ImportDetailsFormLayout form) {
+        if (importTagInputBox == null || !importTagInputBox.isFocused() || importTags.isEmpty()) {
+            return;
+        }
+
+        int popupW = Math.max(form.wideFieldW, Math.min(form.wideFieldW + 80, form.fileX + form.wideFieldW - form.tagsX));
+        int popupX = form.tagsX;
+        int tagH = 16;
+        int tagGap = 5;
+        int rowGap = 5;
+        int innerPad = 8;
+        int maxRows = 3;
+        int rowCount = 1;
+        int measureX = popupX + innerPad;
+        int rowRight = popupX + popupW - innerPad;
+
+        for (String tag : importTags) {
+            int tagW = this.font.width(tag) + 20;
+            if (measureX + tagW > rowRight) {
+                rowCount++;
+                measureX = popupX + innerPad;
+            }
+            measureX += tagW + tagGap;
+        }
+
+        int visibleRows = Math.min(maxRows, Math.max(1, rowCount));
+        int popupH = innerPad + (visibleRows * tagH) + ((visibleRows - 1) * rowGap) + innerPad;
+        int popupY = form.tagsY - popupH - 6;
+
+        if (popupY < 24) {
+            popupY = form.tagsY + form.fieldH + 4;
+        }
+
+        drawPanel(guiGraphics, popupX, popupY, popupW, popupH, 0xFF0B1524, COLOR_BORDER_ACTIVE);
+
+        int tagX = popupX + innerPad;
+        int tagY = popupY + innerPad;
+        int drawnCount = 0;
+
+        guiGraphics.enableScissor(popupX + 2, popupY + 2, popupX + popupW - 2, popupY + popupH - 2);
+
+        for (String tag : importTags) {
+            int tagW = this.font.width(tag) + 20;
+            if (tagX + tagW > rowRight) {
+                tagX = popupX + innerPad;
+                tagY += tagH + rowGap;
+            }
+
+            if (tagY + tagH > popupY + popupH - innerPad) {
+                break;
+            }
+
+            drawPanel(guiGraphics, tagX, tagY, tagW, tagH, 0xFF14263A, COLOR_BORDER);
+            int tagTextY = tagY + Math.max(0, (tagH - this.font.lineHeight) / 2) + 1;
+            guiGraphics.drawString(this.font, tag, tagX + 6, tagTextY, COLOR_TEXT);
+            guiGraphics.drawString(this.font, "x", tagX + tagW - 10, tagTextY, COLOR_TEXT_DIM);
+            tagX += tagW + tagGap;
+            drawnCount++;
+        }
+
+        if (drawnCount < importTags.size()) {
+            String moreLabel = "+" + (importTags.size() - drawnCount) + " more";
+            int moreW = this.font.width(moreLabel) + 14;
+            int moreX = popupX + popupW - moreW - innerPad;
+            int moreY = popupY + popupH - tagH - innerPad;
+            drawPanel(guiGraphics, moreX, moreY, moreW, tagH, 0xFF14263A, COLOR_BORDER);
+            int moreTextY = moreY + Math.max(0, (tagH - this.font.lineHeight) / 2) + 1;
+            guiGraphics.drawString(this.font, moreLabel, moreX + 6, moreTextY, COLOR_TEXT_DIM);
+        }
+
+        guiGraphics.disableScissor();
+    }
+
+    private void drawImportVariantStepper(GuiGraphics guiGraphics, ImportDetailsFormLayout form) {
+        drawRequiredLabel(guiGraphics, "Variants", form.variantsX, getImportLabelY(form.variantsY), false);
+        drawPanel(guiGraphics, form.variantsX, form.variantsY, form.fieldW3, form.fieldH, COLOR_PANEL, COLOR_BORDER);
+        int textY = getFieldTextY(form.variantsY, form.fieldH);
+        guiGraphics.drawString(this.font, "−", form.variantsX + 12, textY, COLOR_TEXT);
+        String variantsLabel = getCurrentImportVariantCount() + " variants";
+        guiGraphics.drawString(this.font, variantsLabel, form.variantsX + (form.fieldW3 - this.font.width(variantsLabel)) / 2, textY, COLOR_TEXT);
+        guiGraphics.drawString(this.font, "+", form.variantsX + form.fieldW3 - 18, textY, COLOR_TEXT);
+    }
+
+    private void drawImportDropdownList(GuiGraphics guiGraphics, ImportDetailsFormLayout form) {
+        if (importDropdownOpen == null) {
+            return;
+        }
+
+        List<String> options = getImportDropdownOptions(importDropdownOpen);
+        if (options.isEmpty()) {
+            return;
+        }
+
+        String currentValue = getImportDropdownValue(importDropdownOpen);
+        int rowH = getImportDropdownRowH();
+        int x = getImportDropdownX(form, importDropdownOpen);
+        int y = getImportDropdownPanelY(form, importDropdownOpen);
+        int w = getImportDropdownW(form, importDropdownOpen);
+        int visibleRows = getImportDropdownVisibleRows(importDropdownOpen);
+        int h = visibleRows * rowH;
+        int startIndex = clampInt(importDropdownScrollIndex, 0, getImportDropdownMaxScrollIndex(importDropdownOpen));
+
+        drawPanel(guiGraphics, x, y, w, h, 0xFF0B1524, COLOR_BORDER_ACTIVE);
+
+        for (int visibleIndex = 0; visibleIndex < visibleRows; visibleIndex++) {
+            int optionIndex = startIndex + visibleIndex;
+            if (optionIndex >= options.size()) {
+                break;
+            }
+
+            String option = options.get(optionIndex);
+            int rowY = y + visibleIndex * rowH;
+            boolean selected = option.equals(currentValue);
+
+            if (selected) {
+                guiGraphics.fill(x + 1, rowY + 1, x + w - 1, rowY + rowH, 0xFF173659);
+            }
+
+            if (visibleIndex > 0) {
+                guiGraphics.fill(x + 1, rowY, x + w - 1, rowY + 1, COLOR_BORDER);
+            }
+
+            String icon = "version".equals(importDropdownOpen)
+                    ? "▣"
+                    : getMetadataOptionIcon(option, optionIndex);
+            int textY = getFieldTextY(rowY, rowH);
+            guiGraphics.drawString(this.font, icon, x + 10, textY, selected ? COLOR_BORDER_ACTIVE : COLOR_TEXT_DIM);
+            drawClippedString(guiGraphics, option, x + 28, textY, w - 56, selected ? COLOR_TEXT : COLOR_TEXT_DIM);
+
+            if (selected) {
+                guiGraphics.drawString(this.font, "✓", x + w - 18, textY, COLOR_SUCCESS);
+            }
+        }
     }
 
     private void drawButtonBox(GuiGraphics guiGraphics, String label, int x, int y, int width, int height, boolean primary) {
@@ -5240,11 +6117,8 @@ public class ArchivScreen extends Screen {
     }
 
     private void drawInactiveOverlay(GuiGraphics guiGraphics, int x, int y, int width, int height, boolean inactive) {
-        if (!inactive) {
-            return;
-        }
-
-        guiGraphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, 0x4408111D);
+        // Keep inactive import sections visible. The selected step is already shown by
+        // the cyan border, and hiding/greying content made the import layout feel broken.
     }
 
     private void drawStatCard(GuiGraphics guiGraphics, int x, int y, int width, int height, String value, String label, String subtitle) {
@@ -6168,7 +7042,7 @@ public class ArchivScreen extends Screen {
         boolean imageStepActive = selectedImportStep == 2;
         boolean detailsStepActive = selectedImportStep == 3;
         boolean saveStepActive = selectedImportStep == 4;
-        boolean compactTopSections = detailsStepActive || saveStepActive;
+        boolean compactTopSections = false;
 
         drawSidebarItem(guiGraphics, "1. Select File", stepX, bodyY + 34, stepW, stepH, selectedImportStep == 1);
         drawSidebarItem(guiGraphics, "2. Preview Image", stepX, bodyY + 34 + stepGap, stepW, stepH, selectedImportStep == 2);
@@ -6177,8 +7051,7 @@ public class ArchivScreen extends Screen {
 
         ImportLayout layout = buildImportLayout(contentX, contentY, contentW, contentH);
 
-        boolean compact = true;
-        int detailsGap = compact ? 10 : 16;
+        int detailsGap = 12;
 
         int innerX = layout.innerX;
         int innerY = layout.innerY;
@@ -6215,8 +7088,8 @@ public class ArchivScreen extends Screen {
         drawStepPanel(guiGraphics, imageX, sectionY, imageW, topBoxH, imageStepActive);
         drawStepPanel(guiGraphics, previewX, sectionY, previewColumnW, topBoxH + detailsGap + detailsH, saveStepActive);
 
-        int boxMainTextY = compact ? sectionY + 42 : sectionY + 76;
-        int boxSubTextY = compact ? sectionY + 60 : sectionY + 92;
+        int boxSubTextY = boxButtonY - 28;
+        int boxMainTextY = boxSubTextY - 18;
 
         guiGraphics.drawString(this.font, "1. Structure File", structureX + 12, sectionY + 12, COLOR_TEXT);
 
@@ -6236,7 +7109,7 @@ public class ArchivScreen extends Screen {
                 int replaceButtonW = 108;
                 int replaceButtonH = 24;
                 int replaceButtonX = structureX + structureW - replaceButtonW - 20;
-                int replaceButtonY = sectionY + 34;
+                int replaceButtonY = sectionY + topBoxH - replaceButtonH - 14;
 
                 guiGraphics.drawString(this.font, "Selected file:", selectedInfoX, selectedInfoY, COLOR_TEXT_DIM);
                 guiGraphics.drawString(this.font, mockStructureFileName, selectedInfoX, selectedInfoY + 18, COLOR_TEXT);
@@ -6297,7 +7170,8 @@ public class ArchivScreen extends Screen {
         int previewImageX = previewX + 12;
         int previewImageY = sectionY + 30;
         int previewImageW = previewColumnW - 24;
-        int previewImageH = compact ? 92 : 110;
+        int previewPanelH = topBoxH + detailsGap + detailsH;
+        int previewImageH = clampInt((previewPanelH * 32) / 100, 104, 156);
 
         int previewColor = mockPreviewImageSelected ? MOCK_PREVIEW_IMAGE_COLOR : MOCK_NO_PREVIEW_IMAGE_COLOR;
         guiGraphics.fill(previewImageX, previewImageY, previewImageX + previewImageW, previewImageY + previewImageH, previewColor);
@@ -6312,13 +7186,13 @@ public class ArchivScreen extends Screen {
                 0xFFFFFFFF
         );
 
-        int previewInfoY = compact ? sectionY + 132 : sectionY + 150;
+        int previewInfoY = previewImageY + previewImageH + 14;
 
-        String previewName = mockDetailsFilled ? preset.name : "Unnamed Asset";
-        String previewType = mockDetailsFilled ? getCurrentImportType() : "Unknown Type";
-        String previewVersion = mockDetailsFilled ? getCurrentImportVersion() : "Unknown";
-        String previewAuthor = mockDetailsFilled ? preset.author : "Unknown";
-        String previewCategory = mockDetailsFilled ? getCurrentImportCategory() : "Uncategorized";
+        String previewName = mockDetailsFilled && !getCurrentImportName().isBlank() ? getCurrentImportName() : "Unnamed Asset";
+        String previewType = mockDetailsFilled && !getCurrentImportType().isBlank() ? getCurrentImportType() : "Unknown Type";
+        String previewVersion = mockDetailsFilled && !getCurrentImportVersion().isBlank() ? getCurrentImportVersion() : "Unknown";
+        String previewAuthor = mockDetailsFilled && !getCurrentImportAuthor().isBlank() ? getCurrentImportAuthor() : "Unknown";
+        String previewCategory = mockDetailsFilled && !getCurrentImportCategory().isBlank() ? getCurrentImportCategory() : "Uncategorized";
         String previewFormat = mockStructureFileSelected ? mockStructureFileFormat : "No file";
         String previewImageStatus = mockPreviewImageSelected ? mockPreviewImageFormat + "  •  " + mockPreviewImageRatio : "No preview image";
 
@@ -6352,32 +7226,28 @@ public class ArchivScreen extends Screen {
         }
 
         ImportDetailsFormLayout form = buildImportDetailsFormLayout(layout);
+        boolean shouldDrawDetailsForm = true;
 
-        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.name : "Asset Name...", form.nameX, form.nameY, form.fieldW1, form.fieldH, mockDetailsFilled);
+        if (shouldDrawDetailsForm) {
+            drawImportTextInputShell(guiGraphics, "Asset Name", form.nameX, form.nameY, form.fieldW1, form.fieldH, true);
+            drawImportSelectorField(guiGraphics, "Macro Category", getCurrentImportCategory(), "category", form.categoryX, form.categoryY, form.fieldW2, form.fieldH, true);
+            drawImportTextInputShell(guiGraphics, "Author", form.authorX, form.authorY, form.fieldW3, form.fieldH, true);
 
-        if (mockDetailsFilled) {
-            drawSelectorField(guiGraphics, getCurrentImportCategory(), form.categoryX, form.categoryY, form.fieldW2, form.fieldH);
+            drawImportSelectorField(guiGraphics, "Type", getCurrentImportType(), "type", form.typeX, form.typeY, form.fieldW1, form.fieldH, true);
+            drawImportSelectorField(guiGraphics, "Minecraft Version", getCurrentImportVersion(), "version", form.versionX, form.versionY, form.fieldW2, form.fieldH, true);
+            drawImportVariantStepper(guiGraphics, form);
+
+            drawImportTagsField(guiGraphics, form);
+            drawRequiredLabel(guiGraphics, "File Info", form.fileX, getImportLabelY(form.fileY), false);
+            drawFieldBox(guiGraphics, mockStructureFileSelected ? mockStructureFileFormat + " • " + mockStructureFileSize : "After upload", form.fileX, form.fileY, form.wideFieldW, form.fieldH, mockStructureFileSelected);
+            drawImportTagsViewer(guiGraphics, form);
+
+            if (detailsStepActive) {
+                drawImportDropdownList(guiGraphics, form);
+            }
         } else {
-            drawFieldBox(guiGraphics, "Macro Category...", form.categoryX, form.categoryY, form.fieldW2, form.fieldH, false);
+            guiGraphics.drawString(this.font, "Complete the previous steps, then fill the asset metadata here.", innerX + 12, detailsY + 40, COLOR_TEXT_DIM);
         }
-
-        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.author : "Author...", form.authorX, form.authorY, form.fieldW3, form.fieldH, mockDetailsFilled);
-
-        if (mockDetailsFilled) {
-            drawSelectorField(guiGraphics, getCurrentImportType(), form.typeX, form.typeY, form.fieldW1, form.fieldH);
-            drawSelectorField(guiGraphics, getCurrentImportVersion(), form.versionX, form.versionY, form.fieldW2, form.fieldH);
-
-            drawPanel(guiGraphics, form.variantsX, form.variantsY, form.fieldW3, form.fieldH, COLOR_PANEL, COLOR_BORDER);
-            String variantsLabel = "-  " + getCurrentImportVariantCount() + " variants  +";
-            guiGraphics.drawString(this.font, fitTextToWidth(variantsLabel, form.fieldW3 - 18), form.variantsX + 9, form.variantsY + 7, COLOR_TEXT);
-        } else {
-            drawFieldBox(guiGraphics, "Type...", form.typeX, form.typeY, form.fieldW1, form.fieldH, false);
-            drawFieldBox(guiGraphics, "Minecraft Version...", form.versionX, form.versionY, form.fieldW2, form.fieldH, false);
-            drawFieldBox(guiGraphics, "Variants...", form.variantsX, form.variantsY, form.fieldW3, form.fieldH, false);
-        }
-
-        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.tags : "Tags...", form.tagsX, form.tagsY, form.wideFieldW, form.fieldH, mockDetailsFilled);
-        drawFieldBox(guiGraphics, mockDetailsFilled ? preset.fileInfo : "File Info...", form.fileX, form.fileY, form.wideFieldW, form.fieldH, mockDetailsFilled);
 
         drawInactiveOverlay(guiGraphics, innerX, detailsY, leftAreaW, detailsH, !detailsStepActive);
 
