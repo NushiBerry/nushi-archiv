@@ -6,7 +6,6 @@ import com.nushi.archiv.client.storage.ArchivWorldEditBridge;
 import com.nushi.archiv.client.storage.ArchivAssetMetadataStore;
 import com.nushi.archiv.client.storage.ArchivMetadataSettingsStore;
 import com.nushi.archiv.client.storage.ArchivCollectionStore;
-import com.nushi.archiv.client.storage.ArchivLibraryStateStore;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -62,11 +61,9 @@ public class ArchivScreen extends Screen {
     private ArchivAssetMetadataStore metadataStore;
     private ArchivMetadataSettingsStore metadataSettingsStore;
     private ArchivCollectionStore collectionStore;
-    private ArchivLibraryStateStore libraryStateStore;
     private ArchivWorldEditBridge worldEditBridge;
     private boolean metadataSettingsLoaded = false;
     private boolean collectionsLoaded = false;
-    private boolean libraryStateLoaded = false;
     private boolean localLibraryReady = false;
     private int localLibraryDetectedCount = 0;
 
@@ -860,7 +857,6 @@ public class ArchivScreen extends Screen {
         loadMetadataSettingsIfNeeded();
         syncLocalLibraryAssets();
         loadCollectionsIfNeeded();
-        loadLibraryStateIfNeeded();
         int closeButtonSize = 24;
         int closeX = this.width - 20 - closeButtonSize;
         int closeY = 20;
@@ -3377,7 +3373,6 @@ public class ArchivScreen extends Screen {
 
         replaceAssetNameReferences(oldAsset.getName(), newName);
         saveCollections();
-        saveLibraryState();
 
         selectedLibraryAssetName = newName;
 
@@ -3442,7 +3437,6 @@ public class ArchivScreen extends Screen {
         recentLoadedAssetNames.remove(deletedName);
         removeAssetReferencesFromCollections(deletedName);
         saveCollections();
-        saveLibraryState();
 
         if (deletedName.equals(loadedAssetName)) {
             loadedAssetName = null;
@@ -3519,9 +3513,7 @@ public class ArchivScreen extends Screen {
         if (recentLoadedAssetNames.size() > 12) {
             recentLoadedAssetNames.remove(recentLoadedAssetNames.size() - 1);
         }
-    
-        saveLibraryState();
-}
+    }
 
     private void closeAssetDetails() {
         assetDetailsOpen = false;
@@ -3917,91 +3909,6 @@ public class ArchivScreen extends Screen {
             libraryActionMessage = "Local folder refreshed: " + localLibraryDetectedCount + " file(s)";
         } else {
             libraryActionMessage = "Local folder refreshed";
-        }
-    }
-
-
-    private ArchivLibraryStateStore getLibraryStateStore() {
-        if (this.minecraft == null) {
-            return null;
-        }
-
-        if (libraryStateStore == null) {
-            libraryStateStore = new ArchivLibraryStateStore(this.minecraft.gameDirectory.toPath());
-        }
-
-        return libraryStateStore;
-    }
-
-    private void loadLibraryStateIfNeeded() {
-        if (libraryStateLoaded) {
-            return;
-        }
-
-        libraryStateLoaded = true;
-
-        ArchivLibraryStateStore store = getLibraryStateStore();
-
-        if (store == null) {
-            return;
-        }
-
-        try {
-            ArchivLibraryStateStore.LoadedLibraryState state = store.load();
-
-            if (state == null) {
-                return;
-            }
-
-            loadedAssetName = null;
-            String savedLoadedAssetName = trimToEmpty(state.loadedAssetName());
-
-            if (!savedLoadedAssetName.isBlank() && getSavedAssetByName(savedLoadedAssetName) != null) {
-                loadedAssetName = savedLoadedAssetName;
-            }
-
-            recentLoadedAssetNames.clear();
-
-            for (String recentAssetName : state.recentLoadedAssetNames()) {
-                if (recentLoadedAssetNames.size() >= 12) {
-                    break;
-                }
-
-                String cleanRecentName = trimToEmpty(recentAssetName);
-
-                if (!cleanRecentName.isBlank()
-                        && getSavedAssetByName(cleanRecentName) != null
-                        && !recentLoadedAssetNames.contains(cleanRecentName)) {
-                    recentLoadedAssetNames.add(cleanRecentName);
-                }
-            }
-
-            if (selectedLibraryAssetName == null && loadedAssetName != null) {
-                selectedLibraryAssetName = loadedAssetName;
-            }
-
-            if (loadedAssetName != null || !recentLoadedAssetNames.isEmpty()) {
-                libraryActionMessage = "Library state loaded";
-            }
-        } catch (IOException exception) {
-            libraryActionMessage = "Library state load failed";
-        }
-    }
-
-    private boolean saveLibraryState() {
-        ArchivLibraryStateStore store = getLibraryStateStore();
-
-        if (store == null) {
-            libraryActionMessage = "Library state unavailable";
-            return false;
-        }
-
-        try {
-            store.save(loadedAssetName, recentLoadedAssetNames);
-            return true;
-        } catch (IOException exception) {
-            libraryActionMessage = "Library state save failed";
-            return false;
         }
     }
 
