@@ -13,6 +13,16 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.Util;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.Locale;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.io.IOException;
@@ -161,17 +171,33 @@ public class ArchivScreen extends Screen {
     private String pendingCollectionAssetName = null;
 
     private boolean mockStructureFileSelected = false;
-    private final String mockStructureFileName = "stone_tower.schem";
-    private final String mockStructureFileFormat = ".schem";
-    private final String mockStructureFileSize = "1.24 MB";
+    private String mockStructureFileName = "stone_tower.schem";
+    private String mockStructureFileFormat = ".schem";
+    private String mockStructureFileSize = "1.24 MB";
+    private Path importSelectedStructureSourcePath = null;
 
     private boolean mockPreviewImageSelected = false;
-    private final String mockPreviewImageName = "stone_tower_preview.png";
-    private final String mockPreviewImageFormat = ".png";
-    private final String mockPreviewImageRatio = "16:9";
+    private String mockPreviewImageName = "stone_tower_preview.png";
+    private String mockPreviewImageFormat = ".png";
+    private String mockPreviewImageRatio = "16:9";
+    private Path importSelectedPreviewSourcePath = null;
+    private volatile boolean importFilePickerRunning = false;
+    private volatile ImportPickerResult pendingImportPickerResult = null;
 
     private boolean mockDetailsFilled = false;
     private boolean mockAssetSaved = false;
+
+    private static class ImportPickerResult {
+        final String target;
+        final Path selectedPath;
+        final String message;
+
+        ImportPickerResult(String target, Path selectedPath, String message) {
+            this.target = target;
+            this.selectedPath = selectedPath;
+            this.message = message;
+        }
+    }
 
     private final ImportPreset[] importPresets = new ImportPreset[] {
             new ImportPreset(
@@ -1529,6 +1555,506 @@ public class ArchivScreen extends Screen {
             return;
         }
         box.setValue(value == null ? "" : value);
+    }
+
+    private void beginImportFileSelection(String target, String title, String description, String... allowedExtensions) {
+        if (importFilePickerRunning) {
+            libraryActionMessage = "File picker already open";
+            return;
+        }
+
+        importFilePickerRunning = true;
+        libraryActionMessage = "Opening file picker...";
+
+        Thread pickerThread = new Thread(() -> {
+            ImportPickerResult result;
+
+            try {
+                result = chooseImportFileBlocking(target, title, description, allowedExtensions);
+            } catch (Exception exception) {
+                result = new ImportPickerResult(
+                        target,
+                        null,
+                        "File picker failed: " + exception.getClass().getSimpleName()
+                );
+            }
+
+            pendingImportPickerResult = result;
+        }, "Archiv Import File Picker");
+
+        pickerThread.setDaemon(true);
+        pickerThread.start();
+    }
+
+    private ImportPickerResult chooseImportFileBlocking(String target, String title, String description, String... allowedExtensions) {
+        String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+
+        if (!osName.contains("win")) {
+            return new ImportPickerResult(target, null, "File picker only supports Windows for now");
+        }
+
+        String filter = buildWindowsFileDialogFilter(description, allowedExtensions);
+
+        String script = ""
+                + "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;"
+                + "Add-Type -AssemblyName System.Windows.Forms;"
+                + "[System.Windows.Forms.Application]::EnableVisualStyles();"
+                + "$owner = New-Object System.Windows.Forms.Form;"
+                + "$owner.TopMost = $true;"
+                + "$owner.ShowInTaskbar = $false;"
+                + "$owner.Width = 1;"
+                + "$owner.Height = 1;"
+                + "$owner.Opacity = 0;"
+                + "$owner.StartPosition = 'CenterScreen';"
+                + "$dialog = New-Object System.Windows.Forms.OpenFileDialog;"
+                + "$dialog.Title = '" + escapePowerShellSingleQuoted(title) + "';"
+                + "$dialog.Filter = '" + escapePowerShellSingleQuoted(filter) + "';"
+                + "$dialog.Multiselect = $false;"
+                + "$owner.Show();"
+                + "$owner.Activate();"
+                + "$result = $dialog.ShowDialog($owner);"
+                + "$owner.Dispose();"
+                + "if ($result -eq [System.Windows.Forms.DialogResult]::OK) {"
+                + "  Write-Output $dialog.FileName;"
+                + "}";
+
+        try {
+            Process process = new ProcessBuilder(
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-STA",
+                    "-Command",
+                    script
+            )
+                    .redirectErrorStream(true)
+                    .start();
+
+            String selectedPath = "";
+
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8)
+            )) {
+                String line;
+
+                while ((line = reader.readLine()) != null) {
+                    if (!line.isBlank()) {
+                        selectedPath = line.trim();
+                    }
+                }
+            }
+
+            int exitCode = process.waitFor();
+
+            if (exitCode != 0) {
+                return new ImportPickerResult(target, null, "File picker failed");
+            }
+
+            if (selectedPath.isBlank()) {
+                return new ImportPickerResult(target, null, "File selection cancelled");
+            }
+
+            return new ImportPickerResult(
+                    target,
+                    Path.of(selectedPath),
+                    "Selected file: " + Path.of(selectedPath).getFileName()
+            );
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return new ImportPickerResult(target, null, "File picker interrupted");
+        } catch (Exception exception) {
+            return new ImportPickerResult(
+                    target,
+                    null,
+                    "File picker unavailable: " + exception.getClass().getSimpleName()
+            );
+        }
+    }
+
+    private void drainImportPickerResult() {
+        ImportPickerResult result = pendingImportPickerResult;
+
+        if (result == null) {
+            return;
+        }
+
+        pendingImportPickerResult = null;
+        importFilePickerRunning = false;
+
+        if (result.message != null && !result.message.isBlank()) {
+            libraryActionMessage = result.message;
+        }
+
+        if (result.selectedPath == null) {
+            return;
+        }
+
+        if ("structure".equals(result.target)) {
+            applyImportStructureFile(result.selectedPath);
+            return;
+        }
+
+        if ("preview".equals(result.target)) {
+            applyImportPreviewImage(result.selectedPath);
+        }
+    }
+
+    private boolean applyImportStructureFile(Path selectedPath) {
+        if (selectedPath == null) {
+            return false;
+        }
+
+        String fileName = selectedPath.getFileName().toString();
+        String extension = getFileExtension(fileName).toLowerCase(Locale.ROOT);
+
+        if (!isSupportedImportStructureExtension(extension)) {
+            libraryActionMessage = "Unsupported structure file: " + extension;
+            return false;
+        }
+
+        importSelectedStructureSourcePath = selectedPath;
+        mockStructureFileSelected = true;
+        mockStructureFileName = fileName;
+        mockStructureFileFormat = extension;
+        mockStructureFileSize = getDisplayFileSize(selectedPath);
+        mockAssetSaved = false;
+
+        if (importAssetNameBox != null && getCurrentImportName().isBlank()) {
+            setImportTextBoxValue(importAssetNameBox, toDefaultImportAssetName(fileName));
+        }
+
+        selectedImportStep = Math.max(selectedImportStep, 2);
+        libraryActionMessage = "Selected structure file: " + fileName;
+        return true;
+    }
+
+    private boolean applyImportPreviewImage(Path selectedPath) {
+        if (selectedPath == null) {
+            return false;
+        }
+
+        String fileName = selectedPath.getFileName().toString();
+        String extension = getFileExtension(fileName).toLowerCase(Locale.ROOT);
+
+        if (!extension.equals(".png") && !extension.equals(".jpg") && !extension.equals(".jpeg")) {
+            libraryActionMessage = "Unsupported preview image: " + extension;
+            return false;
+        }
+
+        importSelectedPreviewSourcePath = selectedPath;
+        mockPreviewImageSelected = true;
+        mockPreviewImageName = fileName;
+        mockPreviewImageFormat = extension;
+        mockPreviewImageRatio = getImageRatio(selectedPath);
+        mockAssetSaved = false;
+
+        selectedImportStep = Math.max(selectedImportStep, 3);
+        libraryActionMessage = "Selected preview image: " + fileName;
+        return true;
+    }
+
+    private String buildWindowsFileDialogFilter(String description, String... allowedExtensions) {
+        StringBuilder patterns = new StringBuilder();
+
+        for (String extension : allowedExtensions) {
+            String cleanExtension = trimToEmpty(extension);
+
+            if (cleanExtension.isBlank()) {
+                continue;
+            }
+
+            if (!cleanExtension.startsWith(".")) {
+                cleanExtension = "." + cleanExtension;
+            }
+
+            if (!patterns.isEmpty()) {
+                patterns.append(";");
+            }
+
+            patterns.append("*").append(cleanExtension);
+        }
+
+        if (patterns.isEmpty()) {
+            return "All files (*.*)|*.*";
+        }
+
+        String cleanDescription = trimToEmpty(description).isBlank()
+                ? "Supported files"
+                : trimToEmpty(description);
+
+        return cleanDescription + " (" + patterns + ")|" + patterns + "|All files (*.*)|*.*";
+    }
+
+    private String escapePowerShellSingleQuoted(String value) {
+        return trimToEmpty(value).replace("'", "''");
+    }
+
+    private boolean hasAllowedExtension(String fileName, String... allowedExtensions) {
+        String lowerName = trimToEmpty(fileName).toLowerCase(Locale.ROOT);
+
+        for (String extension : allowedExtensions) {
+            if (lowerName.endsWith(extension.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void selectImportStructureFile() {
+        beginImportFileSelection(
+                "structure",
+                "Select Archiv Structure File",
+                "Structure files",
+                ".schem",
+                ".schematic",
+                ".blueprint"
+        );
+    }
+
+    private void selectImportPreviewImage() {
+        beginImportFileSelection(
+                "preview",
+                "Select Archiv Preview Image",
+                "Preview images",
+                ".png",
+                ".jpg",
+                ".jpeg"
+        );
+    }
+
+    private void clearImportStructureSelection() {
+        mockStructureFileSelected = false;
+        importSelectedStructureSourcePath = null;
+        mockStructureFileName = "stone_tower.schem";
+        mockStructureFileFormat = ".schem";
+        mockStructureFileSize = "1.24 MB";
+        mockAssetSaved = false;
+    }
+
+    private void clearImportPreviewSelection() {
+        mockPreviewImageSelected = false;
+        importSelectedPreviewSourcePath = null;
+        mockPreviewImageName = "stone_tower_preview.png";
+        mockPreviewImageFormat = ".png";
+        mockPreviewImageRatio = "16:9";
+        mockAssetSaved = false;
+    }
+
+    private boolean copyImportFilesToLocalLibrary() {
+        ArchivLocalLibrary library = getLocalLibrary();
+
+        if (library == null) {
+            libraryActionMessage = "Local library unavailable";
+            return false;
+        }
+
+        try {
+            library.ensureDirectories();
+
+            if (mockStructureFileSelected && importSelectedStructureSourcePath != null) {
+                Path targetPath = getUniqueImportTargetPath(
+                        library.getAssetsDirectory(),
+                        importSelectedStructureSourcePath.getFileName().toString()
+                );
+
+                Path sourcePath = importSelectedStructureSourcePath.toAbsolutePath().normalize();
+                Path normalizedTargetPath = targetPath.toAbsolutePath().normalize();
+
+                if (!sourcePath.equals(normalizedTargetPath)) {
+                    Files.copy(sourcePath, normalizedTargetPath, StandardCopyOption.REPLACE_EXISTING);
+                }
+
+                mockStructureFileName = normalizedTargetPath.getFileName().toString();
+                mockStructureFileFormat = getFileExtension(mockStructureFileName);
+                mockStructureFileSize = getDisplayFileSize(normalizedTargetPath);
+                importSelectedStructureSourcePath = normalizedTargetPath;
+            }
+
+            if (mockPreviewImageSelected && importSelectedPreviewSourcePath != null) {
+                Path targetPath = getUniqueImportTargetPath(
+                        library.getPreviewsDirectory(),
+                        importSelectedPreviewSourcePath.getFileName().toString()
+                );
+
+                Path sourcePath = importSelectedPreviewSourcePath.toAbsolutePath().normalize();
+                Path normalizedTargetPath = targetPath.toAbsolutePath().normalize();
+
+                if (!sourcePath.equals(normalizedTargetPath)) {
+                    Files.copy(sourcePath, normalizedTargetPath, StandardCopyOption.REPLACE_EXISTING);
+                }
+
+                mockPreviewImageName = normalizedTargetPath.getFileName().toString();
+                mockPreviewImageFormat = getFileExtension(mockPreviewImageName);
+                mockPreviewImageRatio = getImageRatio(normalizedTargetPath);
+                importSelectedPreviewSourcePath = normalizedTargetPath;
+            }
+
+            return true;
+        } catch (IOException exception) {
+            libraryActionMessage = "Import file copy failed";
+            return false;
+        }
+    }
+
+    private Path getUniqueImportTargetPath(Path directory, String fileName) throws IOException {
+        Files.createDirectories(directory);
+
+        String safeFileName = sanitizeImportFileName(fileName);
+        String extension = getFileExtension(safeFileName);
+        String baseName = safeFileName;
+
+        if (!extension.isBlank() && baseName.toLowerCase(Locale.ROOT).endsWith(extension.toLowerCase(Locale.ROOT))) {
+            baseName = baseName.substring(0, baseName.length() - extension.length());
+        }
+
+        Path candidate = directory.resolve(safeFileName);
+
+        if (!Files.exists(candidate)) {
+            return candidate;
+        }
+
+        int index = 2;
+        while (true) {
+            String indexedName = baseName + "_" + index + extension;
+            candidate = directory.resolve(indexedName);
+
+            if (!Files.exists(candidate)) {
+                return candidate;
+            }
+
+            index++;
+        }
+    }
+
+    private String sanitizeImportFileName(String fileName) {
+        String clean = trimToEmpty(fileName);
+
+        if (clean.isBlank()) {
+            return "archiv_asset.schem";
+        }
+
+        int slashIndex = Math.max(clean.lastIndexOf('/'), clean.lastIndexOf('\\'));
+        if (slashIndex >= 0 && slashIndex + 1 < clean.length()) {
+            clean = clean.substring(slashIndex + 1);
+        }
+
+        clean = clean
+                .replaceAll("[^a-zA-Z0-9._ -]+", "_")
+                .replaceAll("\\s+", " ")
+                .replaceAll("_+", "_")
+                .trim();
+
+        return clean.isBlank() ? "archiv_asset.schem" : clean;
+    }
+
+    private boolean isSupportedImportStructureExtension(String extension) {
+        return ".schem".equals(extension)
+                || ".schematic".equals(extension)
+                || ".blueprint".equals(extension);
+    }
+
+    private String getFileExtension(String fileName) {
+        String clean = trimToEmpty(fileName);
+        int dotIndex = clean.lastIndexOf(".");
+
+        if (dotIndex < 0 || dotIndex >= clean.length() - 1) {
+            return "";
+        }
+
+        return clean.substring(dotIndex);
+    }
+
+    private String getDisplayFileSize(Path path) {
+        try {
+            long bytes = Files.size(path);
+
+            double kb = bytes / 1024.0;
+            if (kb < 1024.0) {
+                return String.format(Locale.ROOT, "%.1f KB", kb);
+            }
+
+            double mb = kb / 1024.0;
+            if (mb < 1024.0) {
+                return String.format(Locale.ROOT, "%.2f MB", mb);
+            }
+
+            double gb = mb / 1024.0;
+            return String.format(Locale.ROOT, "%.2f GB", gb);
+        } catch (IOException exception) {
+            return "Unknown";
+        }
+    }
+
+    private String getImageRatio(Path path) {
+        try {
+            BufferedImage image = ImageIO.read(path.toFile());
+
+            if (image == null || image.getWidth() <= 0 || image.getHeight() <= 0) {
+                return "Unknown";
+            }
+
+            int width = image.getWidth();
+            int height = image.getHeight();
+            int gcd = gcd(width, height);
+
+            return (width / gcd) + ":" + (height / gcd);
+        } catch (IOException exception) {
+            return "Unknown";
+        }
+    }
+
+    private int gcd(int a, int b) {
+        a = Math.abs(a);
+        b = Math.abs(b);
+
+        while (b != 0) {
+            int temp = b;
+            b = a % b;
+            a = temp;
+        }
+
+        return Math.max(1, a);
+    }
+
+    private String toDefaultImportAssetName(String fileName) {
+        String clean = trimToEmpty(fileName);
+        String extension = getFileExtension(clean);
+
+        if (!extension.isBlank() && clean.toLowerCase(Locale.ROOT).endsWith(extension.toLowerCase(Locale.ROOT))) {
+            clean = clean.substring(0, clean.length() - extension.length());
+        }
+
+        clean = clean
+                .replace("_", " ")
+                .replace("-", " ")
+                .trim();
+
+        if (clean.isBlank()) {
+            return "Imported Asset";
+        }
+
+        StringBuilder result = new StringBuilder();
+        String[] words = clean.split("\\s+");
+
+        for (String word : words) {
+            if (word.isBlank()) {
+                continue;
+            }
+
+            if (!result.isEmpty()) {
+                result.append(" ");
+            }
+
+            result.append(word.substring(0, 1).toUpperCase(Locale.ROOT));
+
+            if (word.length() > 1) {
+                result.append(word.substring(1));
+            }
+        }
+
+        return result.isEmpty() ? "Imported Asset" : result.toString();
     }
 
     private void clearImportDetailFields() {
@@ -3023,8 +3549,8 @@ public class ArchivScreen extends Screen {
     }
 
     private void resetImportState() {
-        mockStructureFileSelected = false;
-        mockPreviewImageSelected = false;
+        clearImportStructureSelection();
+        clearImportPreviewSelection();
         mockDetailsFilled = false;
         mockAssetSaved = false;
         selectedImportStep = 1;
@@ -4996,17 +5522,14 @@ public class ArchivScreen extends Screen {
                     int replaceButtonY = layout.sectionY + 34;
 
                     if (isInside(mouseX, mouseY, replaceButtonX, replaceButtonY, replaceButtonW, replaceButtonH)) {
-                        mockStructureFileSelected = false;
-                        mockAssetSaved = false;
+                        clearImportStructureSelection();
                         return true;
                     }
                 } else {
                     int browseFileButtonX = layout.structureX + (layout.structureW / 2) - 60;
 
                     if (isInside(mouseX, mouseY, browseFileButtonX, layout.boxButtonY, 120, 28)) {
-                        mockStructureFileSelected = true;
-                        mockAssetSaved = false;
-                        selectedImportStep = 2;
+                        selectImportStructureFile();
                         return true;
                     }
                 }
@@ -5020,17 +5543,14 @@ public class ArchivScreen extends Screen {
                     int replaceButtonY = layout.sectionY + layout.topBoxH - replaceButtonH - 8;
 
                     if (isInside(mouseX, mouseY, replaceButtonX, replaceButtonY, replaceButtonW, replaceButtonH)) {
-                        mockPreviewImageSelected = false;
-                        mockAssetSaved = false;
+                        clearImportPreviewSelection();
                         return true;
                     }
                 } else {
                     int browseImageButtonX = layout.imageX + (layout.imageW / 2) - 60;
 
                     if (isInside(mouseX, mouseY, browseImageButtonX, layout.boxButtonY, 120, 28)) {
-                        mockPreviewImageSelected = true;
-                        mockAssetSaved = false;
-                        selectedImportStep = 3;
+                        selectImportPreviewImage();
                         return true;
                     }
                 }
@@ -5133,6 +5653,10 @@ public class ArchivScreen extends Screen {
 
             if (isInside(mouseX, mouseY, layout.saveX, layout.actionsY, layout.saveW, layout.buttonH)) {
                 if (isImportReady() && !mockAssetSaved) {
+                    if (!copyImportFilesToLocalLibrary()) {
+                        return true;
+                    }
+
                     ArchivAsset savedAsset = buildSavedAssetFromImport();
                     savedAssets.add(0, savedAsset);
                     saveAssetMetadata(savedAsset);
@@ -5836,10 +6360,12 @@ public class ArchivScreen extends Screen {
         guiGraphics.fill(0, 0, this.width, this.height, COLOR_BACKGROUND);
 
         ScreenChromeLayout chrome = buildChromeLayout();
+        drainImportPickerResult();
 
         boolean browseActive = "Browse".equals(selectedTopTab);
         boolean myAssetsActive = "My Assets".equals(selectedTopTab);
         boolean libraryTabActive = browseActive || myAssetsActive;
+        boolean actionFooterActive = libraryTabActive || "Import".equals(selectedTopTab);
 
         if (browseSearchBox != null) {
             boolean browseSearchEnabled = browseActive && !isBrowseOverlayOpen();
@@ -6027,7 +6553,7 @@ public class ArchivScreen extends Screen {
         int footerY = chrome.rootY + chrome.rootH - chrome.footerH + 8;
         guiGraphics.drawString(this.font, "WorldEdit: pending", chrome.rootX + 12, footerY, COLOR_SUCCESS);
 
-        String footerMiddleText = libraryTabActive ? libraryActionMessage : "Preview pipeline: planned";
+        String footerMiddleText = actionFooterActive ? libraryActionMessage : "Preview pipeline: planned";
         guiGraphics.drawString(this.font, footerMiddleText, chrome.rootX + 140, footerY, COLOR_TEXT_DIM);
 
         if (libraryTabActive) {
