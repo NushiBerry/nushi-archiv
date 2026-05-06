@@ -904,6 +904,44 @@ public class ArchivScreen extends Screen {
         int variantsLegacyY;
     }
 
+    private String buildCompactImportStructureMessage(String fileName) {
+        StringBuilder messageBuilder = new StringBuilder("Selected: ").append(fileName);
+
+        String dimensions = importStructureInspection.getDimensionsText();
+
+        if (!dimensions.isBlank()) {
+            messageBuilder.append(" • ").append(dimensions);
+        }
+
+        if (importStructureDataSummary != null && importStructureDataSummary.isReadable()) {
+            long nonAirBlocks = importStructureDataSummary.getNonAirBlocks();
+
+            if (nonAirBlocks > 0L) {
+                messageBuilder.append(" • ").append(formatCompactCount(nonAirBlocks)).append(" blocks");
+            }
+
+            String topBlock = importStructureDataSummary.getTopBlockText();
+
+            if (!topBlock.isBlank()) {
+                messageBuilder.append(" • Top: ").append(topBlock);
+            }
+        }
+
+        return messageBuilder.toString();
+    }
+
+    private String formatCompactCount(long value) {
+        if (value >= 1_000_000L) {
+            return String.format(Locale.ROOT, "%.1fM", value / 1_000_000.0D);
+        }
+
+        if (value >= 1_000L) {
+            return String.format(Locale.ROOT, "%.1fk", value / 1_000.0D);
+        }
+
+        return Long.toString(value);
+    }
+
     public ArchivScreen(Component title, Screen parent) {
         super(title);
         this.parent = parent;
@@ -1804,25 +1842,7 @@ public class ArchivScreen extends Screen {
             setImportTextBoxValue(importAssetNameBox, toDefaultImportAssetName(fileName));
         }
 
-        String inspectedInfo = importStructureInspection.getCompactInfo();
-        String dataInfo = importStructureDataSummary.getCompactInfo();
-        String voxelInfo = importStructureVoxelSnapshot.getCompactInfo();
-
-        StringBuilder messageBuilder = new StringBuilder("Selected structure file: ").append(fileName);
-
-        if (!inspectedInfo.isBlank()) {
-            messageBuilder.append(" • ").append(inspectedInfo);
-        }
-
-        if (!dataInfo.isBlank() && !dataInfo.equals(inspectedInfo)) {
-            messageBuilder.append(" • ").append(dataInfo);
-        }
-
-        if (!voxelInfo.isBlank() && !voxelInfo.equals(dataInfo) && !voxelInfo.equals(inspectedInfo)) {
-            messageBuilder.append(" • ").append(voxelInfo);
-        }
-
-        libraryActionMessage = messageBuilder.toString();
+        libraryActionMessage = buildCompactImportStructureMessage(fileName);
         return true;
     }
     private boolean applyImportPreviewImage(Path selectedPath) {
