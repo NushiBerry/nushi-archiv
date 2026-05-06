@@ -14,12 +14,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.stream.Stream;
 
 public class ArchivAssetMetadataStore {
     private static final String ROOT_FOLDER_NAME = "archiv";
-    private static final String ASSETS_FOLDER_NAME = "assets";
-    private static final String PREVIEWS_FOLDER_NAME = "previews";
     private static final String METADATA_FOLDER_NAME = "metadata";
     private static final String JSON_EXTENSION = ".json";
 
@@ -28,16 +25,12 @@ public class ArchivAssetMetadataStore {
             .disableHtmlEscaping()
             .create();
 
-    private final Path rootDirectory;
-    private final Path assetsDirectory;
-    private final Path previewsDirectory;
     private final Path metadataDirectory;
 
     public ArchivAssetMetadataStore(Path gameDirectory) {
-        this.rootDirectory = gameDirectory.resolve(ROOT_FOLDER_NAME);
-        this.assetsDirectory = rootDirectory.resolve(ASSETS_FOLDER_NAME);
-        this.previewsDirectory = rootDirectory.resolve(PREVIEWS_FOLDER_NAME);
-        this.metadataDirectory = rootDirectory.resolve(METADATA_FOLDER_NAME);
+        this.metadataDirectory = gameDirectory
+                .resolve(ROOT_FOLDER_NAME)
+                .resolve(METADATA_FOLDER_NAME);
     }
 
     public Path getMetadataDirectory() {
@@ -45,9 +38,6 @@ public class ArchivAssetMetadataStore {
     }
 
     public void ensureDirectories() throws IOException {
-        Files.createDirectories(rootDirectory);
-        Files.createDirectories(assetsDirectory);
-        Files.createDirectories(previewsDirectory);
         Files.createDirectories(metadataDirectory);
     }
 
@@ -69,112 +59,11 @@ public class ArchivAssetMetadataStore {
             structureFileName = safeString(asset.getName());
         }
 
-        AssetMetadata metadata = AssetMetadata.fromAsset(asset);
-        metadata.hidden = false;
-        metadata.hiddenAtEpochMillis = 0L;
-
-        writeMetadata(getMetadataPathForStructureFile(structureFileName), metadata);
-    }
-
-    public void hideAsset(ArchivAsset asset) throws IOException {
-        ensureDirectories();
-
-        String structureFileName = safeString(asset.getStructureFileName());
-        if (structureFileName.isBlank()) {
-            structureFileName = safeString(asset.getName());
-        }
-
         Path metadataPath = getMetadataPathForStructureFile(structureFileName);
-        AssetMetadata metadata = readMetadata(metadataPath);
+        AssetMetadata metadata = AssetMetadata.fromAsset(asset);
 
-        if (metadata == null) {
-            metadata = AssetMetadata.fromAsset(asset);
-        }
-
-        // Always keep the current visible metadata in the hidden record too.
-        AssetMetadata current = AssetMetadata.fromAsset(asset);
-        metadata.name = firstNonBlank(metadata.name, current.name);
-        metadata.macroCategory = firstNonBlank(metadata.macroCategory, current.macroCategory);
-        metadata.type = firstNonBlank(metadata.type, current.type);
-        metadata.version = firstNonBlank(metadata.version, current.version);
-        metadata.author = firstNonBlank(metadata.author, current.author);
-        metadata.previewColor = metadata.previewColor == null ? current.previewColor : metadata.previewColor;
-        metadata.chipColor = metadata.chipColor == null ? current.chipColor : metadata.chipColor;
-        metadata.variantCount = metadata.variantCount == null ? current.variantCount : metadata.variantCount;
-        metadata.favorite = metadata.favorite == null ? current.favorite : metadata.favorite;
-        metadata.highlighted = metadata.highlighted == null ? current.highlighted : metadata.highlighted;
-        metadata.tags = metadata.tags == null ? current.tags : cleanTags(metadata.tags);
-        metadata.structureFileName = firstNonBlank(metadata.structureFileName, current.structureFileName);
-        metadata.structureFileFormat = firstNonBlank(metadata.structureFileFormat, current.structureFileFormat);
-        metadata.structureFileSize = firstNonBlank(metadata.structureFileSize, current.structureFileSize);
-        metadata.previewImageName = firstNonBlank(metadata.previewImageName, current.previewImageName);
-        metadata.previewImageFormat = firstNonBlank(metadata.previewImageFormat, current.previewImageFormat);
-        metadata.previewImageRatio = firstNonBlank(metadata.previewImageRatio, current.previewImageRatio);
-
-        metadata.hidden = true;
-        if (metadata.hiddenAtEpochMillis == null || metadata.hiddenAtEpochMillis <= 0L) {
-            metadata.hiddenAtEpochMillis = System.currentTimeMillis();
-        }
-
-        writeMetadata(metadataPath, metadata);
-    }
-
-    public boolean isAssetHidden(ArchivAsset asset) throws IOException {
-        if (asset == null) {
-            return false;
-        }
-
-        String structureFileName = safeString(asset.getStructureFileName());
-        if (structureFileName.isBlank()) {
-            return false;
-        }
-
-        return isStructureFileHidden(structureFileName);
-    }
-
-    public boolean isStructureFileHidden(String structureFileName) throws IOException {
-        ensureDirectories();
-
-        AssetMetadata metadata = readMetadata(getMetadataPathForStructureFile(structureFileName));
-        return metadata != null && Boolean.TRUE.equals(metadata.hidden);
-    }
-
-    public int purgeExpiredHiddenAssets(long retentionMillis) throws IOException {
-        ensureDirectories();
-
-        if (!Files.isDirectory(metadataDirectory)) {
-            return 0;
-        }
-
-        long now = System.currentTimeMillis();
-        int purgedCount = 0;
-
-        try (Stream<Path> paths = Files.list(metadataDirectory)) {
-            List<Path> metadataFiles = paths
-                    .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(JSON_EXTENSION))
-                    .toList();
-
-            for (Path metadataPath : metadataFiles) {
-                AssetMetadata metadata = readMetadata(metadataPath);
-
-                if (metadata == null || !Boolean.TRUE.equals(metadata.hidden)) {
-                    continue;
-                }
-
-                long hiddenAt = metadata.hiddenAtEpochMillis == null ? 0L : metadata.hiddenAtEpochMillis;
-                if (hiddenAt <= 0L || now - hiddenAt < retentionMillis) {
-                    continue;
-                }
-
-                safeDeleteFileInDirectory(assetsDirectory, metadata.structureFileName);
-                safeDeleteFileInDirectory(previewsDirectory, metadata.previewImageName);
-                Files.deleteIfExists(metadataPath);
-                purgedCount++;
-            }
-        }
-
-        return purgedCount;
+        String json = GSON.toJson(metadata);
+        Files.writeString(metadataPath, json, StandardCharsets.UTF_8);
     }
 
     public ArchivAsset applyMetadataIfPresent(ArchivAsset fallbackAsset) throws IOException {
@@ -186,48 +75,24 @@ public class ArchivAssetMetadataStore {
             return fallbackAsset;
         }
 
-        AssetMetadata metadata = readMetadata(getMetadataPathForStructureFile(structureFileName));
+        Path metadataPath = getMetadataPathForStructureFile(structureFileName);
 
-        if (metadata == null) {
-            return fallbackAsset;
-        }
-
-        return metadata.toAsset(fallbackAsset);
-    }
-
-    private AssetMetadata readMetadata(Path metadataPath) throws IOException {
         if (!Files.isRegularFile(metadataPath)) {
-            return null;
+            return fallbackAsset;
         }
 
         try {
             String json = Files.readString(metadataPath, StandardCharsets.UTF_8);
-            return GSON.fromJson(json, AssetMetadata.class);
+            AssetMetadata metadata = GSON.fromJson(json, AssetMetadata.class);
+
+            if (metadata == null) {
+                return fallbackAsset;
+            }
+
+            return metadata.toAsset(fallbackAsset);
         } catch (JsonSyntaxException exception) {
-            return null;
+            return fallbackAsset;
         }
-    }
-
-    private void writeMetadata(Path metadataPath, AssetMetadata metadata) throws IOException {
-        String json = GSON.toJson(metadata);
-        Files.writeString(metadataPath, json, StandardCharsets.UTF_8);
-    }
-
-    private static void safeDeleteFileInDirectory(Path baseDirectory, String fileName) throws IOException {
-        String cleanFileName = safeString(fileName);
-
-        if (cleanFileName.isBlank()) {
-            return;
-        }
-
-        Path normalizedBase = baseDirectory.toAbsolutePath().normalize();
-        Path target = normalizedBase.resolve(cleanFileName).normalize();
-
-        if (!target.startsWith(normalizedBase)) {
-            return;
-        }
-
-        Files.deleteIfExists(target);
     }
 
     private static String toMetadataBaseName(String structureFileName) {
@@ -297,9 +162,6 @@ public class ArchivAssetMetadataStore {
         Boolean favorite;
         Boolean highlighted;
 
-        Boolean hidden = false;
-        Long hiddenAtEpochMillis = 0L;
-
         List<String> tags;
 
         String structureFileName;
@@ -324,9 +186,6 @@ public class ArchivAssetMetadataStore {
             metadata.variantCount = asset.getVariantCount();
             metadata.favorite = asset.isFavorite();
             metadata.highlighted = asset.isHighlighted();
-
-            metadata.hidden = false;
-            metadata.hiddenAtEpochMillis = 0L;
 
             metadata.tags = cleanTags(asset.getTags());
 

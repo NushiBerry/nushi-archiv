@@ -37,9 +37,6 @@ public class ArchivScreen extends Screen {
     private static final String LOCAL_UNCONFIGURED_TYPE = "Unconfigured";
     private static final String LOCAL_UNKNOWN_VERSION = "Unknown";
 
-    private static final int HIDDEN_ASSET_RETENTION_DAYS = 30;
-    private static final long HIDDEN_ASSET_RETENTION_MILLIS = HIDDEN_ASSET_RETENTION_DAYS * 24L * 60L * 60L * 1000L;
-
     private final Screen parent;
     private final List<ArchivAsset> mockAssets;
     private final List<ArchivAsset> savedAssets = new ArrayList<>();
@@ -2526,7 +2523,7 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(this.font, line1, panelX + 14, panelY + 42, COLOR_TEXT_DIM);
         guiGraphics.drawString(this.font, line2, panelX + 14, panelY + 58, COLOR_TEXT);
 
-        guiGraphics.drawString(this.font, "Hidden assets are auto-deleted after 30 days.", panelX + 14, panelY + 82, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, "This action cannot be undone.", panelX + 14, panelY + 82, COLOR_TEXT_DIM);
 
         int buttonY = panelY + panelH - 36;
         int cancelW = 90;
@@ -2869,29 +2866,15 @@ public class ArchivScreen extends Screen {
         return collectionEntries.size() + 1; // collections + create new
     }
 
-
-    private void removeAssetReferencesFromCollections(String assetName) {
-        for (CollectionEntry entry : collectionEntries) {
-            entry.removeAsset(assetName);
-        }
-    }
-
     private void deleteAsset(ArchivAsset asset) {
         if (!isSavedAsset(asset)) {
             return;
         }
 
         String deletedName = asset.getName();
-        boolean localAsset = hasLocalStructureFile(asset);
-        boolean hiddenForDeletion = false;
-
-        if (localAsset) {
-            hiddenForDeletion = hideAssetMetadata(asset);
-        }
 
         savedAssets.removeIf(savedAsset -> savedAsset.getName().equals(deletedName));
         recentLoadedAssetNames.remove(deletedName);
-        removeAssetReferencesFromCollections(deletedName);
 
         if (deletedName.equals(loadedAssetName)) {
             loadedAssetName = null;
@@ -2908,14 +2891,7 @@ public class ArchivScreen extends Screen {
 
         closeListMenu();
         syncLibrarySelectionWithVisibleAssets();
-
-        if (localAsset && hiddenForDeletion) {
-            libraryActionMessage = "Hidden: " + deletedName + " - auto-delete in " + HIDDEN_ASSET_RETENTION_DAYS + " days";
-        } else if (localAsset) {
-            libraryActionMessage = "Removed from session, but hide metadata failed: " + deletedName;
-        } else {
-            libraryActionMessage = "Deleted: " + deletedName;
-        }
+        libraryActionMessage = "Deleted: " + deletedName;
     }
 
     private void loadAsset(ArchivAsset asset) {
@@ -3210,58 +3186,6 @@ public class ArchivScreen extends Screen {
         }
     }
 
-
-    private boolean hasLocalStructureFile(ArchivAsset asset) {
-        return asset != null && !trimToEmpty(asset.getStructureFileName()).isBlank();
-    }
-
-    private boolean isAssetHidden(ArchivAsset asset) {
-        ArchivAssetMetadataStore store = getMetadataStore();
-
-        if (store == null || asset == null) {
-            return false;
-        }
-
-        try {
-            return store.isAssetHidden(asset);
-        } catch (IOException exception) {
-            libraryActionMessage = "Hidden metadata check failed";
-            return false;
-        }
-    }
-
-    private int purgeExpiredHiddenAssets() {
-        ArchivAssetMetadataStore store = getMetadataStore();
-
-        if (store == null) {
-            return 0;
-        }
-
-        try {
-            return store.purgeExpiredHiddenAssets(HIDDEN_ASSET_RETENTION_MILLIS);
-        } catch (IOException exception) {
-            libraryActionMessage = "Hidden cleanup failed";
-            return 0;
-        }
-    }
-
-    private boolean hideAssetMetadata(ArchivAsset asset) {
-        ArchivAssetMetadataStore store = getMetadataStore();
-
-        if (store == null || asset == null) {
-            libraryActionMessage = "Metadata store unavailable";
-            return false;
-        }
-
-        try {
-            store.hideAsset(asset);
-            return true;
-        } catch (IOException exception) {
-            libraryActionMessage = "Failed to hide asset metadata";
-            return false;
-        }
-    }
-
     private ArchivLocalLibrary getLocalLibrary() {
         if (this.minecraft == null) {
             return null;
@@ -3365,7 +3289,6 @@ public class ArchivScreen extends Screen {
 
         try {
             ensureLocalMetadataOptions();
-            int purgedHiddenCount = purgeExpiredHiddenAssets();
 
             List<ArchivAsset> scannedAssets = library.scanAsUnconfiguredAssets();
             localLibraryDetectedCount = scannedAssets.size();
@@ -3374,10 +3297,6 @@ public class ArchivScreen extends Screen {
 
             for (ArchivAsset scannedAsset : scannedAssets) {
                 ArchivAsset assetWithMetadata = applySavedMetadata(scannedAsset);
-
-                if (isAssetHidden(assetWithMetadata)) {
-                    continue;
-                }
 
                 if (isLocalStructureAlreadySaved(assetWithMetadata)) {
                     continue;
@@ -3389,10 +3308,7 @@ public class ArchivScreen extends Screen {
 
             localLibraryReady = true;
 
-            if (purgedHiddenCount > 0) {
-                libraryActionMessage = "Local cleanup: " + purgedHiddenCount + " hidden file(s) deleted";
-                syncLibrarySelectionWithVisibleAssets();
-            } else if (addedCount > 0) {
+            if (addedCount > 0) {
                 libraryActionMessage = "Local library: " + addedCount + " new asset(s) detected";
                 syncLibrarySelectionWithVisibleAssets();
             } else if (localLibraryDetectedCount > 0) {
