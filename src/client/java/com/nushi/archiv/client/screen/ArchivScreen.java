@@ -2,6 +2,7 @@ package com.nushi.archiv.client.screen;
 
 import com.nushi.archiv.client.inspect.ArchivStructureDataReader;
 import com.nushi.archiv.client.inspect.ArchivStructureDataSummary;
+import com.nushi.archiv.client.inspect.ArchivStructureDataCache;
 
 import com.nushi.archiv.client.inspect.ArchivAssetFileInspection;
 import com.nushi.archiv.client.inspect.ArchivAssetFileInspector;
@@ -95,6 +96,7 @@ public class ArchivScreen extends Screen {
     private ArchivAssetFileInspection importStructureInspection = ArchivAssetFileInspection.empty();
     private final ArchivStructureDataReader structureDataReader = new ArchivStructureDataReader();
     private ArchivStructureDataSummary importStructureDataSummary = ArchivStructureDataSummary.empty();
+    private ArchivStructureDataCache structureDataCache;
     private boolean metadataSettingsLoaded = false;
     private boolean collectionsLoaded = false;
     private boolean libraryStateLoaded = false;
@@ -1790,7 +1792,7 @@ public class ArchivScreen extends Screen {
         mockStructureFileSize = getDisplayFileSize(selectedPath);
         mockAssetSaved = false;
         importStructureInspection = assetFileInspector.inspect(selectedPath);
-        importStructureDataSummary = structureDataReader.read(selectedPath);
+        importStructureDataSummary = readStructureDataSummary(selectedPath);
 
         if (importAssetNameBox != null && getCurrentImportName().isBlank()) {
             setImportTextBoxValue(importAssetNameBox, toDefaultImportAssetName(fileName));
@@ -1958,7 +1960,7 @@ public class ArchivScreen extends Screen {
                 mockStructureFileSize = getDisplayFileSize(normalizedTargetPath);
                 importSelectedStructureSourcePath = normalizedTargetPath;
                 importStructureInspection = assetFileInspector.inspect(normalizedTargetPath);
-                importStructureDataSummary = structureDataReader.read(normalizedTargetPath);
+                importStructureDataSummary = readStructureDataSummary(normalizedTargetPath);
             }
 
             if (mockPreviewImageSelected && importSelectedPreviewSourcePath != null) {
@@ -4234,6 +4236,30 @@ public class ArchivScreen extends Screen {
         }
 
         return worldEditBridge;
+    }
+    private ArchivStructureDataCache getStructureDataCache() {
+        if (this.minecraft == null) {
+            return null;
+        }
+
+        if (structureDataCache == null) {
+            structureDataCache = new ArchivStructureDataCache(
+                    this.minecraft.gameDirectory.toPath(),
+                    structureDataReader
+            );
+        }
+
+        return structureDataCache;
+    }
+
+    private ArchivStructureDataSummary readStructureDataSummary(Path path) {
+        ArchivStructureDataCache cache = getStructureDataCache();
+
+        if (cache != null) {
+            return cache.read(path);
+        }
+
+        return structureDataReader.read(path);
     }
 
     private ArchivLocalLibrary getLocalLibrary() {
