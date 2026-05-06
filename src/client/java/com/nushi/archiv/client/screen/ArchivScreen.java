@@ -1,6 +1,7 @@
 package com.nushi.archiv.client.screen;
 
 import com.nushi.archiv.client.model.ArchivAsset;
+import com.nushi.archiv.client.storage.ArchivLocalLibrary;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -11,6 +12,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.io.IOException;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import org.lwjgl.glfw.GLFW;
@@ -29,9 +31,17 @@ public class ArchivScreen extends Screen {
     private static final int MOCK_PREVIEW_IMAGE_COLOR = 0xFF6B86B3;
     private static final int MOCK_NO_PREVIEW_IMAGE_COLOR = 0xFF4B6E9A;
 
+    private static final String LOCAL_UNCATEGORIZED_CATEGORY = "Uncategorized";
+    private static final String LOCAL_UNCONFIGURED_TYPE = "Unconfigured";
+    private static final String LOCAL_UNKNOWN_VERSION = "Unknown";
+
     private final Screen parent;
     private final List<ArchivAsset> mockAssets;
     private final List<ArchivAsset> savedAssets = new ArrayList<>();
+
+    private ArchivLocalLibrary localLibrary;
+    private boolean localLibraryReady = false;
+    private int localLibraryDetectedCount = 0;
 
     private static final List<String> DEFAULT_MACRO_CATEGORIES = List.of(
             "Medieval",
@@ -804,6 +814,7 @@ public class ArchivScreen extends Screen {
     @Override
     protected void init() {
         ScreenChromeLayout chrome = buildChromeLayout();
+        syncLocalLibraryAssets();
         int closeButtonSize = 24;
         int closeX = this.width - 20 - closeButtonSize;
         int closeY = 20;
@@ -3154,7 +3165,152 @@ public class ArchivScreen extends Screen {
         return options.get(nextIndex);
     }
 
+    private void ensureLocalMetadataOptions() {
+        if (!macroCategories.contains(LOCAL_UNCATEGORIZED_CATEGORY)) {
+            macroCategories.add(LOCAL_UNCATEGORIZED_CATEGORY);
+        }
+
+        if (!assetTypes.contains(LOCAL_UNCONFIGURED_TYPE)) {
+            assetTypes.add(LOCAL_UNCONFIGURED_TYPE);
+        }
+
+        if (!minecraftVersions.contains(LOCAL_UNKNOWN_VERSION)) {
+            minecraftVersions.add(LOCAL_UNKNOWN_VERSION);
+        }
+    }
+
+    private void syncLocalLibraryAssets() {
+        if (this.minecraft == null) {
+            localLibraryReady = false;
+            libraryActionMessage = "Local library unavailable";
+            return;
+        }
+
+        if (localLibrary == null) {
+            localLibrary = new ArchivLocalLibrary(this.minecraft.gameDirectory.toPath());
+        }
+
+        try {
+            ensureLocalMetadataOptions();
+
+            List<ArchivAsset> scannedAssets = localLibrary.scanAsUnconfiguredAssets();
+            localLibraryDetectedCount = scannedAssets.size();
+
+            int addedCount = 0;
+
+            for (ArchivAsset scannedAsset : scannedAssets) {
+                if (isLocalStructureAlreadySaved(scannedAsset)) {
+                    continue;
+                }
+
+                savedAssets.add(createLocalAssetWithUniqueName(scannedAsset));
+                addedCount++;
+            }
+
+            localLibraryReady = true;
+
+            if (addedCount > 0) {
+                libraryActionMessage = "Local library: " + addedCount + " new asset(s) detected";
+                syncLibrarySelectionWithVisibleAssets();
+            } else if (localLibraryDetectedCount > 0) {
+                libraryActionMessage = "Local library ready: " + localLibraryDetectedCount + " file(s)";
+            } else {
+                libraryActionMessage = "Local library ready";
+            }
+        } catch (IOException exception) {
+            localLibraryReady = false;
+            localLibraryDetectedCount = 0;
+            libraryActionMessage = "Local library scan failed";
+        }
+    }
+
+    private boolean isLocalStructureAlreadySaved(ArchivAsset scannedAsset) {
+        String scannedFileName = trimToEmpty(scannedAsset.getStructureFileName());
+
+        if (scannedFileName.isBlank()) {
+            return false;
+        }
+
+        for (ArchivAsset savedAsset : savedAssets) {
+            String savedFileName = trimToEmpty(savedAsset.getStructureFileName());
+
+            if (!savedFileName.isBlank() && savedFileName.equalsIgnoreCase(scannedFileName)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private ArchivAsset createLocalAssetWithUniqueName(ArchivAsset scannedAsset) {
+        String uniqueName = getUniqueSavedAssetName(scannedAsset.getName());
+
+        if (uniqueName.equals(scannedAsset.getName())) {
+            return scannedAsset;
+        }
+
+        return new ArchivAsset(
+                uniqueName,
+                scannedAsset.getMacroCategory(),
+                scannedAsset.getType(),
+                scannedAsset.getVersion(),
+                scannedAsset.getPreviewColor(),
+                scannedAsset.getChipColor(),
+                scannedAsset.getVariantCount(),
+                scannedAsset.isFavorite(),
+                scannedAsset.isHighlighted(),
+                scannedAsset.getAuthor(),
+                scannedAsset.getTags(),
+                scannedAsset.getStructureFileName(),
+                scannedAsset.getStructureFileFormat(),
+                scannedAsset.getStructureFileSize(),
+                scannedAsset.getPreviewImageName(),
+                scannedAsset.getPreviewImageFormat(),
+                scannedAsset.getPreviewImageRatio()
+        );
+    }
+
+    private String getUniqueSavedAssetName(String baseName) {
+        String cleanBaseName = trimToEmpty(baseName).isBlank()
+                ? "Unconfigured Asset"
+                : trimToEmpty(baseName);
+
+        boolean exists = false;
+
+        for (ArchivAsset asset : savedAssets) {
+            if (asset.getName().equalsIgnoreCase(cleanBaseName)) {
+                exists = true;
+                break;
+            }
+        }
+
+        if (!exists) {
+            return cleanBaseName;
+        }
+
+        int index = 2;
+        while (true) {
+            String candidate = cleanBaseName + " #" + index;
+            boolean candidateExists = false;
+
+            for (ArchivAsset asset : savedAssets) {
+                if (asset.getName().equalsIgnoreCase(candidate)) {
+                    candidateExists = true;
+                    break;
+                }
+            }
+
+            if (!candidateExists) {
+                return candidate;
+            }
+
+            index++;
+        }
+    }
+
     private void normalizeMetadataSelections() {
+        ensureLocalMetadataOptions();
+
         if (macroCategories.isEmpty()) {
             macroCategories.add("Uncategorized");
         }
