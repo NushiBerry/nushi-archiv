@@ -21,7 +21,6 @@ import net.minecraft.Util;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 
@@ -32,15 +31,22 @@ import javax.imageio.ImageIO;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.io.IOException;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import org.lwjgl.glfw.GLFW;
@@ -60,6 +66,8 @@ public class ArchivScreen extends Screen {
     private static final int MOCK_NO_PREVIEW_IMAGE_COLOR = 0xFF4B6E9A;
 
     private static final int COLOR_PREVIEW_BG = 0xFF0A1422;
+
+    private final Map<String, CachedPreviewTexture> previewTextureCache = new HashMap<>();
 
     private static final String LOCAL_UNCATEGORIZED_CATEGORY = "Uncategorized";
     private static final String LOCAL_UNCONFIGURED_TYPE = "Unconfigured";
@@ -84,6 +92,21 @@ public class ArchivScreen extends Screen {
     private boolean localLibraryReady = false;
     private int localLibraryDetectedCount = 0;
 
+    private static class CachedPreviewTexture {
+        final long modifiedMillis;
+        final int imageWidth;
+        final int imageHeight;
+        final ResourceLocation textureLocation;
+        final DynamicTexture texture;
+
+        CachedPreviewTexture(long modifiedMillis, int imageWidth, int imageHeight, ResourceLocation textureLocation, DynamicTexture texture) {
+            this.modifiedMillis = modifiedMillis;
+            this.imageWidth = imageWidth;
+            this.imageHeight = imageHeight;
+            this.textureLocation = textureLocation;
+            this.texture = texture;
+        }
+    }
 
     private static final List<String> DEFAULT_MACRO_CATEGORIES = List.of(
             "Medieval",
@@ -239,7 +262,6 @@ public class ArchivScreen extends Screen {
             this.texture = texture;
         }
     }
-
 
     private final ImportPreset[] importPresets = new ImportPreset[] {
             new ImportPreset(
@@ -1136,13 +1158,6 @@ public class ArchivScreen extends Screen {
         this.addRenderableWidget(editAssetVersionBox);
         this.addRenderableWidget(editAssetVariantsBox);
 
-    }
-
-
-    @Override
-    public void removed() {
-        clearPreviewTextureCache();
-        super.removed();
     }
 
     @Override
@@ -2110,7 +2125,6 @@ public class ArchivScreen extends Screen {
         return result.isEmpty() ? "Imported Asset" : result.toString();
     }
 
-
     private Path getCurrentImportPreviewPath() {
         if (!mockPreviewImageSelected) {
             return null;
@@ -2128,7 +2142,13 @@ public class ArchivScreen extends Screen {
             return null;
         }
 
-        return getLocalPreviewImagePath(asset.getPreviewImageName());
+        String previewImageName = trimToEmpty(asset.getPreviewImageName());
+
+        if (previewImageName.isBlank()) {
+            return null;
+        }
+
+        return getLocalPreviewImagePath(previewImageName);
     }
 
     private Path getLocalPreviewImagePath(String previewImageName) {
@@ -2144,18 +2164,14 @@ public class ArchivScreen extends Screen {
             return null;
         }
 
-        try {
-            Path previewsDirectory = library.getPreviewsDirectory().toAbsolutePath().normalize();
-            Path previewPath = previewsDirectory.resolve(cleanName).toAbsolutePath().normalize();
+        Path previewsDirectory = library.getPreviewsDirectory().toAbsolutePath().normalize();
+        Path previewPath = previewsDirectory.resolve(cleanName).toAbsolutePath().normalize();
 
-            if (!previewPath.startsWith(previewsDirectory)) {
-                return null;
-            }
-
-            return previewPath;
-        } catch (Exception exception) {
+        if (!previewPath.startsWith(previewsDirectory)) {
             return null;
         }
+
+        return previewPath;
     }
 
     private void drawPreviewImage(
@@ -2168,83 +2184,48 @@ public class ArchivScreen extends Screen {
             int fallbackColor,
             String fallbackLabel
     ) {
-        CachedPreviewTexture previewTexture = getOrLoadPreviewTexture(imagePath);
+        int safeW = Math.max(1, width);
+        int safeH = Math.max(1, height);
 
-        if (previewTexture == null) {
-            drawPreviewFallback(guiGraphics, x, y, width, height, fallbackColor, fallbackLabel);
+        CachedPreviewTexture preview = getOrLoadPreviewTexture(imagePath, safeW, safeH);
+
+        if (preview == null) {
+            guiGraphics.fill(x, y, x + safeW, y + safeH, fallbackColor);
+
+            String label = trimToEmpty(fallbackLabel);
+            if (!label.isBlank()) {
+                int labelW = this.font.width(label);
+                guiGraphics.drawString(
+                        this.font,
+                        label,
+                        x + (safeW - labelW) / 2,
+                        y + (safeH - this.font.lineHeight) / 2,
+                        COLOR_TEXT
+                );
+            }
             return;
         }
 
-        guiGraphics.fill(x, y, x + width, y + height, COLOR_PREVIEW_BG);
+        guiGraphics.fill(x, y, x + safeW, y + safeH, COLOR_PREVIEW_BG);
 
-        float scale = Math.min(
-                width / (float) previewTexture.imageWidth,
-                height / (float) previewTexture.imageHeight
-        );
-
-        int drawW = Math.max(1, Math.round(previewTexture.imageWidth * scale));
-        int drawH = Math.max(1, Math.round(previewTexture.imageHeight * scale));
-        int drawX = x + (width - drawW) / 2;
-        int drawY = y + (height - drawH) / 2;
+        int drawX = x + (safeW - preview.imageWidth) / 2;
+        int drawY = y + (safeH - preview.imageHeight) / 2;
 
         guiGraphics.blit(
-                RenderPipelines.GUI_TEXTURED,
-                previewTexture.textureLocation,
+                preview.textureLocation,
                 drawX,
                 drawY,
-                0,
-                0,
-                drawW,
-                drawH,
-                previewTexture.imageWidth,
-                previewTexture.imageHeight,
-                previewTexture.imageWidth,
-                previewTexture.imageHeight
+                0.0F,
+                0.0F,
+                preview.imageWidth,
+                preview.imageHeight,
+                preview.imageWidth,
+                preview.imageHeight
         );
     }
 
-    private boolean drawPreviewImage(
-            GuiGraphics guiGraphics,
-            Path imagePath,
-            int x,
-            int y,
-            int width,
-            int height,
-            int fallbackColor
-    ) {
-        boolean hasPreview = getOrLoadPreviewTexture(imagePath) != null;
-        drawPreviewImage(guiGraphics, imagePath, x, y, width, height, fallbackColor, hasPreview ? "" : "PREVIEW");
-        return hasPreview;
-    }
-
-    private void drawPreviewFallback(
-            GuiGraphics guiGraphics,
-            int x,
-            int y,
-            int width,
-            int height,
-            int fallbackColor,
-            String fallbackLabel
-    ) {
-        guiGraphics.fill(x, y, x + width, y + height, fallbackColor);
-
-        String text = trimToEmpty(fallbackLabel);
-        if (text.isBlank()) {
-            return;
-        }
-
-        int textWidth = this.font.width(text);
-        guiGraphics.drawString(
-                this.font,
-                text,
-                x + (width - textWidth) / 2,
-                y + (height - this.font.lineHeight) / 2,
-                COLOR_TEXT
-        );
-    }
-
-    private CachedPreviewTexture getOrLoadPreviewTexture(Path imagePath) {
-        if (imagePath == null || this.minecraft == null) {
+    private CachedPreviewTexture getOrLoadPreviewTexture(Path imagePath, int boxW, int boxH) {
+        if (imagePath == null || boxW <= 0 || boxH <= 0 || this.minecraft == null) {
             return null;
         }
 
@@ -2256,20 +2237,21 @@ public class ArchivScreen extends Screen {
             }
 
             long modifiedMillis = Files.getLastModifiedTime(normalizedPath).toMillis();
-            String cacheKey = normalizedPath.toString();
+            String cacheKey = normalizedPath + "::" + modifiedMillis + "::" + boxW + "x" + boxH;
 
             CachedPreviewTexture cached = previewTextureCache.get(cacheKey);
-            if (cached != null && cached.modifiedMillis == modifiedMillis) {
+
+            if (cached != null) {
                 return cached;
             }
 
-            if (cached != null) {
-                releasePreviewTexture(cached);
-                previewTextureCache.remove(cacheKey);
-            }
+            CachedPreviewTexture loaded = loadPreviewTexture(normalizedPath, modifiedMillis, boxW, boxH, cacheKey);
 
-            CachedPreviewTexture loaded = loadPreviewTexture(normalizedPath, modifiedMillis, cacheKey);
             if (loaded != null) {
+                if (previewTextureCache.size() > 64) {
+                    clearPreviewTextureCache();
+                }
+
                 previewTextureCache.put(cacheKey, loaded);
             }
 
@@ -2279,76 +2261,53 @@ public class ArchivScreen extends Screen {
         }
     }
 
-    private CachedPreviewTexture loadPreviewTexture(Path imagePath, long modifiedMillis, String cacheKey) {
-        if (this.minecraft == null) {
-            return null;
-        }
-
+    private CachedPreviewTexture loadPreviewTexture(Path imagePath, long modifiedMillis, int boxW, int boxH, String cacheKey) {
         try {
             BufferedImage source = ImageIO.read(imagePath.toFile());
 
-            if (source == null || source.getWidth() <= 0 || source.getHeight() <= 0) {
+            if (source == null || source.getWidth() <= 0 || source.getHeight() <= 0 || this.minecraft == null) {
                 return null;
             }
 
-            BufferedImage scaled = scalePreviewImageForTexture(source, 512);
-            NativeImage nativeImage = new NativeImage(scaled.getWidth(), scaled.getHeight(), true);
-
-            for (int py = 0; py < scaled.getHeight(); py++) {
-                for (int px = 0; px < scaled.getWidth(); px++) {
-                    nativeImage.setPixel(px, py, toNativeImageColor(scaled.getRGB(px, py)));
-                }
-            }
-
-            DynamicTexture texture = new DynamicTexture(() -> "Archiv preview", nativeImage);
-            ResourceLocation textureLocation = ResourceLocation.fromNamespaceAndPath(
-                    "archiv",
-                    "preview/" + Integer.toHexString(cacheKey.hashCode())
+            float scale = Math.min(
+                    boxW / (float) source.getWidth(),
+                    boxH / (float) source.getHeight()
             );
 
-            this.minecraft.getTextureManager().register(textureLocation, texture);
+            int drawW = Math.max(1, Math.round(source.getWidth() * scale));
+            int drawH = Math.max(1, Math.round(source.getHeight() * scale));
 
-            return new CachedPreviewTexture(
-                    modifiedMillis,
-                    scaled.getWidth(),
-                    scaled.getHeight(),
-                    textureLocation,
-                    texture
-            );
-        } catch (IOException exception) {
-            return null;
-        }
-    }
-
-    private BufferedImage scalePreviewImageForTexture(BufferedImage source, int maxDimension) {
-        int sourceW = source.getWidth();
-        int sourceH = source.getHeight();
-        int longest = Math.max(sourceW, sourceH);
-
-        if (longest <= maxDimension) {
-            BufferedImage copy = new BufferedImage(sourceW, sourceH, BufferedImage.TYPE_INT_ARGB);
-            Graphics2D graphics = copy.createGraphics();
+            BufferedImage scaled = new BufferedImage(drawW, drawH, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D graphics = scaled.createGraphics();
             graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
             graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
             graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            graphics.drawImage(source, 0, 0, null);
+            graphics.drawImage(source, 0, 0, drawW, drawH, null);
             graphics.dispose();
-            return copy;
+
+            NativeImage nativeImage = new NativeImage(drawW, drawH, false);
+
+            for (int py = 0; py < drawH; py++) {
+                for (int px = 0; px < drawW; px++) {
+                    nativeImage.setPixelRGBA(px, py, toNativeImageColor(scaled.getRGB(px, py)));
+                }
+            }
+
+            DynamicTexture texture = new DynamicTexture(nativeImage);
+            try {
+                texture.setFilter(true, false);
+            } catch (Exception ignored) {
+            }
+
+            ResourceLocation textureLocation = this.minecraft.getTextureManager().register(
+                    "archiv_preview_" + Integer.toHexString(cacheKey.hashCode()),
+                    texture
+            );
+
+            return new CachedPreviewTexture(modifiedMillis, drawW, drawH, textureLocation, texture);
+        } catch (IOException exception) {
+            return null;
         }
-
-        float scale = maxDimension / (float) longest;
-        int targetW = Math.max(1, Math.round(sourceW * scale));
-        int targetH = Math.max(1, Math.round(sourceH * scale));
-
-        BufferedImage scaled = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D graphics = scaled.createGraphics();
-        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-        graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        graphics.drawImage(source, 0, 0, targetW, targetH, null);
-        graphics.dispose();
-
-        return scaled;
     }
 
     private int toNativeImageColor(int argb) {
@@ -2357,28 +2316,29 @@ public class ArchivScreen extends Screen {
         int green = (argb >>> 8) & 0xFF;
         int blue = argb & 0xFF;
 
+        if (alpha < 20) {
+            alpha = 0xFF;
+            red = (COLOR_PREVIEW_BG >>> 16) & 0xFF;
+            green = (COLOR_PREVIEW_BG >>> 8) & 0xFF;
+            blue = COLOR_PREVIEW_BG & 0xFF;
+        }
+
         return (alpha << 24) | (blue << 16) | (green << 8) | red;
     }
 
-    private void releasePreviewTexture(CachedPreviewTexture cached) {
-        if (cached == null || this.minecraft == null) {
-            return;
-        }
-
-        try {
-            this.minecraft.getTextureManager().release(cached.textureLocation);
-        } catch (Exception ignored) {
-        }
-
-        try {
-            cached.texture.close();
-        } catch (Exception ignored) {
-        }
-    }
-
     private void clearPreviewTextureCache() {
-        for (CachedPreviewTexture cached : previewTextureCache.values()) {
-            releasePreviewTexture(cached);
+        if (this.minecraft != null) {
+            for (CachedPreviewTexture cached : previewTextureCache.values()) {
+                try {
+                    this.minecraft.getTextureManager().release(cached.textureLocation);
+                } catch (Exception ignored) {
+                }
+
+                try {
+                    cached.texture.close();
+                } catch (Exception ignored) {
+                }
+            }
         }
 
         previewTextureCache.clear();

@@ -44,6 +44,18 @@ public class ArchivAssetMetadataStore {
         return metadataDirectory;
     }
 
+    public Path getRootDirectory() {
+        return rootDirectory;
+    }
+
+    public Path getAssetsDirectory() {
+        return assetsDirectory;
+    }
+
+    public Path getPreviewsDirectory() {
+        return previewsDirectory;
+    }
+
     public void ensureDirectories() throws IOException {
         Files.createDirectories(rootDirectory);
         Files.createDirectories(assetsDirectory);
