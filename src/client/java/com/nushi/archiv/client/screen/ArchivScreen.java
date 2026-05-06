@@ -10,6 +10,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.Util;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -3185,6 +3186,48 @@ public class ArchivScreen extends Screen {
         }
     }
 
+    private ArchivLocalLibrary getLocalLibrary() {
+        if (this.minecraft == null) {
+            return null;
+        }
+
+        if (localLibrary == null) {
+            localLibrary = new ArchivLocalLibrary(this.minecraft.gameDirectory.toPath());
+        }
+
+        return localLibrary;
+    }
+
+    private void openLocalAssetsFolder() {
+        ArchivLocalLibrary library = getLocalLibrary();
+
+        if (library == null) {
+            libraryActionMessage = "Local folder unavailable";
+            return;
+        }
+
+        try {
+            library.ensureDirectories();
+            Util.getPlatform().openFile(library.getAssetsDirectory().toFile());
+            syncLocalLibraryAssets();
+            resetMyAssetsScroll();
+            libraryActionMessage = "Opened local assets folder";
+        } catch (Exception exception) {
+            libraryActionMessage = "Failed to open local folder";
+        }
+    }
+
+    private void refreshLocalAssetsFolder() {
+        syncLocalLibraryAssets();
+        resetMyAssetsScroll();
+
+        if (localLibraryDetectedCount > 0) {
+            libraryActionMessage = "Local folder refreshed: " + localLibraryDetectedCount + " file(s)";
+        } else {
+            libraryActionMessage = "Local folder refreshed";
+        }
+    }
+
     private ArchivAssetMetadataStore getMetadataStore() {
         if (this.minecraft == null) {
             return null;
@@ -3236,14 +3279,18 @@ public class ArchivScreen extends Screen {
             return;
         }
 
-        if (localLibrary == null) {
-            localLibrary = new ArchivLocalLibrary(this.minecraft.gameDirectory.toPath());
+        ArchivLocalLibrary library = getLocalLibrary();
+
+        if (library == null) {
+            localLibraryReady = false;
+            libraryActionMessage = "Local library unavailable";
+            return;
         }
 
         try {
             ensureLocalMetadataOptions();
 
-            List<ArchivAsset> scannedAssets = localLibrary.scanAsUnconfiguredAssets();
+            List<ArchivAsset> scannedAssets = library.scanAsUnconfiguredAssets();
             localLibraryDetectedCount = scannedAssets.size();
 
             int addedCount = 0;
@@ -4405,6 +4452,53 @@ public class ArchivScreen extends Screen {
         ScreenChromeLayout chrome = buildChromeLayout();
         double mouseX = event.x();
         double mouseY = event.y();
+
+        if ("My Assets".equals(selectedTopTab)
+                && !assetDetailsOpen
+                && !deleteConfirmOpen
+                && !createCollectionModalOpen
+                && !editAssetModalOpen) {
+
+            int innerPadding = 18;
+            int usableContentW = chrome.contentW - (innerPadding * 2);
+            int titleX = chrome.contentX + innerPadding;
+
+            int statGap = 12;
+            int statW = (usableContentW - (statGap * 3)) / 4;
+            int statH = 58;
+
+            int quickBaseY = chrome.contentY + 14 + 34 + statH + 20;
+            int quickButtonBaseY = quickBaseY + 18;
+            int quickButtonH = 30;
+            int quickGap = 12;
+            int quickW = (usableContentW - (quickGap * 2)) / 3;
+
+            int scrollRenderY = -myAssetsScrollOffset;
+            int quickButtonY = quickButtonBaseY + scrollRenderY;
+
+            int importX = titleX;
+            int createCollectionX = titleX + quickW + quickGap;
+            int openFolderX = titleX + (quickW + quickGap) * 2;
+
+            if (isInside(mouseX, mouseY, importX, quickButtonY, quickW, quickButtonH)) {
+                selectedTopTab = "Import";
+                selectedImportStep = 1;
+                closeListMenu();
+                return true;
+            }
+
+            if (isInside(mouseX, mouseY, createCollectionX, quickButtonY, quickW, quickButtonH)) {
+                openCreateCollectionModal();
+                closeListMenu();
+                return true;
+            }
+
+            if (isInside(mouseX, mouseY, openFolderX, quickButtonY, quickW, quickButtonH)) {
+                openLocalAssetsFolder();
+                closeListMenu();
+                return true;
+            }
+        }
 
         if (assetDetailsOpen) {
             ArchivAsset asset = getDetailsAsset();
