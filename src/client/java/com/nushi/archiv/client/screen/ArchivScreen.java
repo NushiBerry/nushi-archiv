@@ -2942,7 +2942,13 @@ public class ArchivScreen extends Screen {
                 try {
                     ArchivWorldEditBridge.LoadResult result = bridge.loadLocalAsset(library, asset);
                     loadSucceeded = result.success();
-                    message = result.message();
+
+                    if (result.success() && !result.worldEditLoadCommand().isBlank()) {
+                        copyToClipboard(result.worldEditLoadCommand());
+                        message = "Loaded + copied command: " + result.worldEditLoadCommand();
+                    } else {
+                        message = result.message();
+                    }
                 } catch (IOException exception) {
                     loadSucceeded = false;
                     message = "Load failed: " + asset.getName();
@@ -3288,6 +3294,18 @@ public class ArchivScreen extends Screen {
         } catch (IOException exception) {
             libraryActionMessage = "Failed to hide asset metadata";
             return false;
+        }
+    }
+
+    private void copyToClipboard(String text) {
+        if (this.minecraft == null || text == null || text.isBlank()) {
+            return;
+        }
+
+        try {
+            this.minecraft.keyboardHandler.setClipboard(text);
+        } catch (Exception exception) {
+            libraryActionMessage = "Clipboard unavailable";
         }
     }
 

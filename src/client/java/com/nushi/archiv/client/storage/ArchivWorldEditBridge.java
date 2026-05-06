@@ -162,20 +162,28 @@ public class ArchivWorldEditBridge {
         private final String message;
         private final Path sourcePath;
         private final Path targetPath;
+        private final String worldEditLoadCommand;
 
-        private LoadResult(boolean success, String message, Path sourcePath, Path targetPath) {
+        private LoadResult(boolean success, String message, Path sourcePath, Path targetPath, String worldEditLoadCommand) {
             this.success = success;
             this.message = message;
             this.sourcePath = sourcePath;
             this.targetPath = targetPath;
+            this.worldEditLoadCommand = worldEditLoadCommand;
         }
 
         public static LoadResult success(String message, Path sourcePath, Path targetPath) {
-            return new LoadResult(true, message, sourcePath, targetPath);
+            return new LoadResult(
+                    true,
+                    message,
+                    sourcePath,
+                    targetPath,
+                    targetPath == null ? "" : "//schem load " + targetPath.getFileName()
+            );
         }
 
         public static LoadResult failure(String message, Path sourcePath, Path targetPath) {
-            return new LoadResult(false, message, sourcePath, targetPath);
+            return new LoadResult(false, message, sourcePath, targetPath, "");
         }
 
         public boolean success() {
@@ -192,6 +200,10 @@ public class ArchivWorldEditBridge {
 
         public Path targetPath() {
             return targetPath;
+        }
+
+        public String worldEditLoadCommand() {
+            return worldEditLoadCommand;
         }
     }
 }
