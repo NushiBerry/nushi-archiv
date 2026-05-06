@@ -7,6 +7,9 @@ import com.nushi.archiv.client.inspect.ArchivStructureDataCache;
 import com.nushi.archiv.client.inspect.ArchivAssetFileInspection;
 import com.nushi.archiv.client.inspect.ArchivAssetFileInspector;
 
+import com.nushi.archiv.client.inspect.ArchivStructureVoxelReader;
+import com.nushi.archiv.client.inspect.ArchivStructureVoxelSnapshot;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -97,6 +100,8 @@ public class ArchivScreen extends Screen {
     private final ArchivStructureDataReader structureDataReader = new ArchivStructureDataReader();
     private ArchivStructureDataSummary importStructureDataSummary = ArchivStructureDataSummary.empty();
     private ArchivStructureDataCache structureDataCache;
+    private final ArchivStructureVoxelReader structureVoxelReader = new ArchivStructureVoxelReader();
+    private ArchivStructureVoxelSnapshot importStructureVoxelSnapshot = ArchivStructureVoxelSnapshot.empty();
     private boolean metadataSettingsLoaded = false;
     private boolean collectionsLoaded = false;
     private boolean libraryStateLoaded = false;
@@ -1793,15 +1798,15 @@ public class ArchivScreen extends Screen {
         mockAssetSaved = false;
         importStructureInspection = assetFileInspector.inspect(selectedPath);
         importStructureDataSummary = readStructureDataSummary(selectedPath);
+        importStructureVoxelSnapshot = structureVoxelReader.read(selectedPath);
 
         if (importAssetNameBox != null && getCurrentImportName().isBlank()) {
             setImportTextBoxValue(importAssetNameBox, toDefaultImportAssetName(fileName));
         }
 
-        selectedImportStep = Math.max(selectedImportStep, 2);
-
         String inspectedInfo = importStructureInspection.getCompactInfo();
         String dataInfo = importStructureDataSummary.getCompactInfo();
+        String voxelInfo = importStructureVoxelSnapshot.getCompactInfo();
 
         StringBuilder messageBuilder = new StringBuilder("Selected structure file: ").append(fileName);
 
@@ -1811,6 +1816,10 @@ public class ArchivScreen extends Screen {
 
         if (!dataInfo.isBlank() && !dataInfo.equals(inspectedInfo)) {
             messageBuilder.append(" • ").append(dataInfo);
+        }
+
+        if (!voxelInfo.isBlank() && !voxelInfo.equals(dataInfo) && !voxelInfo.equals(inspectedInfo)) {
+            messageBuilder.append(" • ").append(voxelInfo);
         }
 
         libraryActionMessage = messageBuilder.toString();
@@ -1916,6 +1925,7 @@ public class ArchivScreen extends Screen {
         importSelectedStructureSourcePath = null;
         importStructureInspection = ArchivAssetFileInspection.empty();
         importStructureDataSummary = ArchivStructureDataSummary.empty();
+        importStructureVoxelSnapshot = ArchivStructureVoxelSnapshot.empty();
         mockStructureFileName = "stone_tower.schem";
         mockStructureFileFormat = ".schem";
         mockStructureFileSize = "1.24 MB";
@@ -1961,6 +1971,7 @@ public class ArchivScreen extends Screen {
                 importSelectedStructureSourcePath = normalizedTargetPath;
                 importStructureInspection = assetFileInspector.inspect(normalizedTargetPath);
                 importStructureDataSummary = readStructureDataSummary(normalizedTargetPath);
+                importStructureVoxelSnapshot = structureVoxelReader.read(normalizedTargetPath);
             }
 
             if (mockPreviewImageSelected && importSelectedPreviewSourcePath != null) {
