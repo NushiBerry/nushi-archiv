@@ -5,6 +5,7 @@ import com.nushi.archiv.client.storage.ArchivLocalLibrary;
 import com.nushi.archiv.client.storage.ArchivWorldEditBridge;
 import com.nushi.archiv.client.storage.ArchivAssetMetadataStore;
 import com.nushi.archiv.client.storage.ArchivMetadataSettingsStore;
+import com.nushi.archiv.client.storage.ArchivCollectionStore;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -59,8 +60,10 @@ public class ArchivScreen extends Screen {
     private ArchivLocalLibrary localLibrary;
     private ArchivAssetMetadataStore metadataStore;
     private ArchivMetadataSettingsStore metadataSettingsStore;
+    private ArchivCollectionStore collectionStore;
     private ArchivWorldEditBridge worldEditBridge;
     private boolean metadataSettingsLoaded = false;
+    private boolean collectionsLoaded = false;
     private boolean localLibraryReady = false;
     private int localLibraryDetectedCount = 0;
 
@@ -853,6 +856,7 @@ public class ArchivScreen extends Screen {
         ScreenChromeLayout chrome = buildChromeLayout();
         loadMetadataSettingsIfNeeded();
         syncLocalLibraryAssets();
+        loadCollectionsIfNeeded();
         int closeButtonSize = 24;
         int closeX = this.width - 20 - closeButtonSize;
         int closeY = 20;
@@ -3368,6 +3372,7 @@ public class ArchivScreen extends Screen {
         }
 
         replaceAssetNameReferences(oldAsset.getName(), newName);
+        saveCollections();
 
         selectedLibraryAssetName = newName;
 
@@ -3395,6 +3400,13 @@ public class ArchivScreen extends Screen {
         libraryActionMessage = alreadyAdded
                 ? asset.getName() + " is already in " + targetCollection.getName()
                 : "Added " + asset.getName() + " to " + targetCollection.getName();
+
+        String addMessage = libraryActionMessage;
+        boolean collectionsSaved = saveCollections();
+
+        libraryActionMessage = collectionsSaved
+                ? addMessage
+                : addMessage + " (collection save failed)";
     }
 
     private int getAssetCollectionPickerItemCount() {
@@ -3424,6 +3436,7 @@ public class ArchivScreen extends Screen {
         savedAssets.removeIf(savedAsset -> savedAsset.getName().equals(deletedName));
         recentLoadedAssetNames.remove(deletedName);
         removeAssetReferencesFromCollections(deletedName);
+        saveCollections();
 
         if (deletedName.equals(loadedAssetName)) {
             loadedAssetName = null;
@@ -3702,7 +3715,13 @@ public class ArchivScreen extends Screen {
 
         selectedCollectionName = name;
         selectedMyAssetsSection = "Collections";
-        libraryActionMessage = "Created collection: " + name;
+        String createMessage = "Created collection: " + name;
+        boolean collectionsSaved = saveCollections();
+
+        libraryActionMessage = collectionsSaved
+                ? createMessage
+                : createMessage + " (collection save failed)";
+
         resetMyAssetsScroll();
     }
 
@@ -3890,6 +3909,108 @@ public class ArchivScreen extends Screen {
             libraryActionMessage = "Local folder refreshed: " + localLibraryDetectedCount + " file(s)";
         } else {
             libraryActionMessage = "Local folder refreshed";
+        }
+    }
+
+    private ArchivCollectionStore getCollectionStore() {
+        if (this.minecraft == null) {
+            return null;
+        }
+
+        if (collectionStore == null) {
+            collectionStore = new ArchivCollectionStore(this.minecraft.gameDirectory.toPath());
+        }
+
+        return collectionStore;
+    }
+
+    private void loadCollectionsIfNeeded() {
+        if (collectionsLoaded) {
+            return;
+        }
+
+        collectionsLoaded = true;
+
+        ArchivCollectionStore store = getCollectionStore();
+
+        if (store == null) {
+            return;
+        }
+
+        try {
+            List<ArchivCollectionStore.SavedCollection> savedCollections = store.load();
+
+            if (savedCollections.isEmpty()) {
+                return;
+            }
+
+            collectionEntries.clear();
+
+            for (ArchivCollectionStore.SavedCollection savedCollection : savedCollections) {
+                int index = collectionEntries.size();
+
+                int previewColor = savedCollection.previewColor() == 0
+                        ? getCollectionPreviewColorByIndex(index)
+                        : savedCollection.previewColor();
+
+                int accentColor = savedCollection.accentColor() == 0
+                        ? getCollectionAccentColorByIndex(index)
+                        : savedCollection.accentColor();
+
+                CollectionEntry entry = new CollectionEntry(
+                        getUniqueCollectionName(savedCollection.name()),
+                        savedCollection.tag(),
+                        savedCollection.description(),
+                        previewColor,
+                        accentColor
+                );
+
+                for (String assetName : savedCollection.assetNames()) {
+                    if (!trimToEmpty(assetName).isBlank()) {
+                        entry.addAsset(assetName);
+                    }
+                }
+
+                collectionEntries.add(entry);
+            }
+
+            if (!collectionEntries.isEmpty() && selectedCollectionName == null) {
+                selectedCollectionName = collectionEntries.get(0).getName();
+            }
+
+            libraryActionMessage = "Collections loaded";
+        } catch (IOException exception) {
+            libraryActionMessage = "Collections load failed";
+        }
+    }
+
+    private boolean saveCollections() {
+        ArchivCollectionStore store = getCollectionStore();
+
+        if (store == null) {
+            libraryActionMessage = "Collections unavailable";
+            return false;
+        }
+
+        try {
+            List<ArchivCollectionStore.SavedCollection> savedCollections = new ArrayList<>();
+
+            for (CollectionEntry entry : collectionEntries) {
+                savedCollections.add(new ArchivCollectionStore.SavedCollection(
+                        entry.getName(),
+                        entry.getTag(),
+                        entry.getDescription(),
+                        entry.previewColor,
+                        entry.accentColor,
+                        new ArrayList<>(entry.getAssetNames())
+                ));
+            }
+
+            store.save(savedCollections);
+            return true;
+        } catch (IOException exception) {
+            libraryActionMessage = "Collections save failed";
+            return false;
         }
     }
 
@@ -4730,6 +4851,12 @@ public class ArchivScreen extends Screen {
             libraryActionMessage = "Created collection: " + finalName;
         }
 
+        String createMessage = libraryActionMessage;
+        boolean collectionsSaved = saveCollections();
+        libraryActionMessage = collectionsSaved
+                ? createMessage
+                : createMessage + " (collection save failed)";
+
         resetMyAssetsScroll();
         pendingCollectionAssetName = null;
         closeCreateCollectionModal();
@@ -4816,6 +4943,13 @@ public class ArchivScreen extends Screen {
         libraryActionMessage = alreadyAdded
                 ? asset.getName() + " is already in " + targetCollection.getName()
                 : "Added " + asset.getName() + " to " + targetCollection.getName();
+
+        String addMessage = libraryActionMessage;
+        boolean collectionsSaved = saveCollections();
+
+        libraryActionMessage = collectionsSaved
+                ? addMessage
+                : addMessage + " (collection save failed)";
     }
 
     private int getAssetCollectionRollupW() {
