@@ -1,5 +1,8 @@
 package com.nushi.archiv.client.screen;
 
+import com.nushi.archiv.client.inspect.ArchivStructureDataReader;
+import com.nushi.archiv.client.inspect.ArchivStructureDataSummary;
+
 import com.nushi.archiv.client.inspect.ArchivAssetFileInspection;
 import com.nushi.archiv.client.inspect.ArchivAssetFileInspector;
 
@@ -90,6 +93,8 @@ public class ArchivScreen extends Screen {
     private ArchivPreviewResolver previewResolver;
     private final ArchivAssetFileInspector assetFileInspector = new ArchivAssetFileInspector();
     private ArchivAssetFileInspection importStructureInspection = ArchivAssetFileInspection.empty();
+    private final ArchivStructureDataReader structureDataReader = new ArchivStructureDataReader();
+    private ArchivStructureDataSummary importStructureDataSummary = ArchivStructureDataSummary.empty();
     private boolean metadataSettingsLoaded = false;
     private boolean collectionsLoaded = false;
     private boolean libraryStateLoaded = false;
@@ -1785,6 +1790,7 @@ public class ArchivScreen extends Screen {
         mockStructureFileSize = getDisplayFileSize(selectedPath);
         mockAssetSaved = false;
         importStructureInspection = assetFileInspector.inspect(selectedPath);
+        importStructureDataSummary = structureDataReader.read(selectedPath);
 
         if (importAssetNameBox != null && getCurrentImportName().isBlank()) {
             setImportTextBoxValue(importAssetNameBox, toDefaultImportAssetName(fileName));
@@ -1793,18 +1799,21 @@ public class ArchivScreen extends Screen {
         selectedImportStep = Math.max(selectedImportStep, 2);
 
         String inspectedInfo = importStructureInspection.getCompactInfo();
+        String dataInfo = importStructureDataSummary.getCompactInfo();
+
+        StringBuilder messageBuilder = new StringBuilder("Selected structure file: ").append(fileName);
 
         if (!inspectedInfo.isBlank()) {
-            libraryActionMessage = "Selected structure file: " + fileName + " • " + inspectedInfo;
-        } else if (!importStructureInspection.isReadable() && !importStructureInspection.getMessage().isBlank()) {
-            libraryActionMessage = "Selected structure file: " + fileName + " • " + importStructureInspection.getMessage();
-        } else {
-            libraryActionMessage = "Selected structure file: " + fileName;
+            messageBuilder.append(" • ").append(inspectedInfo);
         }
 
+        if (!dataInfo.isBlank() && !dataInfo.equals(inspectedInfo)) {
+            messageBuilder.append(" • ").append(dataInfo);
+        }
+
+        libraryActionMessage = messageBuilder.toString();
         return true;
     }
-
     private boolean applyImportPreviewImage(Path selectedPath) {
         if (selectedPath == null) {
             return false;
@@ -1904,6 +1913,7 @@ public class ArchivScreen extends Screen {
         mockStructureFileSelected = false;
         importSelectedStructureSourcePath = null;
         importStructureInspection = ArchivAssetFileInspection.empty();
+        importStructureDataSummary = ArchivStructureDataSummary.empty();
         mockStructureFileName = "stone_tower.schem";
         mockStructureFileFormat = ".schem";
         mockStructureFileSize = "1.24 MB";
@@ -1948,6 +1958,7 @@ public class ArchivScreen extends Screen {
                 mockStructureFileSize = getDisplayFileSize(normalizedTargetPath);
                 importSelectedStructureSourcePath = normalizedTargetPath;
                 importStructureInspection = assetFileInspector.inspect(normalizedTargetPath);
+                importStructureDataSummary = structureDataReader.read(normalizedTargetPath);
             }
 
             if (mockPreviewImageSelected && importSelectedPreviewSourcePath != null) {
