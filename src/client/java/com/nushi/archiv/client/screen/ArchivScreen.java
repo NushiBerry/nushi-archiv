@@ -1,5 +1,8 @@
 package com.nushi.archiv.client.screen;
 
+import com.nushi.archiv.client.inspect.ArchivAssetFileInspection;
+import com.nushi.archiv.client.inspect.ArchivAssetFileInspector;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -85,6 +88,8 @@ public class ArchivScreen extends Screen {
     private ArchivLibraryStateStore libraryStateStore;
     private ArchivWorldEditBridge worldEditBridge;
     private ArchivPreviewResolver previewResolver;
+    private final ArchivAssetFileInspector assetFileInspector = new ArchivAssetFileInspector();
+    private ArchivAssetFileInspection importStructureInspection = ArchivAssetFileInspection.empty();
     private boolean metadataSettingsLoaded = false;
     private boolean collectionsLoaded = false;
     private boolean libraryStateLoaded = false;
@@ -1779,13 +1784,24 @@ public class ArchivScreen extends Screen {
         mockStructureFileFormat = extension;
         mockStructureFileSize = getDisplayFileSize(selectedPath);
         mockAssetSaved = false;
+        importStructureInspection = assetFileInspector.inspect(selectedPath);
 
         if (importAssetNameBox != null && getCurrentImportName().isBlank()) {
             setImportTextBoxValue(importAssetNameBox, toDefaultImportAssetName(fileName));
         }
 
         selectedImportStep = Math.max(selectedImportStep, 2);
-        libraryActionMessage = "Selected structure file: " + fileName;
+
+        String inspectedInfo = importStructureInspection.getCompactInfo();
+
+        if (!inspectedInfo.isBlank()) {
+            libraryActionMessage = "Selected structure file: " + fileName + " • " + inspectedInfo;
+        } else if (!importStructureInspection.isReadable() && !importStructureInspection.getMessage().isBlank()) {
+            libraryActionMessage = "Selected structure file: " + fileName + " • " + importStructureInspection.getMessage();
+        } else {
+            libraryActionMessage = "Selected structure file: " + fileName;
+        }
+
         return true;
     }
 
@@ -1887,6 +1903,7 @@ public class ArchivScreen extends Screen {
     private void clearImportStructureSelection() {
         mockStructureFileSelected = false;
         importSelectedStructureSourcePath = null;
+        importStructureInspection = ArchivAssetFileInspection.empty();
         mockStructureFileName = "stone_tower.schem";
         mockStructureFileFormat = ".schem";
         mockStructureFileSize = "1.24 MB";
@@ -1930,6 +1947,7 @@ public class ArchivScreen extends Screen {
                 mockStructureFileFormat = getFileExtension(mockStructureFileName);
                 mockStructureFileSize = getDisplayFileSize(normalizedTargetPath);
                 importSelectedStructureSourcePath = normalizedTargetPath;
+                importStructureInspection = assetFileInspector.inspect(normalizedTargetPath);
             }
 
             if (mockPreviewImageSelected && importSelectedPreviewSourcePath != null) {

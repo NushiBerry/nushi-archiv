@@ -3,6 +3,9 @@ package com.nushi.archiv.client.preview;
 import com.nushi.archiv.client.model.ArchivAsset;
 import com.nushi.archiv.client.storage.ArchivLocalLibrary;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -10,10 +13,21 @@ import java.nio.file.Path;
 public class ArchivPreviewResolver {
     private final ArchivLocalLibrary localLibrary;
     private final ArchivPreviewCache previewCache;
+    private final ArchivEmbeddedPreviewExtractor embeddedPreviewExtractor;
+    private final Set<String> attemptedEmbeddedExtractions = new HashSet<>();
 
     public ArchivPreviewResolver(ArchivLocalLibrary localLibrary) {
         this.localLibrary = localLibrary;
         this.previewCache = new ArchivPreviewCache(localLibrary);
+        this.embeddedPreviewExtractor = new ArchivEmbeddedPreviewExtractor(localLibrary);
+    }
+
+    public Path extractEmbeddedPreviewFromSource(ArchivAsset asset, Path structureSourcePath) {
+        try {
+            return embeddedPreviewExtractor.extractFromSourcePath(asset, structureSourcePath, previewCache);
+        } catch (IOException exception) {
+            return null;
+        }
     }
 
     public ArchivPreviewResult resolve(ArchivAsset asset) {
@@ -81,6 +95,18 @@ public class ArchivPreviewResolver {
 
             if (Files.isRegularFile(embeddedPreviewPath)) {
                 return embeddedPreviewPath;
+            }
+
+            String extractionKey = previewCache.getPreviewCacheBaseName(asset);
+
+            if (!attemptedEmbeddedExtractions.add(extractionKey)) {
+                return null;
+            }
+
+            Path extractedPreviewPath = embeddedPreviewExtractor.extractFromAsset(asset, previewCache);
+
+            if (extractedPreviewPath != null && Files.isRegularFile(extractedPreviewPath)) {
+                return extractedPreviewPath;
             }
         } catch (IOException ignored) {
             return null;
