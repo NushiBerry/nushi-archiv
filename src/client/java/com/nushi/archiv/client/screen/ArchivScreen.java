@@ -2,6 +2,7 @@ package com.nushi.archiv.client.screen;
 
 import com.nushi.archiv.client.model.ArchivAsset;
 import com.nushi.archiv.client.storage.ArchivLocalLibrary;
+import com.nushi.archiv.client.storage.ArchivAssetMetadataStore;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -40,6 +41,7 @@ public class ArchivScreen extends Screen {
     private final List<ArchivAsset> savedAssets = new ArrayList<>();
 
     private ArchivLocalLibrary localLibrary;
+    private ArchivAssetMetadataStore metadataStore;
     private boolean localLibraryReady = false;
     private int localLibraryDetectedCount = 0;
 
@@ -2832,7 +2834,11 @@ public class ArchivScreen extends Screen {
         replaceAssetNameReferences(oldAsset.getName(), newName);
 
         selectedLibraryAssetName = newName;
-        libraryActionMessage = "Edited: " + newName;
+
+        boolean metadataSaved = saveAssetMetadata(editedAsset);
+        libraryActionMessage = metadataSaved
+                ? "Edited and saved metadata: " + newName
+                : "Edited, but metadata save failed: " + newName;
 
         closeEditAssetModal();
         syncLibrarySelectionWithVisibleAssets();
@@ -3179,6 +3185,50 @@ public class ArchivScreen extends Screen {
         }
     }
 
+    private ArchivAssetMetadataStore getMetadataStore() {
+        if (this.minecraft == null) {
+            return null;
+        }
+
+        if (metadataStore == null) {
+            metadataStore = new ArchivAssetMetadataStore(this.minecraft.gameDirectory.toPath());
+        }
+
+        return metadataStore;
+    }
+
+    private ArchivAsset applySavedMetadata(ArchivAsset scannedAsset) {
+        ArchivAssetMetadataStore store = getMetadataStore();
+
+        if (store == null) {
+            return scannedAsset;
+        }
+
+        try {
+            return store.applyMetadataIfPresent(scannedAsset);
+        } catch (IOException exception) {
+            libraryActionMessage = "Metadata load failed";
+            return scannedAsset;
+        }
+    }
+
+    private boolean saveAssetMetadata(ArchivAsset asset) {
+        ArchivAssetMetadataStore store = getMetadataStore();
+
+        if (store == null) {
+            libraryActionMessage = "Metadata store unavailable";
+            return false;
+        }
+
+        try {
+            store.saveAsset(asset);
+            return true;
+        } catch (IOException exception) {
+            libraryActionMessage = "Metadata save failed";
+            return false;
+        }
+    }
+
     private void syncLocalLibraryAssets() {
         if (this.minecraft == null) {
             localLibraryReady = false;
@@ -3199,11 +3249,13 @@ public class ArchivScreen extends Screen {
             int addedCount = 0;
 
             for (ArchivAsset scannedAsset : scannedAssets) {
-                if (isLocalStructureAlreadySaved(scannedAsset)) {
+                ArchivAsset assetWithMetadata = applySavedMetadata(scannedAsset);
+
+                if (isLocalStructureAlreadySaved(assetWithMetadata)) {
                     continue;
                 }
 
-                savedAssets.add(createLocalAssetWithUniqueName(scannedAsset));
+                savedAssets.add(createLocalAssetWithUniqueName(assetWithMetadata));
                 addedCount++;
             }
 
@@ -4846,6 +4898,7 @@ public class ArchivScreen extends Screen {
                 if (isImportReady() && !mockAssetSaved) {
                     ArchivAsset savedAsset = buildSavedAssetFromImport();
                     savedAssets.add(0, savedAsset);
+                    saveAssetMetadata(savedAsset);
                     advanceImportPreset();
 
                     selectedLibraryAssetName = savedAsset.getName();
