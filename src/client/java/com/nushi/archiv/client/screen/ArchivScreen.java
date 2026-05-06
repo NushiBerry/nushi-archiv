@@ -2,6 +2,7 @@ package com.nushi.archiv.client.screen;
 
 import com.nushi.archiv.client.model.ArchivAsset;
 import com.nushi.archiv.client.storage.ArchivLocalLibrary;
+import com.nushi.archiv.client.storage.ArchivWorldEditBridge;
 import com.nushi.archiv.client.storage.ArchivAssetMetadataStore;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -46,6 +47,7 @@ public class ArchivScreen extends Screen {
 
     private ArchivLocalLibrary localLibrary;
     private ArchivAssetMetadataStore metadataStore;
+    private ArchivWorldEditBridge worldEditBridge;
     private boolean localLibraryReady = false;
     private int localLibraryDetectedCount = 0;
 
@@ -2921,13 +2923,40 @@ public class ArchivScreen extends Screen {
     private void loadAsset(ArchivAsset asset) {
         closeListMenu();
 
-        // fecha o modal sem apagar a mensagem final de load
         assetDetailsOpen = false;
         detailsAssetName = null;
 
-        loadedAssetName = asset.getName();
         selectedLibraryAssetName = asset.getName();
-        libraryActionMessage = "Loaded: " + asset.getName();
+
+        boolean loadSucceeded = true;
+        String message = "Loaded: " + asset.getName();
+
+        if (!trimToEmpty(asset.getStructureFileName()).isBlank()) {
+            ArchivLocalLibrary library = getLocalLibrary();
+            ArchivWorldEditBridge bridge = getWorldEditBridge();
+
+            if (library == null || bridge == null) {
+                loadSucceeded = false;
+                message = "Load failed: WorldEdit bridge unavailable";
+            } else {
+                try {
+                    ArchivWorldEditBridge.LoadResult result = bridge.loadLocalAsset(library, asset);
+                    loadSucceeded = result.success();
+                    message = result.message();
+                } catch (IOException exception) {
+                    loadSucceeded = false;
+                    message = "Load failed: " + asset.getName();
+                }
+            }
+        }
+
+        libraryActionMessage = message;
+
+        if (!loadSucceeded) {
+            return;
+        }
+
+        loadedAssetName = asset.getName();
 
         recentLoadedAssetNames.remove(asset.getName());
         recentLoadedAssetNames.add(0, asset.getName());
@@ -3260,6 +3289,18 @@ public class ArchivScreen extends Screen {
             libraryActionMessage = "Failed to hide asset metadata";
             return false;
         }
+    }
+
+    private ArchivWorldEditBridge getWorldEditBridge() {
+        if (this.minecraft == null) {
+            return null;
+        }
+
+        if (worldEditBridge == null) {
+            worldEditBridge = new ArchivWorldEditBridge(this.minecraft.gameDirectory.toPath());
+        }
+
+        return worldEditBridge;
     }
 
     private ArchivLocalLibrary getLocalLibrary() {
