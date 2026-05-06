@@ -1,10 +1,10 @@
 package com.nushi.archiv.client.model;
 
-// Esta classe representa um asset do Archiv.
-// Por enquanto ela é um modelo simples, usado só para mockar dados da interface.
-// Mais pra frente ela pode crescer para carregar dados reais de .schem, .bp, manifest.json etc.
-public class ArchivAsset {
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
+public class ArchivAsset {
     private final String name;
     private final String macroCategory;
     private final String type;
@@ -14,6 +14,15 @@ public class ArchivAsset {
     private final int variantCount;
     private final boolean favorite;
     private final boolean highlighted;
+
+    private final String author;
+    private final List<String> tags;
+    private final String structureFileName;
+    private final String structureFileFormat;
+    private final String structureFileSize;
+    private final String previewImageName;
+    private final String previewImageFormat;
+    private final String previewImageRatio;
 
     public ArchivAsset(
             String name,
@@ -26,15 +35,104 @@ public class ArchivAsset {
             boolean favorite,
             boolean highlighted
     ) {
-        this.name = name;
-        this.macroCategory = macroCategory;
-        this.type = type;
-        this.version = version;
+        this(
+                name,
+                macroCategory,
+                type,
+                version,
+                previewColor,
+                chipColor,
+                variantCount,
+                favorite,
+                highlighted,
+                "Unknown",
+                List.of(),
+                "",
+                ".schem",
+                "Unknown",
+                "",
+                "",
+                ""
+        );
+    }
+
+    public ArchivAsset(
+            String name,
+            String macroCategory,
+            String type,
+            String version,
+            int previewColor,
+            int chipColor,
+            int variantCount,
+            boolean favorite,
+            boolean highlighted,
+            String author,
+            List<String> tags,
+            String structureFileName,
+            String structureFileFormat,
+            String structureFileSize,
+            String previewImageName,
+            String previewImageFormat,
+            String previewImageRatio
+    ) {
+        this.name = clean(name, "Unnamed Asset");
+        this.macroCategory = clean(macroCategory, "Uncategorized");
+        this.type = clean(type, "Unknown Type");
+        this.version = clean(version, "Unknown");
         this.previewColor = previewColor;
         this.chipColor = chipColor;
-        this.variantCount = variantCount;
+        this.variantCount = Math.max(1, variantCount);
         this.favorite = favorite;
         this.highlighted = highlighted;
+
+        this.author = clean(author, "Unknown");
+        this.tags = sanitizeTags(tags);
+        this.structureFileName = clean(structureFileName, "");
+        this.structureFileFormat = clean(structureFileFormat, "");
+        this.structureFileSize = clean(structureFileSize, "");
+        this.previewImageName = clean(previewImageName, "");
+        this.previewImageFormat = clean(previewImageFormat, "");
+        this.previewImageRatio = clean(previewImageRatio, "");
+    }
+
+    private static String clean(String value, String fallback) {
+        if (value == null || value.trim().isEmpty()) {
+            return fallback;
+        }
+        return value.trim();
+    }
+
+    private static List<String> sanitizeTags(List<String> rawTags) {
+        List<String> result = new ArrayList<>();
+
+        if (rawTags == null) {
+            return result;
+        }
+
+        for (String rawTag : rawTags) {
+            if (rawTag == null) {
+                continue;
+            }
+
+            String tag = rawTag.trim().replace("#", "");
+            if (tag.isEmpty()) {
+                continue;
+            }
+
+            boolean alreadyExists = false;
+            for (String existing : result) {
+                if (existing.equalsIgnoreCase(tag)) {
+                    alreadyExists = true;
+                    break;
+                }
+            }
+
+            if (!alreadyExists) {
+                result.add(tag);
+            }
+        }
+
+        return result;
     }
 
     public String getName() {
@@ -71,5 +169,37 @@ public class ArchivAsset {
 
     public boolean isHighlighted() {
         return highlighted;
+    }
+
+    public String getAuthor() {
+        return author;
+    }
+
+    public List<String> getTags() {
+        return Collections.unmodifiableList(tags);
+    }
+
+    public String getStructureFileName() {
+        return structureFileName;
+    }
+
+    public String getStructureFileFormat() {
+        return structureFileFormat;
+    }
+
+    public String getStructureFileSize() {
+        return structureFileSize;
+    }
+
+    public String getPreviewImageName() {
+        return previewImageName;
+    }
+
+    public String getPreviewImageFormat() {
+        return previewImageFormat;
+    }
+
+    public String getPreviewImageRatio() {
+        return previewImageRatio;
     }
 }

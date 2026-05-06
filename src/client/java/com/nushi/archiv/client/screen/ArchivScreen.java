@@ -244,8 +244,12 @@ public class ArchivScreen extends Screen {
     private String editAssetSelectedVersion = "1.20.1";
     private int editAssetVariantCount = 1;
     private String editAssetDropdownOpen = null;
+    private boolean updatingEditAssetTagsBox = false;
+    private final List<String> editAssetTags = new ArrayList<>();
 
     private EditBox editAssetNameBox;
+    private EditBox editAssetAuthorBox;
+    private EditBox editAssetTagInputBox;
     private EditBox editAssetCategoryBox;
     private EditBox editAssetTypeBox;
     private EditBox editAssetVersionBox;
@@ -949,6 +953,35 @@ public class ArchivScreen extends Screen {
         editAssetNameBox.setTextColorUneditable(COLOR_TEXT_DIM);
         editAssetNameBox.setHint(Component.literal("Asset name"));
 
+        editAssetAuthorBox = new EditBox(
+                this.font,
+                editModal.authorX + 8,
+                getCenteredEditBoxTextY(editModal.authorY, editModal.fieldH),
+                editModal.authorW - 16,
+                editModal.fieldH - 4,
+                Component.literal("Asset Author")
+        );
+        editAssetAuthorBox.setBordered(false);
+        editAssetAuthorBox.setMaxLength(40);
+        editAssetAuthorBox.setTextColor(COLOR_TEXT);
+        editAssetAuthorBox.setTextColorUneditable(COLOR_TEXT_DIM);
+        editAssetAuthorBox.setHint(Component.literal("Author"));
+
+        editAssetTagInputBox = new EditBox(
+                this.font,
+                editModal.tagsX + 8,
+                getCenteredEditBoxTextY(editModal.tagsY, editModal.fieldH),
+                editModal.tagsW - 16,
+                editModal.fieldH - 4,
+                Component.literal("Asset Tags")
+        );
+        editAssetTagInputBox.setBordered(false);
+        editAssetTagInputBox.setMaxLength(48);
+        editAssetTagInputBox.setTextColor(COLOR_TEXT);
+        editAssetTagInputBox.setTextColorUneditable(COLOR_TEXT_DIM);
+        editAssetTagInputBox.setHint(Component.literal("Add tag..."));
+        editAssetTagInputBox.setResponder(this::handleEditAssetTagInputChanged);
+
         editAssetCategoryBox = new EditBox(
                 this.font,
                 editModal.fieldX + 6,
@@ -1006,6 +1039,8 @@ public class ArchivScreen extends Screen {
         editAssetVariantsBox.setHint(Component.literal("Variants"));
 
         this.addRenderableWidget(editAssetNameBox);
+        this.addRenderableWidget(editAssetAuthorBox);
+        this.addRenderableWidget(editAssetTagInputBox);
         this.addRenderableWidget(editAssetCategoryBox);
         this.addRenderableWidget(editAssetTypeBox);
         this.addRenderableWidget(editAssetVersionBox);
@@ -1162,7 +1197,9 @@ public class ArchivScreen extends Screen {
                         || asset.getName().toLowerCase().contains(searchQuery)
                         || asset.getType().toLowerCase().contains(searchQuery)
                         || asset.getMacroCategory().toLowerCase().contains(searchQuery)
-                        || asset.getVersion().toLowerCase().contains(searchQuery);
+                        || asset.getVersion().toLowerCase().contains(searchQuery)
+                        || asset.getAuthor().toLowerCase().contains(searchQuery)
+                        || assetHasTagMatching(asset, searchQuery);
 
                 if (categoryMatches && favoriteMatches && searchMatches) {
                     filteredAssets.add(asset);
@@ -1209,6 +1246,20 @@ public class ArchivScreen extends Screen {
         }
 
         return filteredAssets;
+    }
+
+    private boolean assetHasTagMatching(ArchivAsset asset, String searchQuery) {
+        if (asset == null || searchQuery == null || searchQuery.isBlank()) {
+            return false;
+        }
+
+        for (String tag : asset.getTags()) {
+            if (tag.toLowerCase().contains(searchQuery)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private boolean isInside(double mouseX, double mouseY, int x, int y, int width, int height) {
@@ -1418,67 +1469,20 @@ public class ArchivScreen extends Screen {
         return width;
     }
 
-    private int getImportTagInputReserveW(ImportDetailsFormLayout form) {
-        return clampInt(form.wideFieldW / 3, 96, 128);
-    }
-
-    private int getImportVisibleTagLimit(ImportDetailsFormLayout form) {
-        if (importTags.isEmpty()) {
-            return 0;
-        }
-
-        int fieldLeft = form.tagsX + 8;
-        int fieldRight = form.tagsX + form.wideFieldW - 8;
-        int inputReserveW = getImportTagInputReserveW(form);
-        int hiddenReserveW = 42;
-        int maxTagRight = fieldRight - inputReserveW - 6;
-
-        int tagX = fieldLeft;
-        int visibleCount = 0;
-
-        for (int i = 0; i < importTags.size(); i++) {
-            String tag = importTags.get(i);
-            int tagW = this.font.width(tag) + 20;
-            boolean hasHiddenAfterThis = i < importTags.size() - 1;
-            int reservedRight = hasHiddenAfterThis ? hiddenReserveW + 5 : 0;
-
-            if (tagX + tagW + reservedRight > maxTagRight) {
-                break;
-            }
-
-            tagX += tagW + 5;
-            visibleCount++;
-        }
-
-        return visibleCount;
-    }
-
     private int getImportTagsOverflowOffset(ImportDetailsFormLayout form) {
-        // Compact mode keeps the first visible tags anchored on the left.
-        // Hidden tags are represented by +N and shown in the focus popover.
+        // Keep the first chips anchored at the left side of the field.
+        // The input is clamped to the right side when there are many tags,
+        // instead of shifting the whole row left and cutting the first tag.
         return 0;
     }
 
     private int getImportTagInputX(ImportDetailsFormLayout form) {
         int fieldLeft = form.tagsX + 8;
         int fieldRight = form.tagsX + form.wideFieldW - 8;
-        int inputReserveW = getImportTagInputReserveW(form);
-        int visibleLimit = getImportVisibleTagLimit(form);
-
-        int tagX = fieldLeft;
-        for (int i = 0; i < visibleLimit; i++) {
-            String tag = importTags.get(i);
-            tagX += this.font.width(tag) + 25;
-        }
-
-        int hiddenCount = Math.max(0, importTags.size() - visibleLimit);
-        if (hiddenCount > 0) {
-            String hiddenLabel = "+" + hiddenCount;
-            tagX += this.font.width(hiddenLabel) + 19;
-        }
-
-        int maxInputX = fieldRight - inputReserveW;
-        return clampInt(tagX + 4, fieldLeft, Math.max(fieldLeft, maxInputX));
+        int minimumInputW = 118;
+        int shiftedX = fieldLeft + getImportTagsContentWidth() + 4;
+        int maxInputX = fieldRight - minimumInputW;
+        return clampInt(shiftedX, fieldLeft, Math.max(fieldLeft, maxInputX));
     }
 
     private void markImportDetailsEdited() {
@@ -1591,6 +1595,135 @@ public class ArchivScreen extends Screen {
         importTagInputBox.setValue("");
         updatingImportTagsBox = false;
         markImportDetailsEdited();
+    }
+
+    private void setEditAssetTagsFromAsset(ArchivAsset asset) {
+        editAssetTags.clear();
+        if (asset == null) {
+            return;
+        }
+
+        for (String tag : asset.getTags()) {
+            addEditAssetTag(tag);
+        }
+    }
+
+    private void addEditAssetTag(String rawTag) {
+        String tag = trimToEmpty(rawTag).replace("#", "");
+        if (tag.isBlank()) {
+            return;
+        }
+
+        for (String existing : editAssetTags) {
+            if (existing.equalsIgnoreCase(tag)) {
+                return;
+            }
+        }
+
+        editAssetTags.add(tag);
+    }
+
+    private void handleEditAssetTagInputChanged(String value) {
+        if (updatingEditAssetTagsBox) {
+            return;
+        }
+
+        if (value == null || !value.contains(",")) {
+            return;
+        }
+
+        String[] parts = value.split(",", -1);
+        for (int i = 0; i < parts.length - 1; i++) {
+            addEditAssetTag(parts[i]);
+        }
+
+        String remainder = parts[parts.length - 1].trim();
+        updatingEditAssetTagsBox = true;
+        editAssetTagInputBox.setValue(remainder);
+        updatingEditAssetTagsBox = false;
+    }
+
+    private void flushEditAssetTagInput() {
+        if (editAssetTagInputBox == null) {
+            return;
+        }
+
+        String value = trimToEmpty(editAssetTagInputBox.getValue());
+        if (value.isBlank()) {
+            return;
+        }
+
+        addEditAssetTag(value);
+        updatingEditAssetTagsBox = true;
+        editAssetTagInputBox.setValue("");
+        updatingEditAssetTagsBox = false;
+    }
+
+    private int getEditTagInputReserveW(EditAssetModalLayout modal) {
+        return clampInt(modal.tagsW / 3, 96, 128);
+    }
+
+    private int getEditVisibleTagLimit(EditAssetModalLayout modal) {
+        if (editAssetTags.isEmpty()) {
+            return 0;
+        }
+
+        int fieldLeft = modal.tagsX + 8;
+        int fieldRight = modal.tagsX + modal.tagsW - 8;
+        int inputReserveW = getEditTagInputReserveW(modal);
+        int hiddenReserveW = 42;
+        int maxTagRight = fieldRight - inputReserveW - 6;
+
+        int tagX = fieldLeft;
+        int visibleCount = 0;
+
+        for (int i = 0; i < editAssetTags.size(); i++) {
+            String tag = editAssetTags.get(i);
+            int tagW = this.font.width(tag) + 20;
+            boolean hasHiddenAfterThis = i < editAssetTags.size() - 1;
+            int reservedRight = hasHiddenAfterThis ? hiddenReserveW + 5 : 0;
+
+            if (tagX + tagW + reservedRight > maxTagRight) {
+                break;
+            }
+
+            tagX += tagW + 5;
+            visibleCount++;
+        }
+
+        return visibleCount;
+    }
+
+    private int getEditHiddenTagCount(EditAssetModalLayout modal) {
+        return Math.max(0, editAssetTags.size() - getEditVisibleTagLimit(modal));
+    }
+
+    private boolean shouldShowEditTagsPopover(EditAssetModalLayout modal) {
+        return editAssetTagInputBox != null
+                && editAssetTagInputBox.isFocused()
+                && getEditHiddenTagCount(modal) > 0;
+    }
+
+    private int getEditTagInputX(EditAssetModalLayout modal) {
+        int fieldLeft = modal.tagsX + 8;
+        int fieldRight = modal.tagsX + modal.tagsW - 8;
+        int inputReserveW = getEditTagInputReserveW(modal);
+        int visibleLimit = getEditVisibleTagLimit(modal);
+
+        int tagX = fieldLeft;
+        for (int i = 0; i < visibleLimit; i++) {
+            String tag = editAssetTags.get(i);
+            tagX += this.font.width(tag) + 25;
+        }
+
+        int hiddenCount = Math.max(0, editAssetTags.size() - visibleLimit);
+        if (hiddenCount > 0) {
+            String hiddenLabel = "+" + hiddenCount;
+            tagX += this.font.width(hiddenLabel) + 19;
+        }
+
+        int maxInputX = fieldRight - inputReserveW;
+        return clampInt(tagX + 4, fieldLeft, Math.max(fieldLeft, maxInputX));
     }
 
     private void focusOnly(EditBox target, EditBox... boxes) {
@@ -2496,6 +2629,19 @@ public class ArchivScreen extends Screen {
             this.setFocused(editAssetNameBox);
         }
 
+        if (editAssetAuthorBox != null) {
+            editAssetAuthorBox.setValue(asset.getAuthor());
+            editAssetAuthorBox.setFocused(false);
+        }
+
+        setEditAssetTagsFromAsset(asset);
+        if (editAssetTagInputBox != null) {
+            updatingEditAssetTagsBox = true;
+            editAssetTagInputBox.setValue("");
+            updatingEditAssetTagsBox = false;
+            editAssetTagInputBox.setFocused(false);
+        }
+
         editAssetSelectedCategory = getSafeOption(macroCategories, asset.getMacroCategory());
         editAssetSelectedType = getSafeOption(assetTypes, asset.getType());
         editAssetSelectedVersion = getSafeOption(minecraftVersions, asset.getVersion());
@@ -2530,6 +2676,8 @@ public class ArchivScreen extends Screen {
         editAssetDropdownOpen = null;
 
         if (editAssetNameBox != null) editAssetNameBox.setFocused(false);
+        if (editAssetAuthorBox != null) editAssetAuthorBox.setFocused(false);
+        if (editAssetTagInputBox != null) editAssetTagInputBox.setFocused(false);
         if (editAssetCategoryBox != null) editAssetCategoryBox.setFocused(false);
         if (editAssetTypeBox != null) editAssetTypeBox.setFocused(false);
         if (editAssetVersionBox != null) editAssetVersionBox.setFocused(false);
@@ -2576,6 +2724,11 @@ public class ArchivScreen extends Screen {
         int variantCount = clampInt(editAssetVariantCount, 1, 99);
         int chipColor = getChipColorForEditedAsset(type, oldAsset.getChipColor());
 
+        flushEditAssetTagInput();
+        String author = editAssetAuthorBox == null
+                ? oldAsset.getAuthor()
+                : trimToEmpty(editAssetAuthorBox.getValue());
+
         return new ArchivAsset(
                 newName,
                 category,
@@ -2585,7 +2738,15 @@ public class ArchivScreen extends Screen {
                 chipColor,
                 variantCount,
                 oldAsset.isFavorite(),
-                oldAsset.isHighlighted()
+                oldAsset.isHighlighted(),
+                author,
+                new ArrayList<>(editAssetTags),
+                oldAsset.getStructureFileName(),
+                oldAsset.getStructureFileFormat(),
+                oldAsset.getStructureFileSize(),
+                oldAsset.getPreviewImageName(),
+                oldAsset.getPreviewImageFormat(),
+                oldAsset.getPreviewImageRatio()
         );
     }
 
@@ -2845,6 +3006,8 @@ public class ArchivScreen extends Screen {
         String category = getSafeOption(macroCategories, getCurrentImportCategory());
         String version = getSafeOption(minecraftVersions, getCurrentImportVersion());
 
+        flushImportTagInput();
+
         return new ArchivAsset(
                 getNextSavedAssetName(),
                 category,
@@ -2854,7 +3017,15 @@ public class ArchivScreen extends Screen {
                 getChipColorForEditedAsset(type, preset.chipColor),
                 getImportVariantCount(),
                 false,
-                false
+                false,
+                getCurrentImportAuthor(),
+                new ArrayList<>(importTags),
+                mockStructureFileSelected ? mockStructureFileName : "",
+                mockStructureFileSelected ? mockStructureFileFormat : "",
+                mockStructureFileSelected ? mockStructureFileSize : "",
+                mockPreviewImageSelected ? mockPreviewImageName : "",
+                mockPreviewImageSelected ? mockPreviewImageFormat : "",
+                mockPreviewImageSelected ? mockPreviewImageRatio : ""
         );
     }
 
@@ -3815,6 +3986,12 @@ public class ArchivScreen extends Screen {
         if (editAssetNameBox != null) {
             editAssetNameBox.setFocused(false);
         }
+        if (editAssetAuthorBox != null) {
+            editAssetAuthorBox.setFocused(false);
+        }
+        if (editAssetTagInputBox != null) {
+            editAssetTagInputBox.setFocused(false);
+        }
 
         this.setFocused(null);
     }
@@ -3862,7 +4039,15 @@ public class ArchivScreen extends Screen {
                 asset.getChipColor(),
                 asset.getVariantCount(),
                 favorite,
-                asset.isHighlighted()
+                asset.isHighlighted(),
+                asset.getAuthor(),
+                asset.getTags(),
+                asset.getStructureFileName(),
+                asset.getStructureFileFormat(),
+                asset.getStructureFileSize(),
+                asset.getPreviewImageName(),
+                asset.getPreviewImageFormat(),
+                asset.getPreviewImageRatio()
         );
     }
 
@@ -4145,8 +4330,19 @@ public class ArchivScreen extends Screen {
 
             if (editAssetNameBox != null && isInside(mouseX, mouseY, editAssetNameBox.getX(), editAssetNameBox.getY(), editAssetNameBox.getWidth(), editAssetNameBox.getHeight())) {
                 editAssetDropdownOpen = null;
-                editAssetNameBox.setFocused(true);
-                this.setFocused(editAssetNameBox);
+                focusOnly(editAssetNameBox, editAssetNameBox, editAssetAuthorBox, editAssetTagInputBox);
+                return super.mouseClicked(event, doubleClick);
+            }
+
+            if (editAssetAuthorBox != null && isInside(mouseX, mouseY, editAssetAuthorBox.getX(), editAssetAuthorBox.getY(), editAssetAuthorBox.getWidth(), editAssetAuthorBox.getHeight())) {
+                editAssetDropdownOpen = null;
+                focusOnly(editAssetAuthorBox, editAssetNameBox, editAssetAuthorBox, editAssetTagInputBox);
+                return super.mouseClicked(event, doubleClick);
+            }
+
+            if (editAssetTagInputBox != null && isInside(mouseX, mouseY, modal.tagsX, modal.tagsY, modal.tagsW, modal.fieldH)) {
+                editAssetDropdownOpen = null;
+                focusOnly(editAssetTagInputBox, editAssetNameBox, editAssetAuthorBox, editAssetTagInputBox);
                 return super.mouseClicked(event, doubleClick);
             }
 
@@ -4187,6 +4383,12 @@ public class ArchivScreen extends Screen {
 
                 if (editAssetNameBox != null) {
                     editAssetNameBox.setFocused(false);
+                }
+                if (editAssetAuthorBox != null) {
+                    editAssetAuthorBox.setFocused(false);
+                }
+                if (editAssetTagInputBox != null) {
+                    editAssetTagInputBox.setFocused(false);
                 }
                 this.setFocused(null);
                 return true;
@@ -4943,6 +5145,20 @@ public class ArchivScreen extends Screen {
             }
         }
 
+        if (editAssetModalOpen && editAssetTagInputBox != null && editAssetTagInputBox.isFocused()) {
+            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+                flushEditAssetTagInput();
+                return true;
+            }
+
+            if (keyCode == GLFW.GLFW_KEY_BACKSPACE
+                    && trimToEmpty(editAssetTagInputBox.getValue()).isBlank()
+                    && !editAssetTags.isEmpty()) {
+                editAssetTags.remove(editAssetTags.size() - 1);
+                return true;
+            }
+        }
+
         return super.keyPressed(event);
     }
 
@@ -5228,11 +5444,52 @@ public class ArchivScreen extends Screen {
         boolean editAssetModalActive = editAssetModalOpen;
 
         if (editAssetNameBox != null) {
+            EditAssetModalLayout editModal = buildEditAssetModalLayout();
+            setEditBoxBounds(
+                    editAssetNameBox,
+                    editModal.nameX + 8,
+                    getCenteredEditBoxTextY(editModal.nameY, editModal.fieldH),
+                    editModal.nameW - 32
+            );
             editAssetNameBox.visible = editAssetModalActive;
             editAssetNameBox.active = editAssetModalActive;
 
             if (!editAssetModalActive) {
                 editAssetNameBox.setFocused(false);
+            }
+        }
+
+        if (editAssetAuthorBox != null) {
+            EditAssetModalLayout editModal = buildEditAssetModalLayout();
+            setEditBoxBounds(
+                    editAssetAuthorBox,
+                    editModal.authorX + 8,
+                    getCenteredEditBoxTextY(editModal.authorY, editModal.fieldH),
+                    editModal.authorW - 16
+            );
+            editAssetAuthorBox.visible = editAssetModalActive;
+            editAssetAuthorBox.active = editAssetModalActive;
+
+            if (!editAssetModalActive) {
+                editAssetAuthorBox.setFocused(false);
+            }
+        }
+
+        if (editAssetTagInputBox != null) {
+            EditAssetModalLayout editModal = buildEditAssetModalLayout();
+            int inputX = getEditTagInputX(editModal);
+            int inputW = Math.max(40, editModal.tagsX + editModal.tagsW - inputX - 26);
+            setEditBoxBounds(
+                    editAssetTagInputBox,
+                    inputX,
+                    getCenteredEditBoxTextY(editModal.tagsY, editModal.fieldH),
+                    inputW
+            );
+            editAssetTagInputBox.visible = editAssetModalActive && editAssetDropdownOpen == null;
+            editAssetTagInputBox.active = editAssetTagInputBox.visible;
+
+            if (!editAssetTagInputBox.visible) {
+                editAssetTagInputBox.setFocused(false);
             }
         }
 
@@ -5407,9 +5664,10 @@ public class ArchivScreen extends Screen {
             default -> getMetadataOptionIcon(value, getSelectedIndex(macroCategories, value));
         };
 
-        guiGraphics.drawString(this.font, icon, x + 10, y + (height - this.font.lineHeight) / 2, open ? COLOR_BORDER_ACTIVE : COLOR_TEXT_DIM);
-        drawClippedString(guiGraphics, value, x + 26, y + (height - this.font.lineHeight) / 2, width - 48, COLOR_TEXT);
-        guiGraphics.drawString(this.font, open ? "⌃" : "⌄", x + width - 18, y + (height - this.font.lineHeight) / 2, open ? COLOR_BORDER_ACTIVE : COLOR_TEXT_DIM);
+        int textY = y + Math.max(0, (height - this.font.lineHeight) / 2) + 1;
+        guiGraphics.drawString(this.font, icon, x + 10, textY, open ? COLOR_BORDER_ACTIVE : COLOR_TEXT_DIM);
+        drawClippedString(guiGraphics, value, x + 26, textY, width - 48, COLOR_TEXT);
+        guiGraphics.drawString(this.font, open ? "⌃" : "⌄", x + width - 18, textY, open ? COLOR_BORDER_ACTIVE : COLOR_TEXT_DIM);
     }
 
     private void drawEditDropdownList(GuiGraphics guiGraphics, EditAssetModalLayout modal) {
@@ -5462,6 +5720,110 @@ public class ArchivScreen extends Screen {
         }
     }
 
+    private void drawEditTagsField(GuiGraphics guiGraphics, EditAssetModalLayout modal) {
+        drawEditLabel(guiGraphics, "Tags", modal.tagsX, modal.tagsY - 12);
+        drawPanel(guiGraphics, modal.tagsX, modal.tagsY, modal.tagsW, modal.fieldH, COLOR_PANEL, COLOR_BORDER);
+
+        int tagH = 16;
+        int tagGap = 5;
+        int tagY = modal.tagsY + Math.max(2, (modal.fieldH - tagH) / 2);
+        int tagX = modal.tagsX + 8;
+        int inputX = editAssetTagInputBox != null && editAssetTagInputBox.visible
+                ? editAssetTagInputBox.getX()
+                : modal.tagsX + modal.tagsW - 8;
+        int tagRight = Math.max(modal.tagsX + 8, inputX - 6);
+        int hiddenCount = 0;
+
+        guiGraphics.enableScissor(modal.tagsX + 2, modal.tagsY + 2, modal.tagsX + modal.tagsW - 2, modal.tagsY + modal.fieldH - 2);
+
+        for (String tag : editAssetTags) {
+            int tagW = this.font.width(tag) + 20;
+
+            if (tagX + tagW <= tagRight) {
+                drawPanel(guiGraphics, tagX, tagY, tagW, tagH, 0xFF14263A, COLOR_BORDER);
+                int tagTextY = tagY + Math.max(0, (tagH - this.font.lineHeight) / 2) + 1;
+                guiGraphics.drawString(this.font, tag, tagX + 6, tagTextY, COLOR_TEXT);
+                guiGraphics.drawString(this.font, "x", tagX + tagW - 10, tagTextY, COLOR_TEXT_DIM);
+                tagX += tagW + tagGap;
+            } else {
+                hiddenCount++;
+            }
+        }
+
+        if (hiddenCount > 0) {
+            String hiddenLabel = "+" + hiddenCount;
+            int hiddenW = this.font.width(hiddenLabel) + 14;
+            int hiddenX = Math.max(modal.tagsX + 8, tagRight - hiddenW);
+            drawPanel(guiGraphics, hiddenX, tagY, hiddenW, tagH, 0xFF14263A, COLOR_BORDER);
+            int hiddenTextY = tagY + Math.max(0, (tagH - this.font.lineHeight) / 2) + 1;
+            guiGraphics.drawString(this.font, hiddenLabel, hiddenX + 6, hiddenTextY, COLOR_TEXT_DIM);
+        }
+
+        guiGraphics.disableScissor();
+
+        boolean tagInputVisible = editAssetTagInputBox != null && editAssetTagInputBox.visible;
+        if (editAssetTags.isEmpty() && !tagInputVisible) {
+            drawClippedString(guiGraphics, "Use comma to add tags...", modal.tagsX + 10, getFieldTextY(modal.tagsY, modal.fieldH), modal.tagsW - 20, COLOR_TEXT_DIM);
+        }
+
+    }
+
+    private void drawEditTagsPopover(GuiGraphics guiGraphics, EditAssetModalLayout modal) {
+        if (!shouldShowEditTagsPopover(modal)) {
+            return;
+        }
+
+        int popoverW = modal.tagsW;
+        int popoverX = modal.tagsX;
+        int rowH = 18;
+        int padding = 8;
+        int maxRows = 3;
+
+        List<String> rows = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        int currentW = 0;
+        int maxTextW = popoverW - padding * 2;
+
+        for (String tag : editAssetTags) {
+            String chip = current.length() == 0 ? tag : ", " + tag;
+            int chipW = this.font.width(chip);
+
+            if (current.length() > 0 && currentW + chipW > maxTextW) {
+                rows.add(current.toString());
+                current = new StringBuilder(tag);
+                currentW = this.font.width(tag);
+            } else {
+                current.append(chip);
+                currentW += chipW;
+            }
+
+            if (rows.size() >= maxRows) {
+                break;
+            }
+        }
+
+        if (current.length() > 0 && rows.size() < maxRows) {
+            rows.add(current.toString());
+        }
+
+        int shownRows = Math.max(1, rows.size());
+        int popoverH = padding * 2 + shownRows * rowH;
+        int popoverY = modal.tagsY + modal.fieldH + 4;
+        int bottomLimit = modal.panelY + modal.panelH - 44;
+        if (popoverY + popoverH > bottomLimit) {
+            popoverY = modal.tagsY - popoverH - 4;
+        }
+
+        drawPanel(guiGraphics, popoverX, popoverY, popoverW, popoverH, 0xFF0B1524, COLOR_BORDER_ACTIVE);
+        for (int i = 0; i < rows.size(); i++) {
+            String row = rows.get(i);
+            if (i == rows.size() - 1 && getEditHiddenTagCount(modal) > 0) {
+                row = fitTextToWidth(row, maxTextW - 42) + "  +" + getEditHiddenTagCount(modal) + " hidden";
+            }
+            drawClippedString(guiGraphics, row, popoverX + padding, popoverY + padding + i * rowH + 4, maxTextW, COLOR_TEXT_DIM);
+        }
+    }
+
     private void drawEditVariantRow(GuiGraphics guiGraphics, String name, String status, int x, int y, int width, int height, boolean active) {
         int background = active ? 0xFF122A3F : COLOR_PANEL;
         int border = active ? COLOR_BORDER_ACTIVE : COLOR_BORDER;
@@ -5510,6 +5872,48 @@ public class ArchivScreen extends Screen {
 
         drawPanel(guiGraphics, x + width - 28, y, 28, height, COLOR_PANEL_ALT, COLOR_BORDER);
         guiGraphics.drawString(this.font, "...", x + width - 20, centerY, COLOR_TEXT_DIM);
+    }
+
+    private String getAssetAuthorLabel(ArchivAsset asset) {
+        if (asset == null || trimToEmpty(asset.getAuthor()).isBlank()) {
+            return "Unknown";
+        }
+        return asset.getAuthor();
+    }
+
+    private String getAssetStructureFileLabel(ArchivAsset asset) {
+        if (asset == null || trimToEmpty(asset.getStructureFileName()).isBlank()) {
+            return "No structure file";
+        }
+        return asset.getStructureFileName();
+    }
+
+    private String getAssetStructureFormatLabel(ArchivAsset asset) {
+        if (asset == null || trimToEmpty(asset.getStructureFileFormat()).isBlank()) {
+            return ".schem";
+        }
+        return asset.getStructureFileFormat();
+    }
+
+    private String getAssetStructureSizeLabel(ArchivAsset asset) {
+        if (asset == null || trimToEmpty(asset.getStructureFileSize()).isBlank()) {
+            return "Unknown";
+        }
+        return asset.getStructureFileSize();
+    }
+
+    private String getAssetPreviewImageLabel(ArchivAsset asset) {
+        if (asset == null || trimToEmpty(asset.getPreviewImageName()).isBlank()) {
+            return "No preview image";
+        }
+        return asset.getPreviewImageName();
+    }
+
+    private String getAssetTagsLabel(ArchivAsset asset) {
+        if (asset == null || asset.getTags().isEmpty()) {
+            return "No tags";
+        }
+        return String.join(", ", asset.getTags());
     }
 
     private void drawEditPreviewPanel(GuiGraphics guiGraphics, EditAssetModalLayout modal, ArchivAsset asset) {
@@ -5590,7 +5994,7 @@ public class ArchivScreen extends Screen {
 
         drawEditLabel(guiGraphics, "Asset Name", modal.nameX, modal.nameY - 12);
         drawPanel(guiGraphics, modal.nameX, modal.nameY, modal.nameW, modal.fieldH, COLOR_PANEL, COLOR_BORDER);
-        guiGraphics.drawString(this.font, "□", modal.nameX + modal.nameW - 18, modal.nameY + 7, COLOR_TEXT_DIM);
+        guiGraphics.drawString(this.font, "□", modal.nameX + modal.nameW - 18, getFieldTextY(modal.nameY, modal.fieldH), COLOR_TEXT_DIM);
 
         drawEditLabel(guiGraphics, "Macro Category", modal.categoryX, modal.categoryY - 12);
         drawEditSelectorField(guiGraphics, editAssetSelectedCategory, "category", modal.categoryX, modal.categoryY, modal.categoryW, modal.fieldH);
@@ -5602,24 +6006,9 @@ public class ArchivScreen extends Screen {
         drawEditSelectorField(guiGraphics, editAssetSelectedVersion, "version", modal.versionX, modal.versionY, modal.versionW, modal.fieldH);
 
         drawEditLabel(guiGraphics, "Author", modal.authorX, modal.authorY - 12);
-        drawEditStaticField(guiGraphics, "BuilderX", modal.authorX, modal.authorY, modal.authorW, modal.fieldH);
+        drawPanel(guiGraphics, modal.authorX, modal.authorY, modal.authorW, modal.fieldH, COLOR_PANEL, COLOR_BORDER);
 
-        drawEditLabel(guiGraphics, "Tags", modal.tagsX, modal.tagsY - 12);
-        drawPanel(guiGraphics, modal.tagsX, modal.tagsY, modal.tagsW, modal.fieldH, COLOR_PANEL, COLOR_BORDER);
-        int tagX = modal.tagsX + 8;
-        String[] tags = {"tower", "medieval", "build", "stone"};
-        for (String tag : tags) {
-            int tagW = this.font.width(tag) + 20;
-            if (tagX + tagW > modal.tagsX + modal.tagsW - 58) {
-                break;
-            }
-            drawPanel(guiGraphics, tagX, modal.tagsY + 3, tagW, 16, 0xFF14263A, COLOR_BORDER);
-            guiGraphics.drawString(this.font, tag, tagX + 6, modal.tagsY + 7, COLOR_TEXT);
-            guiGraphics.drawString(this.font, "x", tagX + tagW - 10, modal.tagsY + 7, COLOR_TEXT_DIM);
-            tagX += tagW + 5;
-        }
-        drawClippedString(guiGraphics, "Add tag...", tagX + 4, modal.tagsY + 7, modal.tagsX + modal.tagsW - tagX - 32, COLOR_TEXT_DIM);
-        guiGraphics.drawString(this.font, "⌄", modal.tagsX + modal.tagsW - 18, modal.tagsY + 7, COLOR_TEXT_DIM);
+        drawEditTagsField(guiGraphics, modal);
 
         drawPanel(guiGraphics, modal.variantsBoxX, modal.variantsBoxY, modal.variantsBoxW, modal.variantsBoxH, 0xDD0F1B2D, COLOR_BORDER);
         drawEditSectionHeader(guiGraphics, "2", "VARIANTS (" + editAssetVariantCount + " VARIANTS)", modal.variantsBoxX + 12, modal.variantsBoxY + 12, modal.variantsBoxW - 24);
@@ -5641,27 +6030,36 @@ public class ArchivScreen extends Screen {
 
         drawPanel(guiGraphics, modal.filesX, modal.filesY, modal.filesW, modal.filesH, 0xDD0F1B2D, COLOR_BORDER);
         drawEditSectionHeader(guiGraphics, "3", "FILES / OPTIONS", modal.filesX + 12, modal.filesY + 12, modal.filesW - 24);
-        drawEditFileField(guiGraphics, "Structure file (.schem)", "stone_tower_v1.schem", modal.structureFileX, modal.structureFileY, modal.structureFileW, modal.fileFieldH);
-        drawEditFileField(guiGraphics, "Preview image", mockPreviewImageSelected ? mockPreviewImageName : "stone_tower_preview.png", modal.previewFileX, modal.previewFileY, modal.previewFileW, modal.fileFieldH);
+        drawEditFileField(guiGraphics, "Structure file (" + getAssetStructureFormatLabel(asset) + ")", getAssetStructureFileLabel(asset), modal.structureFileX, modal.structureFileY, modal.structureFileW, modal.fileFieldH);
+        drawEditFileField(guiGraphics, "Preview image", getAssetPreviewImageLabel(asset), modal.previewFileX, modal.previewFileY, modal.previewFileW, modal.fileFieldH);
 
         if (modal.filesH >= 118) {
             int optionY = modal.filesY + modal.filesH - 30;
+            int optionTextY = getFieldTextY(optionY, 24);
+            int favoriteTextX = modal.structureFileX;
             int rightOptionX = modal.filesX + Math.max(118, modal.filesW / 2);
-            guiGraphics.drawString(this.font, "☆ Favorite", modal.structureFileX, optionY + 7, COLOR_TEXT_DIM);
-            drawMockToggle(guiGraphics, modal.favoriteToggleX, optionY + 3, asset != null && asset.isFavorite());
-            guiGraphics.drawString(this.font, "◉ Visible", rightOptionX, optionY + 7, COLOR_TEXT_DIM);
-            drawMockToggle(guiGraphics, modal.visibleToggleX, optionY + 3, true);
+            int toggleY = optionY + 4;
+
+            guiGraphics.drawString(this.font, "☆ Favorite", favoriteTextX, optionTextY, COLOR_TEXT_DIM);
+            drawMockToggle(guiGraphics, favoriteTextX + this.font.width("☆ Favorite") + 10, toggleY, asset != null && asset.isFavorite());
+
+            guiGraphics.drawString(this.font, "◉ Visible", rightOptionX, optionTextY, COLOR_TEXT_DIM);
+            int visibleToggleX = Math.min(modal.filesX + modal.filesW - 44, rightOptionX + this.font.width("◉ Visible") + 10);
+            drawMockToggle(guiGraphics, visibleToggleX, toggleY, true);
         }
 
         drawEditPreviewPanel(guiGraphics, modal, asset);
 
-        guiGraphics.fill(modal.panelX + 16, modal.cancelY - 11, modal.panelX + modal.panelW - 16, modal.cancelY - 10, COLOR_BORDER);
         drawButtonBox(guiGraphics, "Delete Asset", modal.deleteX, modal.deleteY, modal.deleteW, modal.buttonH, false);
         guiGraphics.drawString(this.font, "!", modal.deleteX + 10, modal.deleteY + 8, 0xFFFF5D7A);
         drawButtonBox(guiGraphics, "Cancel", modal.cancelX, modal.cancelY, modal.cancelW, modal.buttonH, false);
         drawButtonBoxState(guiGraphics, "Save Changes", modal.saveX, modal.saveY, modal.saveW, modal.buttonH, true, isEditAssetFormValid());
 
         drawEditDropdownList(guiGraphics, modal);
+
+        if (shouldShowEditTagsPopover(modal)) {
+            drawEditTagsPopover(guiGraphics, modal);
+        }
     }
 
     private void drawAssetDetailsPanel(GuiGraphics guiGraphics, int rootX, int rootY, int rootW, int bodyY) {
@@ -5704,7 +6102,7 @@ public class ArchivScreen extends Screen {
 
         guiGraphics.drawString(this.font, asset.getName(), infoX, infoY, COLOR_TEXT);
 
-        String detailsMeta = ".schem  •  " + asset.getVersion();
+        String detailsMeta = getAssetStructureFormatLabel(asset) + "  •  " + asset.getVersion();
         guiGraphics.drawString(this.font, detailsMeta, infoX, infoY + 16, COLOR_TEXT_DIM);
 
         int metaCursorX = infoX + this.font.width(detailsMeta) + 10;
@@ -5720,17 +6118,23 @@ public class ArchivScreen extends Screen {
         int labelColor = COLOR_TEXT_DIM;
         int valueColor = COLOR_TEXT;
 
-        guiGraphics.drawString(this.font, "Category", infoX, infoGridY, labelColor);
-        guiGraphics.drawString(this.font, asset.getMacroCategory(), infoX + 84, infoGridY, valueColor);
+        guiGraphics.drawString(this.font, "Author", infoX, infoGridY, labelColor);
+        drawClippedString(guiGraphics, getAssetAuthorLabel(asset), infoX + 84, infoGridY, 95, valueColor);
 
-        guiGraphics.drawString(this.font, "Type", infoX + 190, infoGridY, labelColor);
-        guiGraphics.drawString(this.font, asset.getType(), infoX + 244, infoGridY, valueColor);
+        guiGraphics.drawString(this.font, "Category", infoX + 190, infoGridY, labelColor);
+        drawClippedString(guiGraphics, asset.getMacroCategory(), infoX + 260, infoGridY, 120, valueColor);
 
-        guiGraphics.drawString(this.font, "Variants", infoX, infoGridY + 18, labelColor);
-        guiGraphics.drawString(this.font, String.valueOf(asset.getVariantCount()), infoX + 84, infoGridY + 18, valueColor);
+        guiGraphics.drawString(this.font, "Type", infoX, infoGridY + 18, labelColor);
+        guiGraphics.drawString(this.font, asset.getType(), infoX + 84, infoGridY + 18, valueColor);
 
-        guiGraphics.drawString(this.font, "Status", infoX + 190, infoGridY + 18, labelColor);
-        guiGraphics.drawString(this.font, loaded ? "Loaded" : "Idle", infoX + 244, infoGridY + 18, loaded ? COLOR_SUCCESS : valueColor);
+        guiGraphics.drawString(this.font, "Variants", infoX + 190, infoGridY + 18, labelColor);
+        guiGraphics.drawString(this.font, String.valueOf(asset.getVariantCount()), infoX + 260, infoGridY + 18, valueColor);
+
+        guiGraphics.drawString(this.font, "File", infoX, infoGridY + 36, labelColor);
+        drawClippedString(guiGraphics, getAssetStructureFileLabel(asset), infoX + 84, infoGridY + 36, 95, valueColor);
+
+        guiGraphics.drawString(this.font, "Tags", infoX + 190, infoGridY + 36, labelColor);
+        drawClippedString(guiGraphics, getAssetTagsLabel(asset), infoX + 260, infoGridY + 36, 120, valueColor);
 
         guiGraphics.fill(modal.panelX + 16, modal.closeButtonY - 12, modal.panelX + modal.panelW - 16, modal.closeButtonY - 11, COLOR_BORDER);
 
@@ -5813,7 +6217,7 @@ public class ArchivScreen extends Screen {
     }
 
     private int getCenteredEditBoxTextY(int fieldY, int fieldH) {
-        return fieldY + Math.max(0, (fieldH - this.font.lineHeight) / 2) + 3;
+        return fieldY + Math.max(0, (fieldH - this.font.lineHeight) / 2) + 1;
     }
 
     private int getImportLabelY(int fieldY) {
@@ -5896,29 +6300,32 @@ public class ArchivScreen extends Screen {
         int tagClipW = form.wideFieldW - 4;
         int tagClipH = form.fieldH - 4;
 
-        int visibleLimit = getImportVisibleTagLimit(form);
-        int hiddenCount = Math.max(0, importTags.size() - visibleLimit);
+        int inputX = importTagInputBox != null && importTagInputBox.visible
+                ? importTagInputBox.getX()
+                : form.tagsX + form.wideFieldW - 8;
+        int tagRight = Math.max(form.tagsX + 8, inputX - 6);
+        int hiddenCount = 0;
 
         guiGraphics.enableScissor(tagClipX, tagClipY, tagClipX + tagClipW, tagClipY + tagClipH);
 
-        for (int i = 0; i < visibleLimit; i++) {
-            String tag = importTags.get(i);
+        for (String tag : importTags) {
             int tagW = this.font.width(tag) + 20;
 
-            drawPanel(guiGraphics, tagX, tagY, tagW, tagH, 0xFF14263A, COLOR_BORDER);
-            int tagTextY = tagY + Math.max(0, (tagH - this.font.lineHeight) / 2) + 1;
-            guiGraphics.drawString(this.font, tag, tagX + 6, tagTextY, COLOR_TEXT);
-            guiGraphics.drawString(this.font, "x", tagX + tagW - 10, tagTextY, COLOR_TEXT_DIM);
-            tagX += tagW + tagGap;
+            if (tagX + tagW <= tagRight) {
+                drawPanel(guiGraphics, tagX, tagY, tagW, tagH, 0xFF14263A, COLOR_BORDER);
+                int tagTextY = tagY + Math.max(0, (tagH - this.font.lineHeight) / 2) + 1;
+                guiGraphics.drawString(this.font, tag, tagX + 6, tagTextY, COLOR_TEXT);
+                guiGraphics.drawString(this.font, "x", tagX + tagW - 10, tagTextY, COLOR_TEXT_DIM);
+                tagX += tagW + tagGap;
+            } else {
+                hiddenCount++;
+            }
         }
 
         if (hiddenCount > 0) {
             String hiddenLabel = "+" + hiddenCount;
             int hiddenW = this.font.width(hiddenLabel) + 14;
-            int hiddenX = tagX;
-            int maxHiddenX = form.tagsX + form.wideFieldW - getImportTagInputReserveW(form) - hiddenW - 12;
-            hiddenX = clampInt(hiddenX, form.tagsX + 8, Math.max(form.tagsX + 8, maxHiddenX));
-
+            int hiddenX = Math.max(form.tagsX + 8, tagRight - hiddenW);
             drawPanel(guiGraphics, hiddenX, tagY, hiddenW, tagH, 0xFF14263A, COLOR_BORDER);
             int hiddenTextY = tagY + Math.max(0, (tagH - this.font.lineHeight) / 2) + 1;
             guiGraphics.drawString(this.font, hiddenLabel, hiddenX + 6, hiddenTextY, COLOR_TEXT_DIM);
@@ -5930,79 +6337,6 @@ public class ArchivScreen extends Screen {
         if (importTags.isEmpty() && !tagInputVisible) {
             drawClippedString(guiGraphics, "Use comma to add tags...", form.tagsX + 10, getFieldTextY(form.tagsY, form.fieldH), form.wideFieldW - 20, COLOR_TEXT_DIM);
         }
-    }
-
-    private void drawImportTagsViewer(GuiGraphics guiGraphics, ImportDetailsFormLayout form) {
-        if (importTagInputBox == null || !importTagInputBox.isFocused() || importTags.isEmpty()) {
-            return;
-        }
-
-        int popupW = Math.max(form.wideFieldW, Math.min(form.wideFieldW + 80, form.fileX + form.wideFieldW - form.tagsX));
-        int popupX = form.tagsX;
-        int tagH = 16;
-        int tagGap = 5;
-        int rowGap = 5;
-        int innerPad = 8;
-        int maxRows = 3;
-        int rowCount = 1;
-        int measureX = popupX + innerPad;
-        int rowRight = popupX + popupW - innerPad;
-
-        for (String tag : importTags) {
-            int tagW = this.font.width(tag) + 20;
-            if (measureX + tagW > rowRight) {
-                rowCount++;
-                measureX = popupX + innerPad;
-            }
-            measureX += tagW + tagGap;
-        }
-
-        int visibleRows = Math.min(maxRows, Math.max(1, rowCount));
-        int popupH = innerPad + (visibleRows * tagH) + ((visibleRows - 1) * rowGap) + innerPad;
-        int popupY = form.tagsY - popupH - 6;
-
-        if (popupY < 24) {
-            popupY = form.tagsY + form.fieldH + 4;
-        }
-
-        drawPanel(guiGraphics, popupX, popupY, popupW, popupH, 0xFF0B1524, COLOR_BORDER_ACTIVE);
-
-        int tagX = popupX + innerPad;
-        int tagY = popupY + innerPad;
-        int drawnCount = 0;
-
-        guiGraphics.enableScissor(popupX + 2, popupY + 2, popupX + popupW - 2, popupY + popupH - 2);
-
-        for (String tag : importTags) {
-            int tagW = this.font.width(tag) + 20;
-            if (tagX + tagW > rowRight) {
-                tagX = popupX + innerPad;
-                tagY += tagH + rowGap;
-            }
-
-            if (tagY + tagH > popupY + popupH - innerPad) {
-                break;
-            }
-
-            drawPanel(guiGraphics, tagX, tagY, tagW, tagH, 0xFF14263A, COLOR_BORDER);
-            int tagTextY = tagY + Math.max(0, (tagH - this.font.lineHeight) / 2) + 1;
-            guiGraphics.drawString(this.font, tag, tagX + 6, tagTextY, COLOR_TEXT);
-            guiGraphics.drawString(this.font, "x", tagX + tagW - 10, tagTextY, COLOR_TEXT_DIM);
-            tagX += tagW + tagGap;
-            drawnCount++;
-        }
-
-        if (drawnCount < importTags.size()) {
-            String moreLabel = "+" + (importTags.size() - drawnCount) + " more";
-            int moreW = this.font.width(moreLabel) + 14;
-            int moreX = popupX + popupW - moreW - innerPad;
-            int moreY = popupY + popupH - tagH - innerPad;
-            drawPanel(guiGraphics, moreX, moreY, moreW, tagH, 0xFF14263A, COLOR_BORDER);
-            int moreTextY = moreY + Math.max(0, (tagH - this.font.lineHeight) / 2) + 1;
-            guiGraphics.drawString(this.font, moreLabel, moreX + 6, moreTextY, COLOR_TEXT_DIM);
-        }
-
-        guiGraphics.disableScissor();
     }
 
     private void drawImportVariantStepper(GuiGraphics guiGraphics, ImportDetailsFormLayout form) {
@@ -6660,6 +6994,7 @@ public class ArchivScreen extends Screen {
             }
 
             guiGraphics.disableScissor();
+            drawOpenAssetContextMenuOnList(guiGraphics, visibleAssets, layout, mouseX, mouseY);
             drawScrollbar(guiGraphics, scrollbar, browseScrollbarDragging);
         } else {
             CardGridLayout measureLayout = buildBrowseGridLayout(contentX, contentY, contentW, visibleAssets.size(), 0);
@@ -6689,6 +7024,7 @@ public class ArchivScreen extends Screen {
             }
 
             guiGraphics.disableScissor();
+            drawOpenAssetContextMenuOnGrid(guiGraphics, visibleAssets, layout, mouseX, mouseY);
             drawScrollbar(guiGraphics, scrollbar, browseScrollbarDragging);
         }
     }
@@ -7025,6 +7361,9 @@ public class ArchivScreen extends Screen {
         }
 
         guiGraphics.disableScissor();
+        if (showImportedGrid && !visibleAssets.isEmpty()) {
+            drawOpenAssetContextMenuOnGrid(guiGraphics, visibleAssets, layout, mouseX, mouseY);
+        }
         drawScrollbar(guiGraphics, scrollbar, myAssetsScrollbarDragging);
     }
 
@@ -7240,7 +7579,6 @@ public class ArchivScreen extends Screen {
             drawImportTagsField(guiGraphics, form);
             drawRequiredLabel(guiGraphics, "File Info", form.fileX, getImportLabelY(form.fileY), false);
             drawFieldBox(guiGraphics, mockStructureFileSelected ? mockStructureFileFormat + " • " + mockStructureFileSize : "After upload", form.fileX, form.fileY, form.wideFieldW, form.fieldH, mockStructureFileSelected);
-            drawImportTagsViewer(guiGraphics, form);
 
             if (detailsStepActive) {
                 drawImportDropdownList(guiGraphics, form);
@@ -7362,9 +7700,7 @@ public class ArchivScreen extends Screen {
         if (isSavedAsset(asset)) {
             drawVerticalDots(guiGraphics, layout.menuDotsX, layout.menuDotsY, COLOR_TEXT_DIM);
 
-            if (isListMenuOpenFor(asset)) {
-                drawAssetContextMenu(guiGraphics, layout.menuX, layout.menuY, layout.menuW, asset, mouseX, mouseY);
-            }
+            // Context menus are rendered after the grid/list pass so they stay above neighboring cards.
         }
     }
 
@@ -7481,9 +7817,82 @@ public class ArchivScreen extends Screen {
         if (isSavedAsset(asset)) {
             drawVerticalDots(guiGraphics, layout.menuDotsX, layout.menuDotsY, COLOR_TEXT_DIM);
 
-            if (isListMenuOpenFor(asset)) {
-                drawAssetContextMenu(guiGraphics, layout.menuX, layout.menuY, layout.menuW, asset, mouseX, mouseY);
+            // Context menus are rendered after the grid/list pass so they stay above neighboring cards.
+        }
+    }
+
+    private void drawOpenAssetContextMenuOnGrid(
+            GuiGraphics guiGraphics,
+            List<ArchivAsset> visibleAssets,
+            CardGridLayout layout,
+            int mouseX,
+            int mouseY
+    ) {
+        if (!listMenuOpen || listMenuAssetName == null) {
+            return;
+        }
+
+        for (int i = 0; i < visibleAssets.size(); i++) {
+            ArchivAsset asset = visibleAssets.get(i);
+
+            if (!isListMenuOpenFor(asset)) {
+                continue;
             }
+
+            int column = i % layout.columns;
+            int row = i / layout.columns;
+
+            int cardX = layout.cardsAreaX + column * (layout.cardW + layout.cardsGap);
+            int cardY = layout.cardsAreaY + row * (layout.cardH + layout.rowGap);
+
+            AssetCardLayout cardLayout = buildAssetCardLayout(cardX, cardY, layout.cardW, layout.cardH);
+
+            drawAssetContextMenu(
+                    guiGraphics,
+                    cardLayout.menuX,
+                    cardLayout.menuY,
+                    cardLayout.menuW,
+                    asset,
+                    mouseX,
+                    mouseY
+            );
+
+            return;
+        }
+    }
+
+    private void drawOpenAssetContextMenuOnList(
+            GuiGraphics guiGraphics,
+            List<ArchivAsset> visibleAssets,
+            BrowseListLayout layout,
+            int mouseX,
+            int mouseY
+    ) {
+        if (!listMenuOpen || listMenuAssetName == null) {
+            return;
+        }
+
+        for (int i = 0; i < visibleAssets.size(); i++) {
+            ArchivAsset asset = visibleAssets.get(i);
+
+            if (!isListMenuOpenFor(asset)) {
+                continue;
+            }
+
+            int rowY = layout.listY + i * (layout.rowH + layout.rowGap);
+            BrowseListRowLayout rowLayout = buildBrowseListRowLayout(layout.listX, rowY, layout.listW, layout.rowH);
+
+            drawAssetContextMenu(
+                    guiGraphics,
+                    rowLayout.menuX,
+                    rowLayout.menuY,
+                    rowLayout.menuW,
+                    asset,
+                    mouseX,
+                    mouseY
+            );
+
+            return;
         }
     }
 
