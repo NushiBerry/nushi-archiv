@@ -4,6 +4,7 @@ import com.nushi.archiv.client.model.ArchivAsset;
 import com.nushi.archiv.client.storage.ArchivLocalLibrary;
 import com.nushi.archiv.client.storage.ArchivWorldEditBridge;
 import com.nushi.archiv.client.storage.ArchivAssetMetadataStore;
+import com.nushi.archiv.client.storage.ArchivMetadataSettingsStore;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -57,7 +58,9 @@ public class ArchivScreen extends Screen {
 
     private ArchivLocalLibrary localLibrary;
     private ArchivAssetMetadataStore metadataStore;
+    private ArchivMetadataSettingsStore metadataSettingsStore;
     private ArchivWorldEditBridge worldEditBridge;
+    private boolean metadataSettingsLoaded = false;
     private boolean localLibraryReady = false;
     private int localLibraryDetectedCount = 0;
 
@@ -848,6 +851,7 @@ public class ArchivScreen extends Screen {
     @Override
     protected void init() {
         ScreenChromeLayout chrome = buildChromeLayout();
+        loadMetadataSettingsIfNeeded();
         syncLocalLibraryAssets();
         int closeButtonSize = 24;
         int closeX = this.width - 20 - closeButtonSize;
@@ -3889,6 +3893,78 @@ public class ArchivScreen extends Screen {
         }
     }
 
+    private ArchivMetadataSettingsStore getMetadataSettingsStore() {
+        if (this.minecraft == null) {
+            return null;
+        }
+
+        if (metadataSettingsStore == null) {
+            metadataSettingsStore = new ArchivMetadataSettingsStore(this.minecraft.gameDirectory.toPath());
+        }
+
+        return metadataSettingsStore;
+    }
+
+    private void loadMetadataSettingsIfNeeded() {
+        if (metadataSettingsLoaded) {
+            return;
+        }
+
+        metadataSettingsLoaded = true;
+
+        ArchivMetadataSettingsStore store = getMetadataSettingsStore();
+
+        if (store == null) {
+            return;
+        }
+
+        try {
+            ArchivMetadataSettingsStore.LoadedMetadataSettings settings = store.load();
+
+            if (settings == null) {
+                return;
+            }
+
+            if (!settings.macroCategories().isEmpty()) {
+                macroCategories.clear();
+                macroCategories.addAll(settings.macroCategories());
+            }
+
+            if (!settings.assetTypes().isEmpty()) {
+                assetTypes.clear();
+                assetTypes.addAll(settings.assetTypes());
+            }
+
+            if (!settings.minecraftVersions().isEmpty()) {
+                minecraftVersions.clear();
+                minecraftVersions.addAll(settings.minecraftVersions());
+            }
+
+            normalizeMetadataSelections();
+        } catch (IOException exception) {
+            libraryActionMessage = "Metadata settings load failed";
+        }
+    }
+
+    private boolean saveMetadataSettings() {
+        ArchivMetadataSettingsStore store = getMetadataSettingsStore();
+
+        if (store == null) {
+            libraryActionMessage = "Metadata settings unavailable";
+            return false;
+        }
+
+        try {
+            normalizeMetadataSelections();
+            store.save(macroCategories, assetTypes, minecraftVersions);
+            libraryActionMessage = "Metadata settings saved";
+            return true;
+        } catch (IOException exception) {
+            libraryActionMessage = "Metadata settings save failed";
+            return false;
+        }
+    }
+
     private ArchivAssetMetadataStore getMetadataStore() {
         if (this.minecraft == null) {
             return null;
@@ -4350,7 +4426,7 @@ public class ArchivScreen extends Screen {
         selectedMinecraftVersionIndex = 0;
 
         normalizeMetadataSelections();
-        libraryActionMessage = "Metadata settings reset to defaults";
+        libraryActionMessage = "Metadata reset - click Save to persist";
     }
 
     private void applyImportPresetMetadata() {
@@ -5492,7 +5568,7 @@ public class ArchivScreen extends Screen {
                 }
 
                 if (isInside(mouseX, mouseY, settingsLayout.saveX, settingsLayout.saveY, settingsLayout.saveW, settingsLayout.buttonH)) {
-                    libraryActionMessage = "Settings ready - persistence will be added with JSON later";
+                    saveMetadataSettings();
                     return true;
                 }
             }
