@@ -3,6 +3,9 @@ package com.nushi.archiv.client.screen;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.nushi.archiv.client.preview.ArchivPreviewResolver;
+import com.nushi.archiv.client.preview.ArchivPreviewResult;
+
 import com.nushi.archiv.client.model.ArchivAsset;
 import com.nushi.archiv.client.storage.ArchivLocalLibrary;
 import com.nushi.archiv.client.storage.ArchivWorldEditBridge;
@@ -47,6 +50,7 @@ import org.lwjgl.glfw.GLFW;
 
 public class ArchivScreen extends Screen {
 
+
     private static final int COLOR_BACKGROUND = 0xFF08111D;
     private static final int COLOR_ROOT = 0xFF0C1624;
     private static final int COLOR_PANEL = 0xFF0F1B2D;
@@ -72,12 +76,15 @@ public class ArchivScreen extends Screen {
     private final List<ArchivAsset> mockAssets;
     private final List<ArchivAsset> savedAssets = new ArrayList<>();
 
+
+
     private ArchivLocalLibrary localLibrary;
     private ArchivAssetMetadataStore metadataStore;
     private ArchivMetadataSettingsStore metadataSettingsStore;
     private ArchivCollectionStore collectionStore;
     private ArchivLibraryStateStore libraryStateStore;
     private ArchivWorldEditBridge worldEditBridge;
+    private ArchivPreviewResolver previewResolver;
     private boolean metadataSettingsLoaded = false;
     private boolean collectionsLoaded = false;
     private boolean libraryStateLoaded = false;
@@ -2128,7 +2135,19 @@ public class ArchivScreen extends Screen {
             return null;
         }
 
-        return getLocalPreviewImagePath(asset.getPreviewImageName());
+        ArchivPreviewResolver resolver = getPreviewResolver();
+
+        if (resolver == null) {
+            return getLocalPreviewImagePath(asset.getPreviewImageName());
+        }
+
+        ArchivPreviewResult result = resolver.resolve(asset);
+
+        if (result != null && result.hasImage()) {
+            return result.getImagePath();
+        }
+
+        return null;
     }
 
     private Path getLocalPreviewImagePath(String previewImageName) {
@@ -2352,12 +2371,7 @@ public class ArchivScreen extends Screen {
     }
 
     private int toNativeImageColor(int argb) {
-        int alpha = (argb >>> 24) & 0xFF;
-        int red = (argb >>> 16) & 0xFF;
-        int green = (argb >>> 8) & 0xFF;
-        int blue = argb & 0xFF;
-
-        return (alpha << 24) | (blue << 16) | (green << 8) | red;
+        return argb;
     }
 
     private void releasePreviewTexture(CachedPreviewTexture cached) {
@@ -4203,6 +4217,20 @@ public class ArchivScreen extends Screen {
         }
 
         return localLibrary;
+    }
+
+    private ArchivPreviewResolver getPreviewResolver() {
+        ArchivLocalLibrary library = getLocalLibrary();
+
+        if (library == null) {
+            return null;
+        }
+
+        if (previewResolver == null) {
+            previewResolver = new ArchivPreviewResolver(library);
+        }
+
+        return previewResolver;
     }
 
     private void openLocalAssetsFolder() {
