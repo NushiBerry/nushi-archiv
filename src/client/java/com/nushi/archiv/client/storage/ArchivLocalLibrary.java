@@ -19,7 +19,12 @@ public class ArchivLocalLibrary {
     private static final List<String> SUPPORTED_STRUCTURE_EXTENSIONS = List.of(
             ".schem",
             ".schematic",
-            ".blueprint"
+            ".litematic",
+            ".bp",
+            ".blueprint",
+            ".bl",
+            ".nbt",
+            ".mcstructure"
     );
 
     private final Path rootDirectory;

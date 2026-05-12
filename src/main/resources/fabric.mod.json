@@ -1,30 +1,30 @@
 {
-	"schemaVersion": 1,
-	"id": "archiv",
-	"version": "${version}",
-	"name": "Archiv",
-	"description": "A visual asset library for Minecraft Builders",
-	"authors": [
-		"Nushi"
-	],
-	"contact": {
-		"sources": "https://github.com/NushiBerry/nushi-archiv"
-	},
-	"license": "CC0-1.0",
-	"icon": "assets/archiv/icon.png",
-	"environment": "*",
-	"entrypoints": {
-		"main": [
-			"com.nushi.archiv.Archiv"
-		],
-		"client": [
-			"com.nushi.archiv.client.ArchivClient"
-		]
-	},
-	"depends": {
-		"fabricloader": ">=0.19.2",
-		"minecraft": "~1.21.10",
-		"java": ">=21",
-		"fabric-api": "*"
-	}
+  "schemaVersion": 1,
+  "id": "archiv",
+  "version": "${version}",
+  "name": "Archiv",
+  "description": "A visual asset library for Minecraft Builders",
+  "authors": [
+    "Nushi"
+  ],
+  "contact": {
+    "sources": "https://github.com/NushiBerry/nushi-archiv"
+  },
+  "license": "CC0-1.0",
+  "icon": "assets/archiv/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.nushi.archiv.Archiv"
+    ],
+    "client": [
+      "com.nushi.archiv.client.ArchivClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.2",
+    "minecraft": "~1.21.10",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
 }

@@ -1,5 +1,7 @@
 package com.nushi.archiv.client.screen;
 
+
+import com.nushi.archiv.client.preview.*;
 import com.nushi.archiv.client.inspect.ArchivStructureDataReader;
 import com.nushi.archiv.client.inspect.ArchivStructureDataSummary;
 import com.nushi.archiv.client.inspect.ArchivStructureDataCache;
@@ -12,9 +14,6 @@ import com.nushi.archiv.client.inspect.ArchivStructureVoxelSnapshot;
 
 import java.util.HashMap;
 import java.util.Map;
-
-import com.nushi.archiv.client.preview.ArchivPreviewResolver;
-import com.nushi.archiv.client.preview.ArchivPreviewResult;
 
 import com.nushi.archiv.client.model.ArchivAsset;
 import com.nushi.archiv.client.storage.ArchivLocalLibrary;
@@ -33,7 +32,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.Util;
 
 import com.mojang.blaze3d.platform.NativeImage;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
@@ -95,6 +93,7 @@ public class ArchivScreen extends Screen {
     private ArchivLibraryStateStore libraryStateStore;
     private ArchivWorldEditBridge worldEditBridge;
     private ArchivPreviewResolver previewResolver;
+    private ArchivGeneratedPreviewQueue previewQueue;
     private final ArchivAssetFileInspector assetFileInspector = new ArchivAssetFileInspector();
     private ArchivAssetFileInspection importStructureInspection = ArchivAssetFileInspection.empty();
     private final ArchivStructureDataReader structureDataReader = new ArchivStructureDataReader();
@@ -214,6 +213,7 @@ public class ArchivScreen extends Screen {
 
     private boolean listMenuOpen = false;
     private String listMenuAssetName = null;
+    private String pendingPreviewAssetName = null;
 
     private boolean collectionPickerOpen = false;
     private String pendingCollectionAssetName = null;
@@ -230,6 +230,8 @@ public class ArchivScreen extends Screen {
     private String mockPreviewImageRatio = "16:9";
     private Path importSelectedPreviewSourcePath = null;
     private final Map<String, CachedPreviewTexture> previewTextureCache = new HashMap<>();
+    private int lastRenderMouseX = 0;
+    private int lastRenderMouseY = 0;
     private volatile boolean importFilePickerRunning = false;
     private volatile ImportPickerResult pendingImportPickerResult = null;
 
@@ -1203,7 +1205,7 @@ public class ArchivScreen extends Screen {
 
     @Override
     public void removed() {
-        clearPreviewTextureCache();
+        if (previewQueue != null) previewQueue.shutdown();
         super.removed();
     }
 
@@ -1802,6 +1804,9 @@ public class ArchivScreen extends Screen {
         }
 
         if (result.selectedPath == null) {
+            if ("assetPreview".equals(result.target)) {
+                pendingPreviewAssetName = null;
+            }
             return;
         }
 
@@ -1812,6 +1817,13 @@ public class ArchivScreen extends Screen {
 
         if ("preview".equals(result.target)) {
             applyImportPreviewImage(result.selectedPath);
+            return;
+        }
+
+        if ("assetPreview".equals(result.target)) {
+            String assetName = pendingPreviewAssetName;
+            pendingPreviewAssetName = null;
+            applyAssetPreviewImage(assetName, result.selectedPath);
         }
     }
 
@@ -1853,7 +1865,7 @@ public class ArchivScreen extends Screen {
         String fileName = selectedPath.getFileName().toString();
         String extension = getFileExtension(fileName).toLowerCase(Locale.ROOT);
 
-        if (!extension.equals(".png") && !extension.equals(".jpg") && !extension.equals(".jpeg")) {
+        if (!isSupportedPreviewImageExtension(extension)) {
             libraryActionMessage = "Unsupported preview image: " + extension;
             return false;
         }
@@ -1868,6 +1880,203 @@ public class ArchivScreen extends Screen {
         selectedImportStep = Math.max(selectedImportStep, 3);
         libraryActionMessage = "Selected preview image: " + fileName;
         return true;
+    }
+
+    private boolean isSupportedPreviewImageExtension(String extension) {
+        String clean = trimToEmpty(extension).toLowerCase(Locale.ROOT);
+        return ".png".equals(clean) || ".jpg".equals(clean) || ".jpeg".equals(clean);
+    }
+
+    private String buildCustomPreviewFileName(ArchivAsset asset, String extension) {
+        String cleanExtension = trimToEmpty(extension).toLowerCase(Locale.ROOT);
+        if (cleanExtension.isBlank()) {
+            cleanExtension = ".png";
+        }
+        if (!cleanExtension.startsWith(".")) {
+            cleanExtension = "." + cleanExtension;
+        }
+
+        String baseName = trimToEmpty(asset == null ? "" : asset.getStructureFileName());
+        if (baseName.isBlank()) {
+            baseName = trimToEmpty(asset == null ? "" : asset.getName());
+        }
+        if (baseName.isBlank()) {
+            baseName = "asset";
+        }
+
+        String existingExtension = getFileExtension(baseName);
+        if (!existingExtension.isBlank() && baseName.toLowerCase(Locale.ROOT).endsWith(existingExtension.toLowerCase(Locale.ROOT))) {
+            baseName = baseName.substring(0, baseName.length() - existingExtension.length());
+        }
+
+        return sanitizeImportFileName(baseName + "_custom_preview" + cleanExtension);
+    }
+
+    private ArchivAsset withPreviewImage(ArchivAsset asset, String previewName, String previewFormat, String previewRatio) {
+        if (asset == null) {
+            return null;
+        }
+
+        boolean hasPreview = !trimToEmpty(previewName).isBlank();
+
+        return new ArchivAsset(
+                asset.getName(),
+                asset.getMacroCategory(),
+                asset.getType(),
+                asset.getVersion(),
+                hasPreview ? MOCK_PREVIEW_IMAGE_COLOR : MOCK_NO_PREVIEW_IMAGE_COLOR,
+                asset.getChipColor(),
+                asset.getVariantCount(),
+                asset.isFavorite(),
+                asset.isHighlighted(),
+                asset.getAuthor(),
+                new ArrayList<>(asset.getTags()),
+                asset.getStructureFileName(),
+                asset.getStructureFileFormat(),
+                asset.getStructureFileSize(),
+                hasPreview ? trimToEmpty(previewName) : "",
+                hasPreview ? trimToEmpty(previewFormat) : "",
+                hasPreview ? trimToEmpty(previewRatio) : ""
+        );
+    }
+
+    private boolean replaceSavedAsset(ArchivAsset replacement) {
+        if (replacement == null) {
+            return false;
+        }
+
+        for (int i = 0; i < savedAssets.size(); i++) {
+            ArchivAsset current = savedAssets.get(i);
+            if (current.getName().equals(replacement.getName())) {
+                savedAssets.set(i, replacement);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void beginAssetPreviewSelection(ArchivAsset asset) {
+        if (!isSavedAsset(asset)) {
+            return;
+        }
+
+        closeListMenu();
+        pendingPreviewAssetName = asset.getName();
+        beginImportFileSelection(
+                "assetPreview",
+                "Select Custom Preview Image",
+                "Preview images",
+                ".png",
+                ".jpg",
+                ".jpeg"
+        );
+    }
+
+    private boolean applyAssetPreviewImage(String assetName, Path selectedPath) {
+        String cleanAssetName = trimToEmpty(assetName);
+        ArchivAsset asset = getSavedAssetByName(cleanAssetName);
+
+        if (asset == null) {
+            libraryActionMessage = "Asset not found for preview change";
+            return false;
+        }
+
+        if (selectedPath == null || !Files.isRegularFile(selectedPath)) {
+            libraryActionMessage = "Preview image not found";
+            return false;
+        }
+
+        String extension = getFileExtension(selectedPath.getFileName().toString()).toLowerCase(Locale.ROOT);
+        if (!isSupportedPreviewImageExtension(extension)) {
+            libraryActionMessage = "Unsupported preview image: " + extension;
+            return false;
+        }
+
+        ArchivLocalLibrary library = getLocalLibrary();
+        if (library == null) {
+            libraryActionMessage = "Local library unavailable";
+            return false;
+        }
+
+        try {
+            library.ensureDirectories();
+
+            Path targetPath = getUniqueImportTargetPath(
+                    library.getPreviewsDirectory(),
+                    buildCustomPreviewFileName(asset, extension)
+            );
+
+            Path sourcePath = selectedPath.toAbsolutePath().normalize();
+            Path normalizedTargetPath = targetPath.toAbsolutePath().normalize();
+
+            if (!sourcePath.equals(normalizedTargetPath)) {
+                Files.copy(sourcePath, normalizedTargetPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            String previewName = normalizedTargetPath.getFileName().toString();
+            ArchivAsset updatedAsset = withPreviewImage(
+                    asset,
+                    previewName,
+                    getFileExtension(previewName),
+                    getImageRatio(normalizedTargetPath)
+            );
+
+            if (!replaceSavedAsset(updatedAsset)) {
+                libraryActionMessage = "Asset not found for preview change";
+                return false;
+            }
+
+            saveAssetMetadata(updatedAsset);
+            previewTextureCache.clear();
+            selectedLibraryAssetName = updatedAsset.getName();
+            libraryActionMessage = "Custom preview set: " + updatedAsset.getName();
+            return true;
+        } catch (IOException exception) {
+            libraryActionMessage = "Preview image copy failed";
+            return false;
+        }
+    }
+
+    private void deleteLocalPreviewImage(String previewImageName) {
+        String cleanName = trimToEmpty(previewImageName);
+        if (cleanName.isBlank()) {
+            return;
+        }
+
+        ArchivLocalLibrary library = getLocalLibrary();
+        if (library == null) {
+            return;
+        }
+
+        try {
+            Path previewsDirectory = library.getPreviewsDirectory().toAbsolutePath().normalize();
+            Path targetPath = previewsDirectory.resolve(cleanName).toAbsolutePath().normalize();
+            if (targetPath.startsWith(previewsDirectory)) {
+                Files.deleteIfExists(targetPath);
+            }
+        } catch (IOException ignored) {
+        }
+    }
+
+    private void resetAssetPreview(ArchivAsset asset) {
+        if (!isSavedAsset(asset)) {
+            return;
+        }
+
+        closeListMenu();
+        deleteLocalPreviewImage(asset.getPreviewImageName());
+
+        ArchivAsset updatedAsset = withPreviewImage(asset, "", "", "");
+        if (!replaceSavedAsset(updatedAsset)) {
+            libraryActionMessage = "Asset not found for preview reset";
+            return;
+        }
+
+        saveAssetMetadata(updatedAsset);
+        previewTextureCache.clear();
+        selectedLibraryAssetName = updatedAsset.getName();
+        libraryActionMessage = "Custom preview reset: " + updatedAsset.getName();
     }
 
     private String buildWindowsFileDialogFilter(String description, String... allowedExtensions) {
@@ -1925,7 +2134,12 @@ public class ArchivScreen extends Screen {
                 "Structure files",
                 ".schem",
                 ".schematic",
-                ".blueprint"
+                ".litematic",
+                ".bp",
+                ".blueprint",
+                ".bl",
+                ".nbt",
+                ".mcstructure"
         );
     }
 
@@ -2072,9 +2286,15 @@ public class ArchivScreen extends Screen {
     }
 
     private boolean isSupportedImportStructureExtension(String extension) {
-        return ".schem".equals(extension)
-                || ".schematic".equals(extension)
-                || ".blueprint".equals(extension);
+        String clean = trimToEmpty(extension).toLowerCase(Locale.ROOT);
+        return ".schem".equals(clean)
+                || ".schematic".equals(clean)
+                || ".litematic".equals(clean)
+                || ".bp".equals(clean)
+                || ".blueprint".equals(clean)
+                || ".bl".equals(clean)
+                || ".nbt".equals(clean)
+                || ".mcstructure".equals(clean);
     }
 
     private String getFileExtension(String fileName) {
@@ -2192,25 +2412,35 @@ public class ArchivScreen extends Screen {
         return getLocalPreviewImagePath(mockPreviewImageName);
     }
 
-    private Path getPreviewPathForAsset(ArchivAsset asset) {
+    private ArchivPreviewResult getPreviewResultForAsset(ArchivAsset asset) {
         if (asset == null) {
-            return null;
+            return ArchivPreviewResult.placeholder("No asset");
         }
 
         ArchivPreviewResolver resolver = getPreviewResolver();
 
-        if (resolver == null) {
-            return getLocalPreviewImagePath(asset.getPreviewImageName());
+        if (resolver != null) {
+            ArchivPreviewResult result = resolver.resolve(asset);
+
+            if (result != null) {
+                return result;
+            }
         }
 
-        ArchivPreviewResult result = resolver.resolve(asset);
-
-        if (result != null && result.hasImage()) {
-            return result.getImagePath();
+        Path manualPath = getLocalPreviewImagePath(asset.getPreviewImageName());
+        if (manualPath != null && Files.isRegularFile(manualPath)) {
+            return ArchivPreviewResult.image(ArchivPreviewSource.MANUAL_IMAGE, manualPath);
         }
 
-        return null;
+        return ArchivPreviewResult.placeholder("PREVIEW");
     }
+
+    private Path getPreviewPathForAsset(ArchivAsset asset) {
+        ArchivPreviewResult result = getPreviewResultForAsset(asset);
+        return result != null && result.hasImage() ? result.getImagePath() : null;
+    }
+
+
 
     private Path getLocalPreviewImagePath(String previewImageName) {
         String cleanName = trimToEmpty(previewImageName);
@@ -2249,6 +2479,20 @@ public class ArchivScreen extends Screen {
             int fallbackColor,
             String fallbackLabel
     ) {
+        drawPreviewImage(guiGraphics, imagePath, null, x, y, width, height, fallbackColor, fallbackLabel);
+    }
+
+    private void drawPreviewImage(
+            GuiGraphics guiGraphics,
+            Path imagePath,
+            ArchivPreviewSource previewSource,
+            int x,
+            int y,
+            int width,
+            int height,
+            int fallbackColor,
+            String fallbackLabel
+    ) {
         CachedPreviewTexture previewTexture = getOrLoadPreviewTexture(imagePath);
 
         if (previewTexture == null) {
@@ -2258,15 +2502,36 @@ public class ArchivScreen extends Screen {
 
         guiGraphics.fill(x, y, x + width, y + height, COLOR_PREVIEW_BG);
 
-        float scale = Math.min(
-                width / (float) previewTexture.imageWidth,
-                height / (float) previewTexture.imageHeight
-        );
+        float imageWidth = previewTexture.imageWidth;
+        float imageHeight = previewTexture.imageHeight;
+        ArchivPreviewSource source = previewSource == null ? ArchivPreviewSource.PLACEHOLDER : previewSource;
 
-        int drawW = Math.max(1, Math.round(previewTexture.imageWidth * scale));
-        int drawH = Math.max(1, Math.round(previewTexture.imageHeight * scale));
+        // User-selected images are screenshots most of the time, so they should behave like
+        // thumbnails: cover the available preview area and crop softly if needed.
+        // Embedded/generated previews stay contained so structures are not accidentally cut off.
+        boolean coverPreviewArea = source == ArchivPreviewSource.MANUAL_IMAGE;
+        float fitScale = coverPreviewArea
+                ? Math.max(width / imageWidth, height / imageHeight)
+                : Math.min(width / imageWidth, height / imageHeight);
+
+        float paddingScale = switch (source) {
+            case MANUAL_IMAGE -> 1.0F;
+            case EMBEDDED_PREVIEW -> 1.06F;
+            case GENERATED_PREVIEW -> 0.92F;
+            default -> 0.94F;
+        };
+
+        fitScale *= paddingScale;
+
+        int drawW = Math.max(1, Math.round(imageWidth * fitScale));
+        int drawH = Math.max(1, Math.round(imageHeight * fitScale));
         int drawX = x + (width - drawW) / 2;
         int drawY = y + (height - drawH) / 2;
+
+        boolean needsClip = drawX < x || drawY < y || drawX + drawW > x + width || drawY + drawH > y + height;
+        if (needsClip) {
+            guiGraphics.enableScissor(x, y, x + width, y + height);
+        }
 
         guiGraphics.blit(
                 RenderPipelines.GUI_TEXTURED,
@@ -2282,6 +2547,11 @@ public class ArchivScreen extends Screen {
                 previewTexture.imageWidth,
                 previewTexture.imageHeight
         );
+
+        if (needsClip) {
+            guiGraphics.disableScissor();
+        }
+
     }
 
     private boolean drawPreviewImage(
@@ -2372,12 +2642,13 @@ public class ArchivScreen extends Screen {
                 return null;
             }
 
-            BufferedImage scaled = scalePreviewImageForTexture(source, 512);
+            BufferedImage scaled = preparePreviewImageForTexture(source, imagePath, 1024);
             NativeImage nativeImage = new NativeImage(scaled.getWidth(), scaled.getHeight(), true);
 
             for (int py = 0; py < scaled.getHeight(); py++) {
+                int sourceY = py;
                 for (int px = 0; px < scaled.getWidth(); px++) {
-                    nativeImage.setPixel(px, py, toNativeImageColor(scaled.getRGB(px, py)));
+                    nativeImage.setPixel(px, py, toNativeImageColor(scaled.getRGB(px, sourceY)));
                 }
             }
 
@@ -2401,6 +2672,75 @@ public class ArchivScreen extends Screen {
         }
     }
 
+    private BufferedImage preparePreviewImageForTexture(BufferedImage source, Path imagePath, int maxDimension) {
+        BufferedImage normalized = cropLikelyBloxelizerBanner(source, imagePath);
+        return scalePreviewImageForTexture(normalized, maxDimension);
+    }
+
+    private BufferedImage cropLikelyBloxelizerBanner(BufferedImage source, Path imagePath) {
+        int width = source.getWidth();
+        int height = source.getHeight();
+
+        if (width < 72 || height < 72) {
+            return source;
+        }
+
+        if (Math.abs(width - height) > Math.max(6, Math.round(width * 0.10F))) {
+            return source;
+        }
+
+        int bannerHeight = Math.max(12, Math.min(24, Math.round(height * 0.20F)));
+        int sampleStartX = Math.round(width * 0.22F);
+        int sampleEndX = Math.round(width * 0.78F);
+
+        long darkPixels = 0L;
+        long brightPixels = 0L;
+        long totalPixels = 0L;
+
+        for (int y = 0; y < bannerHeight; y++) {
+            for (int x = sampleStartX; x < sampleEndX; x++) {
+                int argb = source.getRGB(x, y);
+                int alpha = (argb >>> 24) & 0xFF;
+                if (alpha < 16) {
+                    continue;
+                }
+
+                int red = (argb >> 16) & 0xFF;
+                int green = (argb >> 8) & 0xFF;
+                int blue = argb & 0xFF;
+                int luminance = (red * 212 + green * 715 + blue * 72) / 1000;
+
+                if (luminance <= 52) {
+                    darkPixels++;
+                }
+                if (luminance >= 200) {
+                    brightPixels++;
+                }
+
+                totalPixels++;
+            }
+        }
+
+        if (totalPixels <= 0) {
+            return source;
+        }
+
+        double darkRatio = darkPixels / (double) totalPixels;
+        double brightRatio = brightPixels / (double) totalPixels;
+
+        if (darkRatio < 0.68D || brightRatio < 0.01D) {
+            return source;
+        }
+
+        int cropTop = Math.min(height - 8, bannerHeight + 2);
+        BufferedImage cropped = new BufferedImage(width, height - cropTop, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = cropped.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        graphics.drawImage(source, 0, 0, width, height - cropTop, 0, cropTop, width, height, null);
+        graphics.dispose();
+        return cropped;
+    }
+
     private BufferedImage scalePreviewImageForTexture(BufferedImage source, int maxDimension) {
         int sourceW = source.getWidth();
         int sourceH = source.getHeight();
@@ -2421,15 +2761,35 @@ public class ArchivScreen extends Screen {
         int targetW = Math.max(1, Math.round(sourceW * scale));
         int targetH = Math.max(1, Math.round(sourceH * scale));
 
-        BufferedImage scaled = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D graphics = scaled.createGraphics();
-        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-        graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        graphics.drawImage(source, 0, 0, targetW, targetH, null);
-        graphics.dispose();
+        BufferedImage current = source;
+        int currentW = sourceW;
+        int currentH = sourceH;
 
-        return scaled;
+        while (currentW / 2 >= targetW && currentH / 2 >= targetH) {
+            currentW = Math.max(targetW, currentW / 2);
+            currentH = Math.max(targetH, currentH / 2);
+            BufferedImage step = new BufferedImage(currentW, currentH, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D graphics = step.createGraphics();
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            graphics.drawImage(current, 0, 0, currentW, currentH, null);
+            graphics.dispose();
+            current = step;
+        }
+
+        if (current.getWidth() != targetW || current.getHeight() != targetH) {
+            BufferedImage scaled = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D graphics = scaled.createGraphics();
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            graphics.drawImage(current, 0, 0, targetW, targetH, null);
+            graphics.dispose();
+            current = scaled;
+        }
+
+        return current;
     }
 
     private int toNativeImageColor(int argb) {
@@ -2918,13 +3278,13 @@ public class ArchivScreen extends Screen {
         layout.cardsAreaY = toolbarY + 78 - scrollOffset;
         layout.cardsAreaW = contentW - (innerPadding * 2) - scrollbarReserve;
 
-        layout.cardsGap = 14;
-        layout.rowGap = 16;
+        layout.cardsGap = 12;
+        layout.rowGap = 12;
         layout.columns = 3;
         layout.rows = Math.max(1, (Math.max(assetCount, 1) + layout.columns - 1) / layout.columns);
 
         layout.cardW = (layout.cardsAreaW - (layout.cardsGap * (layout.columns - 1))) / layout.columns;
-        layout.cardH = 150;
+        layout.cardH = 164;
         layout.cardsAreaH = (layout.cardH * layout.rows) + (layout.rowGap * (layout.rows - 1));
 
         return layout;
@@ -2940,8 +3300,8 @@ public class ArchivScreen extends Screen {
         layout.listX = contentX + innerPadding;
         layout.listY = toolbarY + 78 - scrollOffset;
         layout.listW = contentW - (innerPadding * 2) - scrollbarReserve;
-        layout.rowH = 68;
-        layout.rowGap = 8;
+        layout.rowH = 60;
+        layout.rowGap = 6;
 
         return layout;
     }
@@ -2957,22 +3317,22 @@ public class ArchivScreen extends Screen {
     private BrowseListRowLayout buildBrowseListRowLayout(int x, int y, int width, int height) {
         BrowseListRowLayout layout = new BrowseListRowLayout();
 
-        int padding = 10;
+        int padding = 8;
         int rightPadding = 18;
         int menuDotsReserve = 18;
         int gapBetweenButtons = 8;
 
-        // preview
-        layout.previewW = 84;
-        layout.previewH = 42;
+        // Preview thumbnail: fills almost the whole list row without crossing the card border.
+        layout.previewW = 132;
+        layout.previewH = Math.min(height - 4, Math.max(50, height - 4));
         layout.previewX = x + padding;
-        layout.previewY = y + (height - layout.previewH) / 2;
+        layout.previewY = y + 2;
 
         // infos
         layout.infoX = layout.previewX + layout.previewW + 14;
-        layout.titleY = y + 14;
-        layout.versionY = y + 28;
-        layout.dotsY = y + 42;
+        layout.titleY = y + 9;
+        layout.versionY = y + 23;
+        layout.dotsY = y + 38;
 
         // botões na direita, com folga da borda
         layout.loadW = 70;
@@ -2992,17 +3352,17 @@ public class ArchivScreen extends Screen {
         // estrela entre badge e divisória
         layout.favoriteBoxSize = 16;
         layout.favoriteX = layout.dividerX - 24;
-        layout.favoriteY = y + 12;
+        layout.favoriteY = y + 8;
 
         // badge mais em cima
         layout.chipH = 18;
-        layout.chipY = y + 10;
+        layout.chipY = y + 6;
 
         layout.menuDotsX = x + width - 18;
         layout.menuDotsY = y + (height / 2) - 6;
 
         layout.menuW = 156;
-        layout.menuH = 66;
+        layout.menuH = 110;
         layout.menuX = x + width - layout.menuW - 28;
         layout.menuY = y + 8;
 
@@ -3025,13 +3385,13 @@ public class ArchivScreen extends Screen {
         layout.cardsAreaY = importedTitleY + 18;
         layout.cardsAreaW = contentW - (innerPadding * 2) - scrollbarReserve;
 
-        layout.cardsGap = 14;
-        layout.rowGap = 16;
+        layout.cardsGap = 12;
+        layout.rowGap = 12;
         layout.columns = 3;
         layout.rows = Math.max(1, (Math.max(assetCount, 1) + layout.columns - 1) / layout.columns);
 
         layout.cardW = (layout.cardsAreaW - (layout.cardsGap * (layout.columns - 1))) / layout.columns;
-        layout.cardH = 150;
+        layout.cardH = 164;
         layout.cardsAreaH = (layout.cardH * layout.rows) + (layout.rowGap * (layout.rows - 1));
 
         return layout;
@@ -3106,9 +3466,9 @@ public class ArchivScreen extends Screen {
         layout.previewY = y + 1;
         layout.previewW = width - 2;
 
-        int minPreviewHeight = 72;
-        int minBodyHeight = 56;
-        int preferredPreviewHeight = (int) (height * 0.55);
+        int minPreviewHeight = 106;
+        int minBodyHeight = 50;
+        int preferredPreviewHeight = (int) (height * 0.66);
 
         layout.previewH = Math.min(
                 Math.max(minPreviewHeight, preferredPreviewHeight),
@@ -3124,8 +3484,8 @@ public class ArchivScreen extends Screen {
         layout.overlayW = width - 60;
 
         int overlayGap = 6;
-        int loadH = 24;
-        int detailsH = 22;
+        int loadH = 22;
+        int detailsH = 20;
         int totalOverlayH = loadH + overlayGap + detailsH;
 
         int overlayStartY = layout.previewY + Math.max(8, (layout.previewH - totalOverlayH) / 2);
@@ -3140,12 +3500,13 @@ public class ArchivScreen extends Screen {
         layout.menuDotsY = y + 8;
 
         layout.menuW = 156;
-        layout.menuH = 66;
+        layout.menuH = 110;
         layout.menuX = x + 8;
         layout.menuY = y + 24;
 
         return layout;
     }
+
 
     private AssetDetailsModalLayout buildAssetDetailsModalLayout(ArchivAsset asset) {
         AssetDetailsModalLayout layout = new AssetDetailsModalLayout();
@@ -4305,6 +4666,29 @@ public class ArchivScreen extends Screen {
         return localLibrary;
     }
 
+    private void drawAssetPreview(
+            GuiGraphics guiGraphics,
+            ArchivAsset asset,
+            int x, int y, int width, int height,
+            int fallbackColor, String fallbackLabel
+    ) {
+        ArchivPreviewResult previewResult = getPreviewResultForAsset(asset);
+        Path imagePath = previewResult != null && previewResult.hasImage() ? previewResult.getImagePath() : null;
+        ArchivPreviewSource previewSource = previewResult != null ? previewResult.getSource() : ArchivPreviewSource.PLACEHOLDER;
+        String label = imagePath == null && previewResult != null && !trimToEmpty(previewResult.getMessage()).isBlank()
+                ? previewResult.getMessage()
+                : fallbackLabel;
+
+        drawPreviewImage(
+                guiGraphics,
+                imagePath,
+                previewSource,
+                x, y, width, height,
+                fallbackColor, label
+        );
+    }
+
+
     private ArchivPreviewResolver getPreviewResolver() {
         ArchivLocalLibrary library = getLocalLibrary();
 
@@ -4313,7 +4697,9 @@ public class ArchivScreen extends Screen {
         }
 
         if (previewResolver == null) {
-            previewResolver = new ArchivPreviewResolver(library);
+            ArchivGeneratedPreviewGenerator generator = new ArchivGeneratedPreviewGenerator(library);
+            previewQueue = new ArchivGeneratedPreviewQueue(generator);
+            previewResolver = new ArchivPreviewResolver(library, previewQueue);
         }
 
         return previewResolver;
@@ -5490,7 +5876,7 @@ public class ArchivScreen extends Screen {
     }
 
     private int getAssetCollectionRollupY(int menuY) {
-        return menuY + 22;
+        return menuY + (22 * 2);
     }
 
     private boolean isHoveringAddToCollectionRow(double mouseX, double mouseY, int menuX, int menuY, int menuW) {
@@ -5522,10 +5908,6 @@ public class ArchivScreen extends Screen {
 
         if (isInside(mouseX, mouseY, menuX, menuY, menuW, itemH)) {
             openEditAssetModal(asset);
-            return true;
-        }
-
-        if (isInside(mouseX, mouseY, menuX, menuY + itemH, menuW, itemH)) {
             return true;
         }
 
@@ -5920,6 +6302,8 @@ public class ArchivScreen extends Screen {
                     loadAsset(asset);
                     return true;
                 }
+
+
             }
 
             return true;
@@ -6028,6 +6412,10 @@ public class ArchivScreen extends Screen {
             }
 
             if (handleEditAssetDropdownClick(mouseX, mouseY, modal)) {
+                return true;
+            }
+
+            if (handleEditPreviewActionClick(mouseX, mouseY, modal, asset)) {
                 return true;
             }
 
@@ -7089,6 +7477,9 @@ public class ArchivScreen extends Screen {
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float delta) {
+        this.lastRenderMouseX = mouseX;
+        this.lastRenderMouseY = mouseY;
+
         guiGraphics.fill(0, 0, this.width, this.height, COLOR_BACKGROUND);
 
         ScreenChromeLayout chrome = buildChromeLayout();
@@ -7620,15 +8011,98 @@ public class ArchivScreen extends Screen {
         return String.join(", ", asset.getTags());
     }
 
+    private int getEditPreviewActionButtonW(EditAssetModalLayout modal) {
+        return Math.min(104, Math.max(74, (modal.previewW - 30) / 2));
+    }
+
+    private int getEditPreviewActionButtonH() {
+        return 22;
+    }
+
+    private int getEditPreviewChangeX(EditAssetModalLayout modal) {
+        int buttonW = getEditPreviewActionButtonW(modal);
+        return modal.previewX + (modal.previewW - (buttonW * 2) - 8) / 2;
+    }
+
+    private int getEditPreviewResetX(EditAssetModalLayout modal) {
+        return getEditPreviewChangeX(modal) + getEditPreviewActionButtonW(modal) + 8;
+    }
+
+    private int getEditPreviewActionY(EditAssetModalLayout modal) {
+        return modal.previewY + (modal.previewH - getEditPreviewActionButtonH()) / 2;
+    }
+
+    private boolean isInsideEditPreviewChangeButton(double mouseX, double mouseY, EditAssetModalLayout modal) {
+        return isInside(
+                mouseX,
+                mouseY,
+                getEditPreviewChangeX(modal),
+                getEditPreviewActionY(modal),
+                getEditPreviewActionButtonW(modal),
+                getEditPreviewActionButtonH()
+        );
+    }
+
+    private boolean isInsideEditPreviewResetButton(double mouseX, double mouseY, EditAssetModalLayout modal) {
+        return isInside(
+                mouseX,
+                mouseY,
+                getEditPreviewResetX(modal),
+                getEditPreviewActionY(modal),
+                getEditPreviewActionButtonW(modal),
+                getEditPreviewActionButtonH()
+        );
+    }
+
+    private boolean handleEditPreviewActionClick(double mouseX, double mouseY, EditAssetModalLayout modal, ArchivAsset asset) {
+        if (asset == null || !isInside(mouseX, mouseY, modal.previewX, modal.previewY, modal.previewW, modal.previewH)) {
+            return false;
+        }
+
+        editAssetDropdownOpen = null;
+
+        if (isInsideEditPreviewChangeButton(mouseX, mouseY, modal)) {
+            beginAssetPreviewSelection(asset);
+            return true;
+        }
+
+        if (isInsideEditPreviewResetButton(mouseX, mouseY, modal)) {
+            resetAssetPreview(asset);
+            return true;
+        }
+
+        return true;
+    }
+
+    private void drawEditPreviewHoverActions(GuiGraphics guiGraphics, EditAssetModalLayout modal, ArchivAsset asset) {
+        if (asset == null || !isInside(lastRenderMouseX, lastRenderMouseY, modal.previewX, modal.previewY, modal.previewW, modal.previewH)) {
+            return;
+        }
+
+        guiGraphics.fill(modal.previewX, modal.previewY, modal.previewX + modal.previewW, modal.previewY + modal.previewH, 0x99000000);
+
+        int buttonW = getEditPreviewActionButtonW(modal);
+        int buttonH = getEditPreviewActionButtonH();
+        int buttonY = getEditPreviewActionY(modal);
+        int changeX = getEditPreviewChangeX(modal);
+        int resetX = getEditPreviewResetX(modal);
+
+        boolean changeHovered = isInsideEditPreviewChangeButton(lastRenderMouseX, lastRenderMouseY, modal);
+        boolean resetHovered = isInsideEditPreviewResetButton(lastRenderMouseX, lastRenderMouseY, modal);
+
+        drawButtonBox(guiGraphics, "Change", changeX, buttonY, buttonW, buttonH, changeHovered);
+        drawButtonBoxState(guiGraphics, "Reset", resetX, buttonY, buttonW, buttonH, resetHovered, !trimToEmpty(asset.getPreviewImageName()).isBlank());
+    }
+
     private void drawEditPreviewPanel(GuiGraphics guiGraphics, EditAssetModalLayout modal, ArchivAsset asset) {
         drawPanel(guiGraphics, modal.previewPanelX, modal.previewPanelY, modal.previewPanelW, modal.previewPanelH, COLOR_PANEL, COLOR_BORDER);
         guiGraphics.drawString(this.font, "◉ PREVIEW", modal.previewPanelX + 12, modal.previewPanelY + 12, COLOR_BORDER_ACTIVE);
 
         int previewColor = asset == null ? MOCK_NO_PREVIEW_IMAGE_COLOR : asset.getPreviewColor();
         drawPanel(guiGraphics, modal.previewX - 1, modal.previewY - 1, modal.previewW + 2, modal.previewH + 2, COLOR_ROOT, COLOR_BORDER);
-        drawPreviewImage(
+        drawAssetPreview(
                 guiGraphics,
-                asset == null ? null : getPreviewPathForAsset(asset),
+                asset,
                 modal.previewX,
                 modal.previewY,
                 modal.previewW,
@@ -7636,6 +8110,7 @@ public class ArchivScreen extends Screen {
                 previewColor,
                 "PREVIEW"
         );
+        drawEditPreviewHoverActions(guiGraphics, modal, asset);
 
         int metaY = modal.previewY + modal.previewH + 10;
         String type = getSafeOption(assetTypes, editAssetSelectedType);
@@ -7723,7 +8198,7 @@ public class ArchivScreen extends Screen {
 
         drawPanel(guiGraphics, modal.variantsBoxX, modal.variantsBoxY, modal.variantsBoxW, modal.variantsBoxH, 0xDD0F1B2D, COLOR_BORDER);
         drawEditSectionHeader(guiGraphics, "2", "VARIANTS (" + editAssetVariantCount + " VARIANTS)", modal.variantsBoxX + 12, modal.variantsBoxY + 12, modal.variantsBoxW - 24);
-        drawClippedString(guiGraphics, "Later: link assets or add .schem / .schematic / .blueprint files.",
+        drawClippedString(guiGraphics, "Later: link assets or add .schem / .litematic / .bp files.",
                 modal.variantsBoxX + 12, modal.variantsBoxY + 31, modal.variantsBoxW - 24, COLOR_TEXT_DIM);
 
         int rowCount = Math.min(editAssetVariantCount, 2);
@@ -7796,9 +8271,9 @@ public class ArchivScreen extends Screen {
         guiGraphics.drawString(this.font, "X", modal.closeX + 6, modal.closeY + 6, COLOR_TEXT);
 
         drawPanel(guiGraphics, modal.previewX - 1, modal.previewY - 1, modal.previewW + 2, modal.previewH + 2, COLOR_PANEL, COLOR_BORDER);
-        drawPreviewImage(
+        drawAssetPreview(
                 guiGraphics,
-                getPreviewPathForAsset(asset),
+                asset,
                 modal.previewX,
                 modal.previewY,
                 modal.previewW,
@@ -7847,6 +8322,7 @@ public class ArchivScreen extends Screen {
         drawClippedString(guiGraphics, getAssetTagsLabel(asset), infoX + 260, infoGridY + 36, 120, valueColor);
 
         guiGraphics.fill(modal.panelX + 16, modal.closeButtonY - 12, modal.panelX + modal.panelW - 16, modal.closeButtonY - 11, COLOR_BORDER);
+
 
         drawButtonBox(guiGraphics, "Close", modal.closeButtonX, modal.closeButtonY, modal.closeButtonW, modal.closeButtonH, false);
         drawButtonBox(guiGraphics, loaded ? "Loaded" : "Load", modal.loadButtonX, modal.loadButtonY, modal.loadButtonW, modal.loadButtonH, true);
@@ -8187,23 +8663,18 @@ public class ArchivScreen extends Screen {
         if (editHovered) {
             guiGraphics.fill(x + 1, y + 1, x + width - 1, y + itemH, 0xFF25364F);
         }
-
         guiGraphics.drawString(this.font, "Edit Asset", x + 10, y + 7, COLOR_TEXT);
-
         guiGraphics.fill(x + 1, y + itemH, x + width - 1, y + itemH + 1, COLOR_BORDER);
 
         if (addHovered || showRollup) {
             guiGraphics.fill(x + 1, y + itemH + 1, x + width - 1, y + (itemH * 2) - 1, 0xFF25364F);
         }
-
         guiGraphics.drawString(this.font, "Add to Collection  >", x + 10, y + itemH + 7, COLOR_TEXT);
-
         guiGraphics.fill(x + 1, y + (itemH * 2), x + width - 1, y + (itemH * 2) + 1, COLOR_BORDER);
 
         if (deleteHovered) {
             guiGraphics.fill(x + 1, y + (itemH * 2) + 1, x + width - 1, y + height - 1, 0xFF25364F);
         }
-
         guiGraphics.drawString(this.font, "Delete Asset", x + 10, y + (itemH * 2) + 7, 0xFFFFD7DE);
 
         if (!showRollup) {
@@ -8275,9 +8746,9 @@ public class ArchivScreen extends Screen {
         drawPanel(guiGraphics, x, y, width, height, COLOR_PANEL, COLOR_BORDER);
 
         int bannerH = 34;
-        drawPreviewImage(
+        drawAssetPreview(
                 guiGraphics,
-                getPreviewPathForAsset(asset),
+                asset,
                 x + 1,
                 y + 1,
                 width - 2,
@@ -8642,7 +9113,7 @@ public class ArchivScreen extends Screen {
         return switch (selectedImportStep) {
             case 1 -> mockStructureFileSelected
                     ? "Step 1 - Structure file selected. You can replace it if needed."
-                    : "Step 1 - Choose a .schem or .schematic file.";
+                    : "Step 1 - Choose a structure file.";
             case 2 -> mockPreviewImageSelected
                     ? "Step 2 - Preview image selected. You can replace it if needed."
                     : "Step 2 - Add an optional preview image for the asset.";
@@ -9171,8 +9642,8 @@ public class ArchivScreen extends Screen {
 
                 drawButtonBox(guiGraphics, "Replace File", replaceButtonX, replaceButtonY, replaceButtonW, replaceButtonH, false);
             } else {
-                guiGraphics.drawString(this.font, "Drop .schem / .schematic here", structureX + 45, boxMainTextY, COLOR_TEXT);
-                guiGraphics.drawString(this.font, "Supports .schem and .schematic files", structureX + 26, boxSubTextY, COLOR_TEXT_DIM);
+                guiGraphics.drawString(this.font, "Drop .schem / .litematic / .bp here", structureX + 45, boxMainTextY, COLOR_TEXT);
+                guiGraphics.drawString(this.font, "Supports .schem, .schematic, .litematic, .bp", structureX + 26, boxSubTextY, COLOR_TEXT_DIM);
                 drawButtonBox(guiGraphics, "Browse File", structureX + (structureW / 2) - 60, boxButtonY, 120, 28, false);
             }
         }
@@ -9358,9 +9829,9 @@ int previewInfoY = previewImageY + previewImageH + 14;
         }
         AssetCardLayout layout = buildAssetCardLayout(x, y, width, height);
 
-        drawPreviewImage(
+        drawAssetPreview(
                 guiGraphics,
-                getPreviewPathForAsset(asset),
+                asset,
                 layout.previewX,
                 layout.previewY,
                 layout.previewW,
@@ -9381,8 +9852,8 @@ int previewInfoY = previewImageY + previewImageH + 14;
             guiGraphics.drawString(this.font, "Details", x + (width / 2) - 18, layout.detailsY + 7, 0xFFE5EEF8);
         }
 
-        int infoY = y + layout.previewH + 12;
-        int versionY = infoY + 14;
+        int infoY = y + layout.previewH + 8;
+        int versionY = infoY + 13;
         int dotsY = y + height - 16;
 
         guiGraphics.drawString(this.font, asset.getName(), x + 12, infoY, COLOR_TEXT);
@@ -9439,9 +9910,9 @@ int previewInfoY = previewImageY + previewImageH + 14;
         BrowseListRowLayout layout = buildBrowseListRowLayout(x, y, width, height);
 
         // preview
-        drawPreviewImage(
+        drawAssetPreview(
                 guiGraphics,
-                getPreviewPathForAsset(asset),
+                asset,
                 layout.previewX,
                 layout.previewY,
                 layout.previewW,
@@ -9452,7 +9923,11 @@ int previewInfoY = previewImageY + previewImageH + 14;
 
         // nome + metadado
         guiGraphics.drawString(this.font, asset.getName(), layout.infoX, layout.titleY, COLOR_TEXT);
-        String metaText = ".schem  •  " + asset.getVersion();
+        String structureFormat = trimToEmpty(asset.getStructureFileFormat());
+        if (structureFormat.isBlank()) {
+            structureFormat = getFileExtension(asset.getStructureFileName());
+        }
+        String metaText = trimToEmpty(structureFormat) + "  •  " + asset.getVersion();
         guiGraphics.drawString(this.font, metaText, layout.infoX, layout.versionY, COLOR_TEXT_DIM);
 
         if (loaded) {
@@ -9497,9 +9972,9 @@ int previewInfoY = previewImageY + previewImageH + 14;
         // divisória
         guiGraphics.fill(
                 layout.dividerX,
-                y + 10,
+                y + 8,
                 layout.dividerX + 1,
-                y + height - 10,
+                y + height - 8,
                 COLOR_BORDER
         );
 
