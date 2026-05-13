@@ -120,13 +120,21 @@ public class ArchivIsometricRenderer {
 
         g.dispose();
 
-        // Composite onto final output with solid background
+        // Composite onto a transparent final output. This keeps generated .schem
+        // previews from carrying an ugly black rectangle around the structure;
+        // the card/list preview background is drawn by ArchivScreen instead.
         BufferedImage output = new BufferedImage(OUTPUT_WIDTH, OUTPUT_HEIGHT, BufferedImage.TYPE_INT_ARGB);
         Graphics2D out = output.createGraphics();
+        out.setComposite(AlphaComposite.Clear);
+        out.fillRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+        out.setComposite(AlphaComposite.SrcOver);
         out.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        out.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        out.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        // Scale canvas to fit, with 5% padding on all sides
-        double scale  = Math.min((double) OUTPUT_WIDTH / canvasW, (double) OUTPUT_HEIGHT / canvasH) * 0.90;
+        // Scale canvas to fit, with modest padding. Extra transparent margins are
+        // trimmed after compositing so the structure fills the preview better.
+        double scale  = Math.min((double) OUTPUT_WIDTH / canvasW, (double) OUTPUT_HEIGHT / canvasH) * 0.94;
         int drawW = Math.max(1, (int) Math.round(canvasW * scale));
         int drawH = Math.max(1, (int) Math.round(canvasH * scale));
         int drawX = (OUTPUT_WIDTH  - drawW) / 2;
@@ -135,10 +143,64 @@ public class ArchivIsometricRenderer {
         out.drawImage(canvas, drawX, drawY, drawW, drawH, null);
         out.dispose();
 
+        BufferedImage croppedOutput = cropTransparentMargins(output, 34);
+
         // IMPORTANT: do NOT call flipVertically here.
         // The math above already places ground at the bottom and the top of the
         // structure at the top of the image. Flipping it would invert everything.
-        return saveImage(output, outputPath);
+        return saveImage(croppedOutput, outputPath);
+    }
+
+    private BufferedImage cropTransparentMargins(BufferedImage source, int padding) {
+        if (source == null || source.getWidth() <= 0 || source.getHeight() <= 0) {
+            return source;
+        }
+
+        int width = source.getWidth();
+        int height = source.getHeight();
+        int minX = width;
+        int minY = height;
+        int maxX = -1;
+        int maxY = -1;
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int alpha = (source.getRGB(x, y) >>> 24) & 0xFF;
+                if (alpha <= 10) {
+                    continue;
+                }
+
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            }
+        }
+
+        if (maxX < minX || maxY < minY) {
+            return source;
+        }
+
+        int safePadding = Math.max(0, padding);
+        int cropX = Math.max(0, minX - safePadding);
+        int cropY = Math.max(0, minY - safePadding);
+        int cropRight = Math.min(width - 1, maxX + safePadding);
+        int cropBottom = Math.min(height - 1, maxY + safePadding);
+        int cropW = cropRight - cropX + 1;
+        int cropH = cropBottom - cropY + 1;
+
+        if (cropW >= width - 2 && cropH >= height - 2) {
+            return source;
+        }
+
+        BufferedImage cropped = new BufferedImage(cropW, cropH, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = cropped.createGraphics();
+        graphics.setComposite(AlphaComposite.Clear);
+        graphics.fillRect(0, 0, cropW, cropH);
+        graphics.setComposite(AlphaComposite.SrcOver);
+        graphics.drawImage(source, 0, 0, cropW, cropH, cropX, cropY, cropX + cropW, cropY + cropH, null);
+        graphics.dispose();
+        return cropped;
     }
 
     // =========================================================================

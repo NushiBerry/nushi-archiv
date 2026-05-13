@@ -36,6 +36,7 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 
+import java.awt.AlphaComposite;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
@@ -1221,7 +1222,7 @@ public class ArchivScreen extends Screen {
         BrowseToolbarLayout layout = new BrowseToolbarLayout();
 
         int innerPadding = 18;
-        int toolbarY = contentY + 14;
+        int toolbarY = contentY + 8;
         int gap = 12;
 
         int filterW = 120;
@@ -1272,7 +1273,7 @@ public class ArchivScreen extends Screen {
         // Compact chrome: the tabs now sit on the header baseline instead of
         // floating with a large vertical gap. This gives every tab more usable
         // body height without changing the content APIs used by the other tabs.
-        layout.headerH = 48;
+        layout.headerH = 42;
         layout.footerH = 24;
         layout.sidebarW = 180;
 
@@ -1287,7 +1288,7 @@ public class ArchivScreen extends Screen {
         layout.tabX = layout.rootX + 144;
         layout.tabW = 110;
         layout.myAssetsW = 120;
-        layout.tabH = 36;
+        layout.tabH = 34;
         layout.tabGap = 0;
         layout.tabY = layout.rootY + layout.headerH - layout.tabH;
 
@@ -1307,10 +1308,10 @@ public class ArchivScreen extends Screen {
     private ViewportLayout buildBrowseViewportLayout(ScreenChromeLayout chrome) {
         ViewportLayout layout = new ViewportLayout();
         int innerPadding = 18;
-        int toolbarY = chrome.contentY + 14;
+        int toolbarY = chrome.contentY + 8;
 
         layout.x = chrome.contentX + innerPadding;
-        layout.y = toolbarY + 78;
+        layout.y = toolbarY + 66;
         layout.w = chrome.contentW - (innerPadding * 2) - 16;
         layout.h = (chrome.contentY + chrome.contentH - 16) - layout.y;
 
@@ -2506,9 +2507,8 @@ public class ArchivScreen extends Screen {
         float imageHeight = previewTexture.imageHeight;
         ArchivPreviewSource source = previewSource == null ? ArchivPreviewSource.PLACEHOLDER : previewSource;
 
-        // User-selected images are screenshots most of the time, so they should behave like
-        // thumbnails: cover the available preview area and crop softly if needed.
-        // Embedded/generated previews stay contained so structures are not accidentally cut off.
+        // Keep high-resolution textures and let the card decide how they fit.
+        // Pre-compositing to the card size made previews look pixelated at GUI scale 2.
         boolean coverPreviewArea = source == ArchivPreviewSource.MANUAL_IMAGE;
         float fitScale = coverPreviewArea
                 ? Math.max(width / imageWidth, height / imageHeight)
@@ -2516,8 +2516,8 @@ public class ArchivScreen extends Screen {
 
         float paddingScale = switch (source) {
             case MANUAL_IMAGE -> 1.0F;
-            case EMBEDDED_PREVIEW -> 1.06F;
-            case GENERATED_PREVIEW -> 0.92F;
+            case EMBEDDED_PREVIEW -> 0.96F;
+            case GENERATED_PREVIEW -> 0.98F;
             default -> 0.94F;
         };
 
@@ -2528,11 +2528,7 @@ public class ArchivScreen extends Screen {
         int drawX = x + (width - drawW) / 2;
         int drawY = y + (height - drawH) / 2;
 
-        boolean needsClip = drawX < x || drawY < y || drawX + drawW > x + width || drawY + drawH > y + height;
-        if (needsClip) {
-            guiGraphics.enableScissor(x, y, x + width, y + height);
-        }
-
+        guiGraphics.enableScissor(x, y, x + width, y + height);
         guiGraphics.blit(
                 RenderPipelines.GUI_TEXTURED,
                 previewTexture.textureLocation,
@@ -2547,11 +2543,7 @@ public class ArchivScreen extends Screen {
                 previewTexture.imageWidth,
                 previewTexture.imageHeight
         );
-
-        if (needsClip) {
-            guiGraphics.disableScissor();
-        }
-
+        guiGraphics.disableScissor();
     }
 
     private boolean drawPreviewImage(
@@ -2595,6 +2587,12 @@ public class ArchivScreen extends Screen {
     }
 
     private CachedPreviewTexture getOrLoadPreviewTexture(Path imagePath) {
+        // 0x0 means “keep source resolution”. Do not clamp this to 1x1,
+        // otherwise the whole preview becomes a single colored square when blitted.
+        return getOrLoadPreviewTexture(imagePath, ArchivPreviewSource.PLACEHOLDER, 0, 0);
+    }
+
+    private CachedPreviewTexture getOrLoadPreviewTexture(Path imagePath, ArchivPreviewSource previewSource, int targetWidth, int targetHeight) {
         if (imagePath == null || this.minecraft == null) {
             return null;
         }
@@ -2606,8 +2604,12 @@ public class ArchivScreen extends Screen {
                 return null;
             }
 
+            boolean hasExplicitTargetSize = targetWidth > 0 && targetHeight > 0;
+            int safeTargetW = hasExplicitTargetSize ? Math.max(1, targetWidth) : 0;
+            int safeTargetH = hasExplicitTargetSize ? Math.max(1, targetHeight) : 0;
+            ArchivPreviewSource safeSource = previewSource == null ? ArchivPreviewSource.PLACEHOLDER : previewSource;
             long modifiedMillis = Files.getLastModifiedTime(normalizedPath).toMillis();
-            String cacheKey = normalizedPath.toString();
+            String cacheKey = normalizedPath + "|" + safeSource + "|" + safeTargetW + "x" + safeTargetH;
 
             CachedPreviewTexture cached = previewTextureCache.get(cacheKey);
             if (cached != null && cached.modifiedMillis == modifiedMillis) {
@@ -2619,7 +2621,7 @@ public class ArchivScreen extends Screen {
                 previewTextureCache.remove(cacheKey);
             }
 
-            CachedPreviewTexture loaded = loadPreviewTexture(normalizedPath, modifiedMillis, cacheKey);
+            CachedPreviewTexture loaded = loadPreviewTexture(normalizedPath, modifiedMillis, cacheKey, safeSource, safeTargetW, safeTargetH);
             if (loaded != null) {
                 previewTextureCache.put(cacheKey, loaded);
             }
@@ -2630,7 +2632,14 @@ public class ArchivScreen extends Screen {
         }
     }
 
-    private CachedPreviewTexture loadPreviewTexture(Path imagePath, long modifiedMillis, String cacheKey) {
+    private CachedPreviewTexture loadPreviewTexture(
+            Path imagePath,
+            long modifiedMillis,
+            String cacheKey,
+            ArchivPreviewSource previewSource,
+            int targetWidth,
+            int targetHeight
+    ) {
         if (this.minecraft == null) {
             return null;
         }
@@ -2642,7 +2651,7 @@ public class ArchivScreen extends Screen {
                 return null;
             }
 
-            BufferedImage scaled = preparePreviewImageForTexture(source, imagePath, 1024);
+            BufferedImage scaled = preparePreviewImageForTexture(source, imagePath, 1024, previewSource, targetWidth, targetHeight);
             NativeImage nativeImage = new NativeImage(scaled.getWidth(), scaled.getHeight(), true);
 
             for (int py = 0; py < scaled.getHeight(); py++) {
@@ -2672,9 +2681,72 @@ public class ArchivScreen extends Screen {
         }
     }
 
-    private BufferedImage preparePreviewImageForTexture(BufferedImage source, Path imagePath, int maxDimension) {
+    private BufferedImage preparePreviewImageForTexture(
+            BufferedImage source,
+            Path imagePath,
+            int maxDimension,
+            ArchivPreviewSource previewSource,
+            int targetWidth,
+            int targetHeight
+    ) {
         BufferedImage normalized = cropLikelyBloxelizerBanner(source, imagePath);
+
+        if (targetWidth > 0 && targetHeight > 0) {
+            return composePreviewImage(normalized, previewSource, targetWidth, targetHeight);
+        }
+
         return scalePreviewImageForTexture(normalized, maxDimension);
+    }
+
+    private BufferedImage composePreviewImage(
+            BufferedImage source,
+            ArchivPreviewSource previewSource,
+            int targetWidth,
+            int targetHeight
+    ) {
+        int safeTargetW = Math.max(1, targetWidth);
+        int safeTargetH = Math.max(1, targetHeight);
+        BufferedImage composed = new BufferedImage(safeTargetW, safeTargetH, BufferedImage.TYPE_INT_ARGB);
+
+        Graphics2D graphics = composed.createGraphics();
+        graphics.setComposite(AlphaComposite.Clear);
+        graphics.fillRect(0, 0, safeTargetW, safeTargetH);
+        graphics.setComposite(AlphaComposite.SrcOver);
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        if (source == null || source.getWidth() <= 0 || source.getHeight() <= 0) {
+            graphics.dispose();
+            return composed;
+        }
+
+        ArchivPreviewSource sourceType = previewSource == null ? ArchivPreviewSource.PLACEHOLDER : previewSource;
+        float imageWidth = source.getWidth();
+        float imageHeight = source.getHeight();
+        boolean coverPreviewArea = sourceType == ArchivPreviewSource.MANUAL_IMAGE;
+
+        float scale = coverPreviewArea
+                ? Math.max(safeTargetW / imageWidth, safeTargetH / imageHeight)
+                : Math.min(safeTargetW / imageWidth, safeTargetH / imageHeight);
+
+        float paddingScale = switch (sourceType) {
+            case MANUAL_IMAGE -> 1.0F;
+            case EMBEDDED_PREVIEW -> 0.90F;
+            case GENERATED_PREVIEW -> 0.98F;
+            default -> 0.94F;
+        };
+
+        scale *= paddingScale;
+
+        int drawW = Math.max(1, Math.round(imageWidth * scale));
+        int drawH = Math.max(1, Math.round(imageHeight * scale));
+        int drawX = (safeTargetW - drawW) / 2;
+        int drawY = (safeTargetH - drawH) / 2;
+
+        graphics.drawImage(source, drawX, drawY, drawX + drawW, drawY + drawH, 0, 0, source.getWidth(), source.getHeight(), null);
+        graphics.dispose();
+        return composed;
     }
 
     private BufferedImage cropLikelyBloxelizerBanner(BufferedImage source, Path imagePath) {
@@ -3272,19 +3344,19 @@ public class ArchivScreen extends Screen {
 
         int innerPadding = 18;
         int scrollbarReserve = 16;
-        int toolbarY = contentY + 14;
+        int toolbarY = contentY + 8;
 
         layout.cardsAreaX = contentX + innerPadding;
-        layout.cardsAreaY = toolbarY + 78 - scrollOffset;
+        layout.cardsAreaY = toolbarY + 66 - scrollOffset;
         layout.cardsAreaW = contentW - (innerPadding * 2) - scrollbarReserve;
 
         layout.cardsGap = 12;
-        layout.rowGap = 12;
+        layout.rowGap = 10;
         layout.columns = 3;
         layout.rows = Math.max(1, (Math.max(assetCount, 1) + layout.columns - 1) / layout.columns);
 
         layout.cardW = (layout.cardsAreaW - (layout.cardsGap * (layout.columns - 1))) / layout.columns;
-        layout.cardH = 164;
+        layout.cardH = 148;
         layout.cardsAreaH = (layout.cardH * layout.rows) + (layout.rowGap * (layout.rows - 1));
 
         return layout;
@@ -3295,10 +3367,10 @@ public class ArchivScreen extends Screen {
 
         int innerPadding = 18;
         int scrollbarReserve = 16;
-        int toolbarY = contentY + 14;
+        int toolbarY = contentY + 8;
 
         layout.listX = contentX + innerPadding;
-        layout.listY = toolbarY + 78 - scrollOffset;
+        layout.listY = toolbarY + 66 - scrollOffset;
         layout.listW = contentW - (innerPadding * 2) - scrollbarReserve;
         layout.rowH = 60;
         layout.rowGap = 6;
@@ -3317,16 +3389,16 @@ public class ArchivScreen extends Screen {
     private BrowseListRowLayout buildBrowseListRowLayout(int x, int y, int width, int height) {
         BrowseListRowLayout layout = new BrowseListRowLayout();
 
-        int padding = 8;
+        int previewLeftInset = 0;
         int rightPadding = 18;
         int menuDotsReserve = 18;
         int gapBetweenButtons = 8;
 
         // Preview thumbnail: fills almost the whole list row without crossing the card border.
-        layout.previewW = 132;
-        layout.previewH = Math.min(height - 4, Math.max(50, height - 4));
-        layout.previewX = x + padding;
-        layout.previewY = y + 2;
+        layout.previewW = 140;
+        layout.previewH = Math.min(height - 2, Math.max(52, height - 2));
+        layout.previewX = x + previewLeftInset;
+        layout.previewY = y + 1;
 
         // infos
         layout.infoX = layout.previewX + layout.previewW + 14;
@@ -3386,12 +3458,12 @@ public class ArchivScreen extends Screen {
         layout.cardsAreaW = contentW - (innerPadding * 2) - scrollbarReserve;
 
         layout.cardsGap = 12;
-        layout.rowGap = 12;
+        layout.rowGap = 10;
         layout.columns = 3;
         layout.rows = Math.max(1, (Math.max(assetCount, 1) + layout.columns - 1) / layout.columns);
 
         layout.cardW = (layout.cardsAreaW - (layout.cardsGap * (layout.columns - 1))) / layout.columns;
-        layout.cardH = 164;
+        layout.cardH = 148;
         layout.cardsAreaH = (layout.cardH * layout.rows) + (layout.rowGap * (layout.rows - 1));
 
         return layout;
@@ -3429,8 +3501,8 @@ public class ArchivScreen extends Screen {
     private ScrollbarLayout buildBrowseScrollbarLayout(int contentX, int contentY, int contentW, int contentH) {
         ScrollbarLayout layout = new ScrollbarLayout();
 
-        int toolbarY = contentY + 14;
-        int viewportY = toolbarY + 78;
+        int toolbarY = contentY + 8;
+        int viewportY = toolbarY + 66;
         int viewportBottom = contentY + contentH - 16;
 
         layout.trackW = 8;
@@ -3466,9 +3538,9 @@ public class ArchivScreen extends Screen {
         layout.previewY = y + 1;
         layout.previewW = width - 2;
 
-        int minPreviewHeight = 106;
-        int minBodyHeight = 50;
-        int preferredPreviewHeight = (int) (height * 0.66);
+        int minPreviewHeight = 88;
+        int minBodyHeight = 46;
+        int preferredPreviewHeight = (int) (height * 0.64);
 
         layout.previewH = Math.min(
                 Math.max(minPreviewHeight, preferredPreviewHeight),
@@ -9145,13 +9217,13 @@ public class ArchivScreen extends Screen {
         drawModeBox(guiGraphics, "Grid", toolbar.gridX, toolbar.toolbarY, toolbar.gridW, 34, browseViewMode.equals("Grid"));
         drawModeBox(guiGraphics, "List", toolbar.listX, toolbar.toolbarY, toolbar.listW, 34, browseViewMode.equals("List"));
 
-        int summaryY = toolbar.toolbarY + 42;
+        int summaryY = toolbar.toolbarY + 38;
         int summaryX = contentX + innerPadding;
         int summaryW = contentW - (innerPadding * 2);
         drawInfoStrip(guiGraphics, getBrowseSummaryText(visibleAssets), summaryX, summaryY, summaryW, 22);
 
         int viewportX = contentX + innerPadding;
-        int viewportY = toolbar.toolbarY + 78;
+        int viewportY = toolbar.toolbarY + 66;
         int viewportW = contentW - (innerPadding * 2) - 16;
         int viewportH = (contentY + contentH - 16) - viewportY;
 

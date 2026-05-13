@@ -110,7 +110,7 @@ public class ArchivEmbeddedPreviewExtractor {
         }
 
         if (imageBytes == null || imageBytes.length == 0) return null;
-        return saveBytes(imageBytes, target);
+        return saveBytes(imageBytes, target, ext);
     }
 
     // =========================================================================
@@ -310,7 +310,7 @@ public class ArchivEmbeddedPreviewExtractor {
     // Save to cache
     // =========================================================================
 
-    private Path saveBytes(byte[] imageBytes, Path target) throws IOException {
+    private Path saveBytes(byte[] imageBytes, Path target, String sourceExtension) throws IOException {
         BufferedImage img = ImageIO.read(new ByteArrayInputStream(imageBytes));
         if (img == null || img.getWidth() <= 0 || img.getHeight() <= 0) {
             System.err.println("[Archiv] Extracted image bytes are not a valid image");
@@ -320,6 +320,13 @@ public class ArchivEmbeddedPreviewExtractor {
         // Previews embutidos de ferramentas Minecraft (Litematica, Axiom) usam
         // convenção OpenGL onde Y=0 fica embaixo. Flipa para corrigir.
         BufferedImage normalized = flipVertically(img);
+
+        // Axiom/.bp previews frequently include a large dark/transparent border around
+        // the build. Crop that border while caching the PNG so every card/list view can
+        // draw the useful part of the thumbnail without needing special UI hacks.
+        if (isBlueprintPreviewExtension(sourceExtension)) {
+            normalized = optimizeBlueprintPreview(normalized);
+        }
 
         Files.createDirectories(target.getParent());
         Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
@@ -335,6 +342,224 @@ public class ArchivEmbeddedPreviewExtractor {
         } finally {
             try { Files.deleteIfExists(tmp); } catch (IOException ignored) {}
         }
+    }
+
+
+    private boolean isBlueprintPreviewExtension(String extension) {
+        String cleanExtension = extension == null ? "" : extension.trim().toLowerCase(Locale.ROOT);
+        return ".bp".equals(cleanExtension)
+                || ".blueprint".equals(cleanExtension)
+                || ".bl".equals(cleanExtension);
+    }
+
+    private BufferedImage optimizeBlueprintPreview(BufferedImage source) {
+        if (source == null || source.getWidth() <= 0 || source.getHeight() <= 0) {
+            return source;
+        }
+
+        // Keep the embedded preview at its original resolution. We only trim the
+        // obvious empty border; framing/resizing here caused extra blur/pixelation
+        // and made tall assets feel off-center in the UI.
+        return cropEmptyPreviewMargins(source);
+    }
+
+    /**
+     * Normalizes blueprint previews into a stable 16:9 thumbnail canvas.
+     *
+     * Axiom embedded previews can be square, very tall, or tightly cropped after
+     * empty-border removal. If we cache that raw crop directly, tall assets can
+     * visually dominate the card and look like they are bleeding out of the
+     * preview region. A fixed thumbnail canvas keeps every .bp predictable while
+     * still letting the structure fill the useful area.
+     */
+    private BufferedImage frameBlueprintPreview(BufferedImage source) {
+        int targetW = 1024;
+        int targetH = 576;
+
+        if (source == null || source.getWidth() <= 0 || source.getHeight() <= 0) {
+            return source;
+        }
+
+        int sourceW = source.getWidth();
+        int sourceH = source.getHeight();
+        int margin = 56;
+        int availableW = targetW - (margin * 2);
+        int availableH = targetH - (margin * 2);
+
+        float scale = Math.min(availableW / (float) sourceW, availableH / (float) sourceH);
+        scale = Math.max(0.01F, scale);
+
+        int drawW = Math.max(1, Math.round(sourceW * scale));
+        int drawH = Math.max(1, Math.round(sourceH * scale));
+        int drawX = (targetW - drawW) / 2;
+        int drawY = (targetH - drawH) / 2;
+
+        BufferedImage framed = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = framed.createGraphics();
+        graphics.setComposite(AlphaComposite.Clear);
+        graphics.fillRect(0, 0, targetW, targetH);
+        graphics.setComposite(AlphaComposite.SrcOver);
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        graphics.drawImage(source, drawX, drawY, drawX + drawW, drawY + drawH, 0, 0, sourceW, sourceH, null);
+        graphics.dispose();
+
+        return framed;
+    }
+
+    private BufferedImage cropEmptyPreviewMargins(BufferedImage source) {
+        int width = source.getWidth();
+        int height = source.getHeight();
+
+        if (width < 32 || height < 32) {
+            return source;
+        }
+
+        int backgroundColor = estimateBorderColor(source);
+
+        int minX = width;
+        int minY = height;
+        int maxX = -1;
+        int maxY = -1;
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if (!isLikelyPreviewContentPixel(source.getRGB(x, y), backgroundColor)) {
+                    continue;
+                }
+
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            }
+        }
+
+        if (maxX < minX || maxY < minY) {
+            return source;
+        }
+
+        int contentW = maxX - minX + 1;
+        int contentH = maxY - minY + 1;
+
+        // Avoid cropping to tiny noise or icons. Real previews should have a meaningful
+        // content footprint even when the structure itself is small in the original image.
+        if (contentW < Math.max(10, width * 0.06F) || contentH < Math.max(10, height * 0.06F)) {
+            return source;
+        }
+
+        int margin = clampPreviewInt(Math.round(Math.max(contentW, contentH) * 0.18F), 18, 104);
+        int cropX = Math.max(0, minX - margin);
+        int cropY = Math.max(0, minY - margin);
+        int cropRight = Math.min(width - 1, maxX + margin);
+        int cropBottom = Math.min(height - 1, maxY + margin);
+        int cropW = cropRight - cropX + 1;
+        int cropH = cropBottom - cropY + 1;
+
+        // If the crop barely changes anything, keep the original to avoid unnecessary
+        // quality loss and cache churn.
+        if (cropW >= width - 4 && cropH >= height - 4) {
+            return source;
+        }
+
+        BufferedImage cropped = new BufferedImage(cropW, cropH, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = cropped.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        graphics.drawImage(source, 0, 0, cropW, cropH, cropX, cropY, cropX + cropW, cropY + cropH, null);
+        graphics.dispose();
+        return cropped;
+    }
+
+    private int estimateBorderColor(BufferedImage source) {
+        int width = source.getWidth();
+        int height = source.getHeight();
+        int step = Math.max(1, Math.min(width, height) / 96);
+
+        long alpha = 0L;
+        long red = 0L;
+        long green = 0L;
+        long blue = 0L;
+        long count = 0L;
+
+        for (int x = 0; x < width; x += step) {
+            int top = source.getRGB(x, 0);
+            int bottom = source.getRGB(x, height - 1);
+            alpha += (top >>> 24) & 0xFF;
+            red += (top >> 16) & 0xFF;
+            green += (top >> 8) & 0xFF;
+            blue += top & 0xFF;
+            count++;
+
+            alpha += (bottom >>> 24) & 0xFF;
+            red += (bottom >> 16) & 0xFF;
+            green += (bottom >> 8) & 0xFF;
+            blue += bottom & 0xFF;
+            count++;
+        }
+
+        for (int y = 0; y < height; y += step) {
+            int left = source.getRGB(0, y);
+            int right = source.getRGB(width - 1, y);
+            alpha += (left >>> 24) & 0xFF;
+            red += (left >> 16) & 0xFF;
+            green += (left >> 8) & 0xFF;
+            blue += left & 0xFF;
+            count++;
+
+            alpha += (right >>> 24) & 0xFF;
+            red += (right >> 16) & 0xFF;
+            green += (right >> 8) & 0xFF;
+            blue += right & 0xFF;
+            count++;
+        }
+
+        if (count <= 0L) {
+            return 0x00000000;
+        }
+
+        int a = (int) (alpha / count);
+        int r = (int) (red / count);
+        int g = (int) (green / count);
+        int b = (int) (blue / count);
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    private boolean isLikelyPreviewContentPixel(int argb, int backgroundColor) {
+        int a = (argb >>> 24) & 0xFF;
+        if (a < 24) {
+            return false;
+        }
+
+        int bgA = (backgroundColor >>> 24) & 0xFF;
+        if (bgA < 24) {
+            return a >= 48;
+        }
+
+        int r = (argb >> 16) & 0xFF;
+        int g = (argb >> 8) & 0xFF;
+        int b = argb & 0xFF;
+        int bgR = (backgroundColor >> 16) & 0xFF;
+        int bgG = (backgroundColor >> 8) & 0xFF;
+        int bgB = backgroundColor & 0xFF;
+
+        int dr = r - bgR;
+        int dg = g - bgG;
+        int db = b - bgB;
+        int colorDistanceSquared = (dr * dr) + (dg * dg) + (db * db);
+
+        int luminance = (r * 212 + g * 715 + b * 72) / 1000;
+        int backgroundLuminance = (bgR * 212 + bgG * 715 + bgB * 72) / 1000;
+
+        return Math.abs(a - bgA) > 28
+                || colorDistanceSquared > 34 * 34
+                || Math.abs(luminance - backgroundLuminance) > 26;
+    }
+
+    private int clampPreviewInt(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private BufferedImage flipVertically(BufferedImage source) {
